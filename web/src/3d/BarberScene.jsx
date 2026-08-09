@@ -1,32 +1,34 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import {
+  Environment,
+  OrbitControls,
+} from "@react-three/drei";
 
-function Cube() {
-  return (
-    <mesh rotation={[0.4, 0.4, 0]}>
-      <boxGeometry args={[2, 2, 2]} />
-
-      <meshStandardMaterial
-        color="#d6a85f"
-      />
-    </mesh>
-  );
-}
+import CustomerModel from "./CustomerScene";
 
 export default function BarberScene() {
   return (
-    <div className="h-[500px] w-full">
+    <div className="h-[600px] w-full">
       <Canvas
         camera={{
-          position: [0, 0, 5],
-          fov: 45,
+          position: [0, 0.5, 5],
+          fov: 35,
         }}
       >
-        <ambientLight intensity={1} />
+        <ambientLight intensity={0.6} />
 
-        <Cube />
+        <directionalLight
+          position={[3, 5, 3]}
+          intensity={2}
+        />
 
-        <OrbitControls />
+        <Environment preset="studio" />
+
+        <CustomerModel />
+
+        <OrbitControls
+          enableZoom={false}
+        />
       </Canvas>
     </div>
   );
