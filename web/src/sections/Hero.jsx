@@ -5,7 +5,7 @@ import {
   Star,
 } from "lucide-react";
 
-import Button from "../components/Botton";
+import Button from "../components/Button";
 
 export default function Hero() {
   return (
