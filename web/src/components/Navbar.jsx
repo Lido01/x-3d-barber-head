@@ -22,6 +22,14 @@ const links = [
     label: "Barbers",
     to: "/barbers",
   },
+  {
+    label: "Gallery",
+    to: "/#gallery",
+  },
+  {
+    label: "About",
+    to: "/#about",
+  },
 ];
 
 export default function Navbar() {
