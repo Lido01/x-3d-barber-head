@@ -1,31 +1,30 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen items-center justify-center px-5">
-      <div className="text-center">
-        <p className="text-xs uppercase tracking-[0.3em] text-[#d6a85f]">
+    <main className="flex min-h-screen items-center justify-center bg-[#080808] px-5 text-center text-white">
+
+      <div>
+        <p className="text-sm uppercase tracking-[0.3em] text-[#d6a85f]">
           404
         </p>
 
-        <h1 className="mt-5 font-serif text-6xl">
-          Wrong chair.
+        <h1 className="mt-5 text-5xl font-semibold">
+          This chair doesn't exist.
         </h1>
 
-        <p className="mx-auto mt-5 max-w-md text-sm leading-6 text-white/40">
-          This page doesn't exist. Let's get you back to the
-          studio.
+        <p className="mt-4 text-white/40">
+          The page you're looking for couldn't be found.
         </p>
 
         <Link
           to="/"
-          className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm transition hover:bg-white/10"
+          className="mt-8 inline-flex rounded-full bg-white px-6 py-3 text-sm font-semibold text-black"
         >
-          <ArrowLeft size={15} />
           Back home
         </Link>
       </div>
-    </div>
+
+    </main>
   );
 }
