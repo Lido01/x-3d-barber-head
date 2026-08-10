@@ -11,9 +11,11 @@ export default function Testimonials() {
         </div>
         <div className="mt-12 grid gap-4 lg:grid-cols-3">
           {testimonials.map((item) => (
-            <article key={item.name} className="rounded-3xl border border-white/10 bg-white/[.025] p-6 sm:p-8">
-              <Quote className="text-[#d6a85f]" size={25} />
-              <div className="mt-7 flex gap-1 text-[#d6a85f]">{Array.from({ length: item.rating }).map((_, i) => <Star key={i} size={13} fill="currentColor" />)}</div>
+            <article key={item.name} className=" border border-white/10 bg-white/[.025] p-6 sm:p-8">
+              {/* <Quote className="text-[#d6a85f]" size={25} /> */}
+              <div className="mt-7 flex gap-1 text-[#d6a85f]">
+                {Array.from({ length: item.rating }).map((_, i) => <Star key={i} size={13} fill="currentColor" />)}
+              </div>
               <p className="mt-5 text-base leading-7 text-white/75">“{item.quote}”</p>
               <div className="mt-7 border-t border-white/10 pt-5"><p className="font-semibold">{item.name}</p><p className="mt-1 text-[10px] uppercase tracking-[.2em] text-white/35">{item.service}</p></div>
             </article>
