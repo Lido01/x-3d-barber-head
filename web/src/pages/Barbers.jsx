@@ -57,18 +57,18 @@ export default function Barbers() {
           {barbers.map((barber, index) => (
             <article
               key={barber.name}
-              className="group overflow-hidden rounded-3xl border border-white/10 bg-[#111]"
+              className="group overflow-hidden  border border-white/10 bg-[#111]"
             >
               <div className="relative h-[430px] overflow-hidden bg-gradient-to-b from-[#292929] to-[#111]">
                 <div className="absolute inset-x-10 bottom-0 top-16 rounded-t-[45%] bg-gradient-to-br from-[#383838] via-[#1c1c1c] to-[#090909] transition-transform duration-700 group-hover:scale-105" />
 
-                <div className="absolute left-1/2 top-20 h-24 w-28 -translate-x-1/2 rounded-full bg-[#080808]" />
+                <div className="absolute left-1/2 top-20 h-24 w-28 -translate-x-1/2  bg-[#080808]" />
 
-                <div className="absolute left-5 top-5 rounded-full border border-white/10 bg-black/30 px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-white/40 backdrop-blur">
+                <div className="absolute left-5 top-5  border border-white/10 bg-black/30 px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-white/40 backdrop-blur">
                   0{index + 1}
                 </div>
 
-                <button className="absolute bottom-5 right-5 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/40 text-white/50 backdrop-blur transition hover:bg-[#d6a85f] hover:text-black">
+                <button className="absolute bottom-5 right-5 flex h-10 w-10 items-center justify-center  border border-white/10 bg-black/40 text-white/50 backdrop-blur transition hover:bg-[#d6a85f] hover:text-black">
                   <Instagram size={16} />
                 </button>
               </div>
