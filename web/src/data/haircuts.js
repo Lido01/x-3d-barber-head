@@ -1,7 +1,7 @@
 export const haircuts = [
   {
     id: "01", name: "Low Fade", category: "Fade", price: 350, duration: 40,
-    image: "https://images.unsplash.com/photo-1622286346003-cd8f8d2e2870?auto=format&fit=crop&w=1000&q=85",
+    image: "https://images.unsplash.com/photo-1622296089863-eb7fc530daa8?auto=format&fit=crop&w=1000&q=85",
     description: "A clean, low transition that keeps the sides refined and the top natural.",
     details: "Best for a polished everyday look. We tailor the blend and neckline to your head shape.",
   },
@@ -35,4 +35,5 @@ export const haircuts = [
     description: "A precise beard shape designed around your jawline and natural growth.",
     details: "Includes line-up, shaping, and a restorative finish to keep the beard feeling sharp.",
   },
+  
 ];

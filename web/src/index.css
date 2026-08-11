@@ -1,0 +1,146 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap");
+
+@import "tailwindcss";
+
+:root {
+  font-family: "Manrope", sans-serif;
+  color: #f4f0e8;
+  background: #090909;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: #090909;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #090909;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+}
+
+::selection {
+  background: #d6a85f;
+  color: #090909;
+}
+
+.font-serif {
+  font-family: "DM Serif Display", Georgia, serif;
+}
+
+/* Scrollbar */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090909;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #292929;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #d6a85f;
+}
+
+/* Date input */
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.45;
+}
+
+/* Better focus accessibility */
+
+:focus-visible {
+  outline: 2px solid #d6a85f;
+  outline-offset: 3px;
+}
+
+
+
+
+
+
+
+
+/* 
+
+
+
+@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap");
+
+@import "tailwindcss";
+
+:root {
+  font-family: "Manrope", sans-serif;
+  color: #f4f0e8;
+  background: #080808;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: #080808;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #080808;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: #d6a85f;
+  color: #080808;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080808;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #292929;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #d6a85f;
+} */
