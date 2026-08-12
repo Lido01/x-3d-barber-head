@@ -31,3 +31,8 @@ venv/
 *.njsproj
 *.sln
 *.sw?
+
+
+*.pyc
+*__pycache__/
+*.py[cod]
