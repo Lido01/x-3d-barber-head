@@ -21,3 +21,19 @@ class ServiceSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("A service name is required.")
+        return name
+
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Price must be greater than zero.")
+        return value
+
+    def validate_duration(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Duration must be greater than zero.")
+        return value
