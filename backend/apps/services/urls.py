@@ -5,7 +5,7 @@ from .views import ServiceViewSet
 router = DefaultRouter()
 
 router.register(
-    "services",
+    r"services",
     ServiceViewSet,
     basename="service"
 )

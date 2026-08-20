@@ -42,8 +42,8 @@ INSTALLED_APPS = [
     "corsheaders",
 
     "apps.services",
-    # "accounts",
-    # "bookings",
+    "apps.accounts",
+    "apps.bookings",
     # "payments",
     # "notifications",
     # "ai_agent",
@@ -127,6 +127,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # Email
