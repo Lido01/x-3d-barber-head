@@ -4,6 +4,17 @@ A modern, immersive **3D men's barber shop website** built with React, Tailwind 
 
 The goal is to create more than a traditional barber website. Customers can explore hairstyles, see **3D haircut transformations**, view real customer testimonials, meet barbers, explore services, and book an appointment through an interactive experience.
 
+## Backend API
+
+The Django backend provides service, booking, availability, and account-registration endpoints. From `backend`, run:
+
+```bash
+python manage.py migrate
+python manage.py runserver
+```
+
+The booking API calculates each appointment end time from the selected service, rejects inactive services and overlapping appointments, and exposes available times at `GET /api/bookings/availability/`. See [API request and response examples](docs/api_endpoints.md).
+
 ---
 
 ## ✨ Project Vision
