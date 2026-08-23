@@ -1,4 +1,5 @@
 from django.db import models
+from apps.services.models import Service
 
 
 class Booking(models.Model):
@@ -11,7 +12,7 @@ class Booking(models.Model):
     customer_name = models.CharField(max_length=120)
     customer_phone = models.CharField(max_length=30)
     service = models.ForeignKey(
-        "services.Service", on_delete=models.PROTECT, related_name="bookings"
+        Service, on_delete=models.PROTECT, related_name="bookings"
     )
     booking_date = models.DateField()
     start_time = models.TimeField()
