@@ -3,6 +3,13 @@ from rest_framework.response import Response
 
 from .serializers import AccountSerializer, RegistrationSerializer
 
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+)
+
+from .serializers import LoginSerializer
+
+
 
 class RegistrationView(generics.CreateAPIView):
     serializer_class = RegistrationSerializer
@@ -21,3 +28,6 @@ class CurrentAccountView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+class LoginView(TokenObtainPairView):
+    serializer_class = LoginSerializer
