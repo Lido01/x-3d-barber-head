@@ -18,11 +18,14 @@ class BookingApiTests(APITestCase):
             name="Unavailable", price="100.00", duration=30, is_active=False
         )
 
-    def payload(self, service, start_time="10:00"):
+    def payload(self, service, start_time="10:00", booking_date=None, notes=""):
         return {
             "customer_name": "Sam Doe", "customer_phone": "+251900000000",
-            "service": service.id, "booking_date": str(self.booking_date), "start_time": start_time,
+            "service": service.id, "booking_date": str(booking_date or self.booking_date),
+            "start_time": start_time, "notes": notes,
         }
+
+    # ------------------------------------------------------------------ create
 
     def test_post_calculates_end_times_for_different_service_durations(self):
         for service, start_time, expected_end in [
@@ -41,6 +44,7 @@ class BookingApiTests(APITestCase):
         overlap = self.client.post("/api/bookings/", self.payload(self.short_service, "10:30"), format="json")
         self.assertEqual(overlap.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("start_time", overlap.data)
+        self.assertEqual(overlap.data["start_time"][0], "This time is already booked.")
 
         listing = self.client.get("/api/bookings/")
         self.assertEqual(listing.status_code, status.HTTP_200_OK)
@@ -50,6 +54,118 @@ class BookingApiTests(APITestCase):
         response = self.client.post("/api/bookings/", self.payload(self.inactive_service), format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("service", response.data)
+        self.assertEqual(response.data["service"][0], "This service is not available.")
+
+    def test_past_date_is_rejected(self):
+        yesterday = date.today() - timedelta(days=1)
+        response = self.client.post(
+            "/api/bookings/",
+            self.payload(self.medium_service, booking_date=yesterday),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("booking_date", response.data)
+
+    def test_nonexistent_service_id_is_rejected(self):
+        payload = self.payload(self.medium_service)
+        payload["service"] = 99999
+        response = self.client.post("/api/bookings/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("service", response.data)
+
+    def test_invalid_time_format_is_rejected(self):
+        payload = self.payload(self.medium_service, start_time="25:99")
+        response = self.client.post("/api/bookings/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("start_time", response.data)
+
+    def test_booking_after_closing_time_is_rejected(self):
+        # 17:30 + 45 min = 18:15 > 18:00 closing.
+        response = self.client.post(
+            "/api/bookings/", self.payload(self.medium_service, start_time="17:30"), format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("start_time", response.data)
+
+    # ------------------------------------------------------- retrieve / update
+
+    def test_retrieve_booking(self):
+        created = self.client.post(
+            "/api/bookings/", self.payload(self.medium_service, notes="First booking"), format="json"
+        )
+        response = self.client.get(f"/api/bookings/{created.data['id']}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["service_name"], "Cut")
+        self.assertIn("status", response.data)
+        self.assertEqual(response.data["status"], "pending")
+
+    def test_patch_reschedules_and_keeps_end_time_computed(self):
+        created = self.client.post(
+            "/api/bookings/", self.payload(self.medium_service, "10:00"), format="json"
+        )
+        booking_id = created.data["id"]
+
+        response = self.client.patch(
+            f"/api/bookings/{booking_id}/", {"start_time": "14:00"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["start_time"], "14:00:00")
+        self.assertEqual(response.data["end_time"], "14:45:00")
+
+    def test_put_reschedule_into_conflict_is_rejected(self):
+        first = self.client.post("/api/bookings/", self.payload(self.medium_service, "10:00"), format="json")
+        second = self.client.post("/api/bookings/", self.payload(self.short_service, "11:00"), format="json")
+
+        # Try to move the second booking on top of the first (11:30 overlaps 10:00-10:45? no:
+        # 11:30 does not overlap; use 10:30 which overlaps the 10:00-10:45 booking).
+        payload = self.payload(self.short_service, "10:30")
+        response = self.client.put(f"/api/bookings/{second.data['id']}/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["start_time"][0], "This time is already booked.")
+        self.assertTrue(Booking.objects.filter(pk=first.data["id"]).exists())
+
+    def test_cancelled_booking_frees_its_slot(self):
+        created = self.client.post("/api/bookings/", self.payload(self.medium_service, "10:00"), format="json")
+        booking_id = created.data["id"]
+
+        # While active, the slot is taken.
+        times_before = get_available_times(booking_date=self.booking_date, service=self.medium_service)
+        self.assertNotIn("10:00", times_before)
+
+        cancelled = self.client.post(f"/api/bookings/{booking_id}/cancel/")
+        self.assertEqual(cancelled.status_code, status.HTTP_200_OK)
+        self.assertEqual(cancelled.data["status"], "cancelled")
+
+        # After cancellation the slot is free again.
+        times_after = get_available_times(booking_date=self.booking_date, service=self.medium_service)
+        self.assertIn("10:00", times_after)
+
+        response = self.client.get(
+            f"/api/bookings/availability/?service={self.medium_service.id}&booking_date={self.booking_date}"
+        )
+        self.assertIn("10:00", response.data["available_times"])
+
+        rebook = self.client.post("/api/bookings/", self.payload(self.short_service, "10:00"), format="json")
+        self.assertEqual(rebook.status_code, status.HTTP_201_CREATED)
+
+    def test_cancelled_bookings_do_not_block_new_bookings_at_same_slot(self):
+        booking = Booking.objects.create(
+            customer_name="Old", customer_phone="123", service=self.medium_service,
+            booking_date=self.booking_date, start_time=time(9, 0), end_time=time(9, 45),
+            status=Booking.Status.CANCELLED,
+        )
+        response = self.client.post("/api/bookings/", self.payload(self.long_service, "09:00"), format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.CANCELLED)
+
+    def test_delete_removes_booking(self):
+        created = self.client.post("/api/bookings/", self.payload(self.medium_service), format="json")
+        response = self.client.delete(f"/api/bookings/{created.data['id']}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Booking.objects.filter(pk=created.data["id"]).exists())
+
+    # ------------------------------------------------------------- availability
 
     def test_availability_hides_overlapping_slots_and_respects_duration(self):
         Booking.objects.create(

@@ -11,6 +11,7 @@ class ServiceViewSet(viewsets.ViewSet):
     Only active services are returned to customers. Write endpoints remain
     available for the current unauthenticated development setup.
     """
+    serializer_class = ServiceSerializer
 
     def list(self, request):
         services = ServiceService.list_active()
