@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-k(=rr7mg&(#nqaag+4=n6-bjd*i9$!49dte)1id&raq=!uofh9
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 
 # Application definition
@@ -136,16 +136,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 
 # added by lidetu for customization
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 REST_FRAMEWORK = {
@@ -154,6 +151,30 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+
+    # Public by default; views that need a login set
+    # permission_classes explicitly (see apps.accounts.views).
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.AllowAny",
+    ),
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Barber Shop API",
+    "DESCRIPTION": (
+        "Booking, services and account endpoints for the "
+        "barber shop. Authenticate at /api/accounts/login/, "
+        "then press Authorize and paste the access token."
+    ),
+    "VERSION": "1.0.0",
+
+    # Keep the schema endpoint itself out of the docs.
+    "SERVE_INCLUDE_SCHEMA": False,
+
+    # Generate separate request/response components so
+    # read-only fields are not shown as required in
+    # Swagger's request bodies.
+    "COMPONENT_SPLIT_REQUEST": True,
 }
 
 SIMPLE_JWT = {
