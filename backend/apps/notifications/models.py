@@ -1,6 +1,6 @@
 from django.db import models
 
-from bookings.models import Booking
+from apps.bookings.models import Booking
 
 
 class Notification(models.Model):
