@@ -1,3 +1,4 @@
+from django.core.mail import send_mail
 from django.utils import timezone
 
 from .models import Notification
@@ -12,10 +13,6 @@ def create_notification(
     subject="",
     message="",
 ):
-    """
-    Create a pending notification.
-    """
-
     return Notification.objects.create(
         booking=booking,
         notification_type=notification_type,
@@ -28,10 +25,6 @@ def create_notification(
 
 
 def mark_notification_sent(notification):
-    """
-    Mark a notification as successfully sent.
-    """
-
     notification.status = "sent"
     notification.sent_at = timezone.now()
     notification.error_message = ""
@@ -52,10 +45,6 @@ def mark_notification_failed(
     notification,
     error_message,
 ):
-    """
-    Mark a notification as failed.
-    """
-
     notification.status = "failed"
     notification.error_message = str(
         error_message
@@ -78,10 +67,6 @@ def create_booking_confirmation(
     channel,
     recipient,
 ):
-    """
-    Create a booking confirmation notification.
-    """
-
     service = booking.service
 
     subject = "Your booking is confirmed"
@@ -105,3 +90,38 @@ def create_booking_confirmation(
         subject=subject,
         message=message,
     )
+
+
+def send_email_notification(notification):
+    """
+    Send a notification through Django email.
+    """
+
+    if notification.channel != "email":
+        raise ValueError(
+            "This notification is not an email notification."
+        )
+
+    if notification.status == "sent":
+        return notification
+
+    try:
+        send_mail(
+            subject=notification.subject,
+            message=notification.message,
+            from_email=None,
+            recipient_list=[
+                notification.recipient
+            ],
+            fail_silently=False,
+        )
+
+        return mark_notification_sent(
+            notification
+        )
+
+    except Exception as exc:
+        return mark_notification_failed(
+            notification,
+            exc,
+        )
