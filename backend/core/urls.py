@@ -21,12 +21,14 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
-
 urlpatterns = [
     path("admin/", admin.site.urls),
 
     path("api/", include("apps.services.urls")),
     path("api/", include("apps.bookings.urls")),
+    path("api/accounts/", include("apps.accounts.urls")),
+    path("api/notifications/", include("apps.notifications.urls")),
+    
 
     path(
         "api/schema/",

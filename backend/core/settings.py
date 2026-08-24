@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.bookings",
     # "payments",
-    # "notifications",
+    "apps.notifications",
     # "ai_agent",
 ]
 
