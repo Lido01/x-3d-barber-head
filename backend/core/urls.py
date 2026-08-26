@@ -21,6 +21,10 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+from django.conf import settings
+from django.conf.urls.static import static
+
+
 urlpatterns = [
     path("admin/", admin.site.urls),
 
@@ -28,6 +32,7 @@ urlpatterns = [
     path("api/", include("apps.bookings.urls")),
     path("api/accounts/", include("apps.accounts.urls")),
     path("api/notifications/", include("apps.notifications.urls")),
+    path("api/payments/", include("apps.payments.urls")),
     
 
     path(
@@ -44,3 +49,8 @@ urlpatterns = [
         name="swagger-ui",
     ),
 ]
+
+urlpatterns += static(
+    settings.MEDIA_URL,
+    document_root=settings.MEDIA_ROOT,
+)
