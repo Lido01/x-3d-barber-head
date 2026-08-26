@@ -9,7 +9,9 @@ from rest_framework.parsers import (
     MultiPartParser,
 )
 from rest_framework.permissions import (
+    AllowAny,
     IsAuthenticated,
+    IsAdminUser,
 )
 from rest_framework.response import Response
 
@@ -27,15 +29,14 @@ from .services import (
 )
 
 
-class PaymentViewSet(
-    viewsets.ModelViewSet
-):
+class PaymentViewSet(viewsets.ModelViewSet):
     """
     Payment API.
 
-    Customers can create and view payments.
-    Verification and rejection are handled
-    through dedicated business operations.
+    Public users can submit payments and receipts
+    without creating an account.
+
+    Admin/staff users can verify or reject payments.
     """
 
     queryset = Payment.objects.select_related(
@@ -45,10 +46,6 @@ class PaymentViewSet(
     )
 
     serializer_class = PaymentSerializer
-
-    # permission_classes = [
-    #     IsAuthenticated,
-    # ]
 
     parser_classes = [
         MultiPartParser,
@@ -63,14 +60,47 @@ class PaymentViewSet(
         "options",
     ]
 
+    # ---------------------------------------------------------
+    # PERMISSIONS
+    # ---------------------------------------------------------
+
+    def get_permissions(self):
+        """
+        Public:
+            - create payment
+            - view payment
+
+        Admin/staff:
+            - verify payment
+            - reject payment
+        """
+
+        if self.action in [
+            "verify",
+            "reject",
+        ]:
+            return [
+                IsAuthenticated(),
+                IsAdminUser(),
+            ]
+
+        return [
+            AllowAny(),
+        ]
+
+    # ---------------------------------------------------------
+    # CREATE PAYMENT
+    # ---------------------------------------------------------
+
     @extend_schema(
         request=PaymentSerializer,
         responses={
             201: PaymentSerializer,
         },
         description=(
-            "Submit a payment and optional "
-            "receipt screenshot. "
+            "Public endpoint. "
+            "A customer can submit a payment "
+            "and receipt without creating an account. "
             "The payment starts as pending."
         ),
     )
@@ -101,18 +131,33 @@ class PaymentViewSet(
             status=status.HTTP_201_CREATED,
         )
 
+    # ---------------------------------------------------------
+    # VERIFY PAYMENT
+    # ---------------------------------------------------------
+
     @extend_schema(
         request=None,
         responses={
             200: PaymentSerializer,
             400: OpenApiResponse(
-                description="Payment cannot be verified.",
+                description=(
+                    "Payment cannot be verified."
+                ),
+            ),
+            401: OpenApiResponse(
+                description=(
+                    "Authentication is required."
+                ),
+            ),
+            403: OpenApiResponse(
+                description=(
+                    "Admin/staff permission required."
+                ),
             ),
         },
         description=(
-            "Verify a pending payment. "
-            "The authenticated user becomes "
-            "the verifier."
+            "Admin/staff only. "
+            "Verify a pending payment."
         ),
     )
     @action(
@@ -138,6 +183,10 @@ class PaymentViewSet(
             ).data
         )
 
+    # ---------------------------------------------------------
+    # REJECT PAYMENT
+    # ---------------------------------------------------------
+
     @extend_schema(
         request={
             "application/json": {
@@ -147,13 +196,31 @@ class PaymentViewSet(
                         "type": "string",
                     }
                 },
-                "required": ["reason"],
+                "required": [
+                    "reason"
+                ],
             }
         },
         responses={
             200: PaymentSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "Payment cannot be rejected."
+                ),
+            ),
+            401: OpenApiResponse(
+                description=(
+                    "Authentication is required."
+                ),
+            ),
+            403: OpenApiResponse(
+                description=(
+                    "Admin/staff permission required."
+                ),
+            ),
         },
         description=(
+            "Admin/staff only. "
             "Reject a pending payment."
         ),
     )
