@@ -28,8 +28,8 @@ class BookingAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "customer_name",
-        "service",
-        "barber",
+        # "service",
+        # "barber",
         "booking_date",
         "start_time",
         "end_time",
@@ -39,12 +39,12 @@ class BookingAdmin(admin.ModelAdmin):
     list_filter = (
         "status",
         "booking_date",
-        "barber",
-        "service",
+        # "barber",
+        # "service",
     )
 
     search_fields = (
         "customer_name",
         "customer_phone",
-        "barber__name",
+        # "barber__name",
     )
