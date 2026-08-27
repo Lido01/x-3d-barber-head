@@ -1,7 +1,4 @@
-from rest_framework import (
-    status,
-    viewsets,
-)
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import (
     FormParser,
@@ -10,8 +7,8 @@ from rest_framework.parsers import (
 )
 from rest_framework.permissions import (
     AllowAny,
-    IsAuthenticated,
     IsAdminUser,
+    IsAuthenticated,
 )
 from rest_framework.response import Response
 
@@ -33,7 +30,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
     """
     Payment API.
 
-    Public users can submit payments and receipts
+    Public customers can submit payments and receipts
     without creating an account.
 
     Admin/staff users can verify or reject payments.
@@ -47,6 +44,10 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
     serializer_class = PaymentSerializer
 
+    # Supports:
+    # - image/file uploads
+    # - normal form data
+    # - JSON requests
     parser_classes = [
         MultiPartParser,
         FormParser,
@@ -60,19 +61,19 @@ class PaymentViewSet(viewsets.ModelViewSet):
         "options",
     ]
 
-    # ---------------------------------------------------------
+    # =========================================================
     # PERMISSIONS
-    # ---------------------------------------------------------
+    # =========================================================
 
     def get_permissions(self):
         """
-        Public:
-            - create payment
-            - view payment
+        Public customers:
+            POST payment
+            GET payment
 
         Admin/staff:
-            - verify payment
-            - reject payment
+            POST verify
+            POST reject
         """
 
         if self.action in [
@@ -88,20 +89,25 @@ class PaymentViewSet(viewsets.ModelViewSet):
             AllowAny(),
         ]
 
-    # ---------------------------------------------------------
+    # =========================================================
     # CREATE PAYMENT
-    # ---------------------------------------------------------
+    # =========================================================
 
     @extend_schema(
-        request=PaymentSerializer,
+        request={
+            "multipart/form-data": PaymentSerializer,
+        },
         responses={
             201: PaymentSerializer,
+            400: OpenApiResponse(
+                description="Invalid payment data.",
+            ),
         },
         description=(
-            "Public endpoint. "
-            "A customer can submit a payment "
-            "and receipt without creating an account. "
-            "The payment starts as pending."
+            "Public payment submission. "
+            "Customers do not need an account. "
+            "Submit payment information and optionally "
+            "upload a receipt screenshot."
         ),
     )
     def create(
@@ -118,9 +124,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
             raise_exception=True
         )
 
-        payment = create_payment(
-            **serializer.validated_data
-        )
+        payment = serializer.save()
 
         output = self.get_serializer(
             payment
@@ -131,9 +135,9 @@ class PaymentViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    # ---------------------------------------------------------
+    # =========================================================
     # VERIFY PAYMENT
-    # ---------------------------------------------------------
+    # =========================================================
 
     @extend_schema(
         request=None,
@@ -157,7 +161,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
         },
         description=(
             "Admin/staff only. "
-            "Verify a pending payment."
+            "Verify a pending payment. "
+            "The authenticated admin becomes the verifier."
         ),
     )
     @action(
@@ -183,9 +188,9 @@ class PaymentViewSet(viewsets.ModelViewSet):
             ).data
         )
 
-    # ---------------------------------------------------------
+    # =========================================================
     # REJECT PAYMENT
-    # ---------------------------------------------------------
+    # =========================================================
 
     @extend_schema(
         request={
@@ -194,10 +199,13 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 "properties": {
                     "reason": {
                         "type": "string",
+                        "description": (
+                            "Reason why the payment was rejected."
+                        ),
                     }
                 },
                 "required": [
-                    "reason"
+                    "reason",
                 ],
             }
         },
@@ -221,7 +229,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
         },
         description=(
             "Admin/staff only. "
-            "Reject a pending payment."
+            "Reject a pending payment and provide a reason."
         ),
     )
     @action(
