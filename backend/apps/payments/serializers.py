@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from .services import create_payment
+
 from .models import Payment
 
 
@@ -55,24 +57,29 @@ class PaymentSerializer(serializers.ModelSerializer):
         return value
 
     def validate_receipt(self, value):
-        if value:
+        if not value:
+            return value
 
-            allowed_types = [
-                "image/jpeg",
-                "image/png",
-                "image/webp",
-            ]
+        allowed_types = [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+        ]
 
-            if value.content_type not in allowed_types:
-                raise serializers.ValidationError(
-                    "Receipt must be JPG, PNG, or WebP."
-                )
+        if value.content_type not in allowed_types:
+            raise serializers.ValidationError(
+                "Receipt must be JPG, PNG, or WebP."
+            )
 
-            max_size = 5 * 1024 * 1024
+        max_size = 5 * 1024 * 1024
 
-            if value.size > max_size:
-                raise serializers.ValidationError(
-                    "Receipt image must be 5MB or smaller."
-                )
+        if value.size > max_size:
+            raise serializers.ValidationError(
+                "Receipt image must be 5MB or smaller."
+            )
 
         return value
+    def create(self, validated_data):
+        return create_payment(
+            **validated_data
+        )
