@@ -1,11 +1,16 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticated,
+    IsAdminUser,
+)
 from rest_framework.response import Response
 
 from drf_spectacular.utils import (
     extend_schema,
-    OpenApiParameter,
     OpenApiResponse,
+    OpenApiParameter,
     OpenApiTypes,
 )
 
@@ -16,18 +21,29 @@ from .serializers import (
 )
 from .services import (
     cancel_booking,
-    create_booking,
     get_available_times,
-    update_booking,
 )
 
 
 class BookingViewSet(viewsets.ModelViewSet):
     """
-    API for creating and managing customer bookings.
+    API for customer bookings.
+
+    Public users can:
+        - check availability
+        - create a booking
+
+    Admin/staff users can:
+        - view bookings
+        - update bookings
+        - cancel bookings
+        - delete bookings
     """
 
-    queryset = Booking.objects.select_related("service")
+    queryset = Booking.objects.select_related(
+        "service",
+        "barber",
+    )
 
     serializer_class = BookingSerializer
 
@@ -42,6 +58,38 @@ class BookingViewSet(viewsets.ModelViewSet):
     ]
 
     # ---------------------------------------------------------
+    # PERMISSIONS
+    # ---------------------------------------------------------
+
+    def get_permissions(self):
+        """
+        Public:
+
+            GET availability
+            POST booking
+
+        Admin:
+
+            GET bookings
+            UPDATE bookings
+            DELETE bookings
+            CANCEL bookings
+        """
+
+        if self.action in [
+            "create",
+            "availability",
+        ]:
+            return [
+                AllowAny(),
+            ]
+
+        return [
+            IsAuthenticated(),
+            IsAdminUser(),
+        ]
+
+    # ---------------------------------------------------------
     # CREATE BOOKING
     # ---------------------------------------------------------
 
@@ -49,14 +97,30 @@ class BookingViewSet(viewsets.ModelViewSet):
         request=BookingSerializer,
         responses={
             201: BookingSerializer,
+            400: OpenApiResponse(
+                description="Invalid booking data.",
+            ),
         },
         description=(
-            "Create a new booking. "
-            "The end_time is calculated automatically "
-            "from the selected service duration."
+            "Public booking endpoint. "
+            "Customers do not need an account. "
+            "The booking service validates the "
+            "barber, service, date and time."
         ),
     )
-    def create(self, request, *args, **kwargs):
+    def create(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
+        """
+        Create a public booking.
+
+        The serializer calls bookings.services,
+        so business logic stays outside the view.
+        """
+
         serializer = self.get_serializer(
             data=request.data
         )
@@ -65,9 +129,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             raise_exception=True
         )
 
-        booking = create_booking(
-            **serializer.validated_data
-        )
+        booking = serializer.save()
 
         output = self.get_serializer(
             booking
@@ -93,8 +155,9 @@ class BookingViewSet(viewsets.ModelViewSet):
             200: BookingSerializer,
         },
         description=(
-            "Update an existing booking. "
-            "Business rules are handled inside services.py."
+            "Admin-only booking update. "
+            "Business rules are handled by "
+            "bookings.services."
         ),
     )
     def update(
@@ -120,10 +183,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             raise_exception=True
         )
 
-        booking = update_booking(
-            booking,
-            **serializer.validated_data,
-        )
+        booking = serializer.save()
 
         output = self.get_serializer(
             booking
@@ -140,10 +200,14 @@ class BookingViewSet(viewsets.ModelViewSet):
     @extend_schema(
         responses={
             204: OpenApiResponse(
-                description="Booking deleted successfully."
+                description=(
+                    "Booking deleted successfully."
+                ),
             ),
         },
-        description="Permanently delete a booking.",
+        description=(
+            "Admin-only permanent deletion."
+        ),
     )
     def destroy(
         self,
@@ -167,10 +231,16 @@ class BookingViewSet(viewsets.ModelViewSet):
         request=None,
         responses={
             200: BookingSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "Booking cannot be cancelled."
+                ),
+            ),
         },
         description=(
-            "Cancel an existing booking. "
-            "The booking is not deleted; its status becomes cancelled."
+            "Admin-only cancellation. "
+            "The booking remains in the database "
+            "but becomes cancelled."
         ),
     )
     @action(
@@ -220,6 +290,18 @@ class BookingViewSet(viewsets.ModelViewSet):
                     "Format: YYYY-MM-DD."
                 ),
             ),
+            OpenApiParameter(
+                name="barber",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description=(
+                    "Optional barber ID. "
+                    "If omitted, availability is "
+                    "returned when at least one "
+                    "active barber is available."
+                ),
+            ),
         ],
         responses={
             200: OpenApiResponse(
@@ -227,10 +309,15 @@ class BookingViewSet(viewsets.ModelViewSet):
                     "Available appointment times."
                 ),
             ),
+            400: OpenApiResponse(
+                description=(
+                    "Invalid service, barber or date."
+                ),
+            ),
         },
         description=(
-            "Return available appointment times "
-            "for a service on a specific date."
+            "Public availability endpoint. "
+            "No customer login is required."
         ),
     )
     @action(
@@ -258,15 +345,25 @@ class BookingViewSet(viewsets.ModelViewSet):
             "booking_date"
         ]
 
+        barber = serializer.validated_data.get(
+            "barber"
+        )
+
         available_times = get_available_times(
             booking_date=booking_date,
             service=service,
+            barber=barber,
         )
 
+        response_data = {
+            "service": service.name,
+            "date": booking_date,
+            "available_times": available_times,
+        }
+
+        if barber is not None:
+            response_data["barber"] = barber.name
+
         return Response(
-            {
-                "service": service.name,
-                "date": booking_date,
-                "available_times": available_times,
-            }
+            response_data
         )

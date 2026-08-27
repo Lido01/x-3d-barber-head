@@ -125,3 +125,12 @@ def send_email_notification(notification):
             notification,
             exc,
         )
+        
+def fail_notification_handling(notification, error_message):
+    """
+    Handle a failed notification by marking it as failed and logging the error.
+    """
+    return mark_notification_failed(
+        notification,
+        error_message,
+    )

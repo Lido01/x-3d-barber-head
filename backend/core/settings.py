@@ -47,8 +47,8 @@ INSTALLED_APPS = [
     "apps.services",
     "apps.accounts",
     "apps.bookings",
-    # "payments",
     "apps.notifications",
+    "apps.payments",
     # "ai_agent",
 ]
 
@@ -186,3 +186,6 @@ SIMPLE_JWT = {
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 DEFAULT_FROM_EMAIL = "noreply@barber.local"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"

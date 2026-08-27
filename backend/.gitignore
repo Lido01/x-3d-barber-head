@@ -38,3 +38,16 @@ venv/
 *.py[cod]
 
 services/
+media/
+payment_receipts/
+
+# Database
+db.sqlite3
+
+# Documentation
+../docs/road_maap.md
+../docs/system_flow.md
+
+# Web assets and build outputs
+../web/public/
+../web/src/assets/
