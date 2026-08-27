@@ -1,9 +1,11 @@
 from django.db import transaction
-from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
+from apps.bookings.services import confirm_booking
 from .models import Payment
 
 
+@transaction.atomic
 def create_payment(
     *,
     booking,
@@ -13,17 +15,46 @@ def create_payment(
     receipt=None,
 ):
     """
-    Create a new pending payment.
+    Create a customer payment.
+
+    Customers do not need an account.
+    Every new payment starts as PENDING.
     """
 
-    if hasattr(booking, "payment"):
-        raise ValueError(
-            "This booking already has a payment."
+    if booking is None:
+        raise ValidationError(
+            {
+                "booking": [
+                    "A valid booking is required."
+                ]
+            }
+        )
+
+    if booking.status == booking.Status.CANCELLED:
+        raise ValidationError(
+            {
+                "booking": [
+                    "Cannot pay for a cancelled booking."
+                ]
+            }
+        )
+
+    if booking.status == booking.Status.COMPLETED:
+        raise ValidationError(
+            {
+                "booking": [
+                    "This booking has already been completed."
+                ]
+            }
         )
 
     if amount <= 0:
-        raise ValueError(
-            "Payment amount must be greater than zero."
+        raise ValidationError(
+            {
+                "amount": [
+                    "Payment amount must be greater than zero."
+                ]
+            }
         )
 
     payment = Payment.objects.create(
@@ -32,7 +63,7 @@ def create_payment(
         method=method,
         transaction_reference=transaction_reference,
         receipt=receipt,
-        status="pending",
+        status=Payment.Status.PENDING,
     )
 
     return payment
@@ -45,38 +76,36 @@ def verify_payment(
     verified_by,
 ):
     """
-    Verify a pending payment.
+    Admin verifies a pending payment.
+
+    Once payment is verified,
+    the related booking becomes CONFIRMED.
     """
 
-    if payment.status != "pending":
-        raise ValueError(
-            "Only pending payments can be verified."
+    if payment.status != Payment.Status.PENDING:
+        raise ValidationError(
+            {
+                "status": [
+                    "Only pending payments can be verified."
+                ]
+            }
         )
 
-    payment.status = "verified"
+    payment.status = Payment.Status.VERIFIED
     payment.verified_by = verified_by
-    payment.verified_at = timezone.now()
-    payment.rejection_reason = ""
 
     payment.save(
         update_fields=[
             "status",
             "verified_by",
-            "verified_at",
-            "rejection_reason",
             "updated_at",
         ]
     )
 
-    booking = payment.booking
-
-    if hasattr(booking, "status"):
-        booking.status = "confirmed"
-        booking.save(
-            update_fields=[
-                "status",
-            ]
-        )
+    # Confirm the booking after successful payment verification.
+    confirm_booking(
+        payment.booking
+    )
 
     return payment
 
@@ -88,30 +117,36 @@ def reject_payment(
     reason,
 ):
     """
-    Reject a pending payment.
+    Admin rejects a pending payment.
     """
 
-    if payment.status != "pending":
-        raise ValueError(
-            "Only pending payments can be rejected."
+    if payment.status != Payment.Status.PENDING:
+        raise ValidationError(
+            {
+                "status": [
+                    "Only pending payments can be rejected."
+                ]
+            }
         )
 
-    if not reason.strip():
-        raise ValueError(
-            "A rejection reason is required."
+    reason = reason.strip()
+
+    if not reason:
+        raise ValidationError(
+            {
+                "reason": [
+                    "A rejection reason is required."
+                ]
+            }
         )
 
-    payment.status = "rejected"
-    payment.rejection_reason = reason.strip()
-    payment.verified_by = None
-    payment.verified_at = None
+    payment.status = Payment.Status.REJECTED
+    payment.rejection_reason = reason
 
     payment.save(
         update_fields=[
             "status",
             "rejection_reason",
-            "verified_by",
-            "verified_at",
             "updated_at",
         ]
     )
