@@ -15,6 +15,10 @@ const links = [
     to: "/",
   },
   {
+    label: "Services",
+    to: "/services",
+  },
+  {
     label: "Haircuts",
     to: "/haircuts",
   },
