@@ -3,6 +3,7 @@ from django.db import models
 
 from apps.bookings.models import Booking
 
+
 class Payment(models.Model):
 
     METHOD_CHOICES = [
@@ -12,11 +13,12 @@ class Payment(models.Model):
         ("other", "Other"),
     ]
 
-    STATUS_CHOICES = [
-        ("pending", "Pending"),
-        ("verified", "Verified"),
-        ("rejected", "Rejected"),
-    ]
+    # Modern TextChoices approach matching the expectations of services.py
+    # Value strings are lowercase to safely preserve existing database entries
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        VERIFIED = "verified", "Verified"
+        REJECTED = "rejected", "Rejected"
 
     booking = models.OneToOneField(
         Booking,
@@ -47,8 +49,8 @@ class Payment(models.Model):
 
     status = models.CharField(
         max_length=20,
-        choices=STATUS_CHOICES,
-        default="pending",
+        choices=Status.choices,  # Points to the new TextChoices inner class
+        default=Status.PENDING,
     )
 
     verified_by = models.ForeignKey(
