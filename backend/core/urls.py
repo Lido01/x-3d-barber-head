@@ -33,6 +33,8 @@ urlpatterns = [
     path("api/accounts/", include("apps.accounts.urls")),
     path("api/notifications/", include("apps.notifications.urls")),
     path("api/payments/", include("apps.payments.urls")),
+    path("api/gallery/", include("apps.gallery.urls")),
+    path("api/testimonials/", include("apps.testimonials.urls")),
     
 
     path(
