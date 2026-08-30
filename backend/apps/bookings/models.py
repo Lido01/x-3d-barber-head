@@ -6,6 +6,27 @@ from apps.services.models import Service
 class Barber(models.Model):
     name = models.CharField(max_length=120)
 
+    role = models.CharField(
+        max_length=120,
+        blank=True,
+    )
+
+    specialty = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+
+    experience = models.CharField(
+        max_length=60,
+        blank=True,
+    )
+
+    image = models.ImageField(
+        upload_to="barbers/",
+        blank=True,
+        null=True,
+    )
+
     phone = models.CharField(
         max_length=30,
         blank=True,

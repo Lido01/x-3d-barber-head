@@ -166,3 +166,27 @@ class AvailabilitySerializer(serializers.Serializer):
         allow_null=True,
     )
 
+
+class BarberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Barber
+
+        fields = [
+            "id",
+            "name",
+            "role",
+            "specialty",
+            "experience",
+            "image",
+            "phone",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+        ]
+

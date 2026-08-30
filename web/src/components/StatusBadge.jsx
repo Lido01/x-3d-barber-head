@@ -28,6 +28,12 @@ const PAYMENT = {
   rejected: { label: "Rejected", tone: "bad" },
 };
 
+const TESTIMONIAL = {
+  pending: { label: "Pending", tone: "waiting" },
+  approved: { label: "Approved", tone: "good" },
+  rejected: { label: "Rejected", tone: "bad" },
+};
+
 export default function StatusBadge({ status, kind = "booking", className = "" }) {
   if (!status) {
     return (
@@ -39,7 +45,8 @@ export default function StatusBadge({ status, kind = "booking", className = "" }
     );
   }
 
-  const table = kind === "payment" ? PAYMENT : BOOKING;
+  const table =
+    kind === "payment" ? PAYMENT : kind === "testimonial" ? TESTIMONIAL : BOOKING;
 
   const entry = table[status] || {
     label: String(status).replace(/_/g, " "),

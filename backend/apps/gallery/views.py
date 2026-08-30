@@ -4,7 +4,7 @@ from rest_framework.parsers import (
     MultiPartParser,
     JSONParser,
 )
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 
 from drf_spectacular.utils import (
@@ -37,10 +37,6 @@ class GalleryPostViewSet(viewsets.ModelViewSet):
         JSONParser,
     ]
 
-    permission_classes = [
-        IsAuthenticated,
-    ]
-
     http_method_names = [
         "get",
         "post",
@@ -51,12 +47,32 @@ class GalleryPostViewSet(viewsets.ModelViewSet):
         "options",
     ]
 
+    def get_permissions(self):
+        """
+        Public customers can view active gallery posts.
+
+        Only admin/staff users can create, update or delete them.
+        """
+
+        if self.action in [
+            "list",
+            "retrieve",
+        ]:
+            return [AllowAny()]
+
+        return [IsAdminUser()]
+
     def get_queryset(self):
         """
         Customers only receive active gallery posts.
         """
 
-        return GalleryPost.objects.filter(
+        queryset = GalleryPost.objects.all()
+
+        if self.request.user.is_authenticated and self.request.user.is_staff:
+            return queryset
+
+        return queryset.filter(
             is_active=True
         )
 

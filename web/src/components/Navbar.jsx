@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import {
+  ArrowUpRight,
   CalendarDays,
   Menu,
   Scissors,
@@ -28,7 +29,7 @@ const links = [
   },
   {
     label: "Gallery",
-    to: "/#gallery",
+    to: "/gallery",
   },
   {
     label: "About",
@@ -37,6 +38,7 @@ const links = [
 ];
 
 export default function Navbar() {
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -65,6 +67,11 @@ export default function Navbar() {
   const closeMenu = () => {
     setMobileOpen(false);
   };
+
+  // The staff console has its own sidebar; hide the public nav there.
+  if (location.pathname.startsWith("/admin")) {
+    return null;
+  }
 
   return (
     <>
@@ -157,7 +164,14 @@ export default function Navbar() {
           </nav>
 
           {/* Desktop CTA */}
-          <div className="hidden lg:block">
+          <div className="hidden items-center gap-6 lg:flex">
+            <Link
+              to="/admin"
+              className="text-[13px] font-medium tracking-[0.08em] text-white/40 transition hover:text-white"
+            >
+              Staff
+            </Link>
+
             <Button
               to="/booking"
               className="px-4 py-2.5"
@@ -249,6 +263,14 @@ export default function Navbar() {
               <CalendarDays size={15} />
               <span>Open today · 09:00 — 21:00</span>
             </div>
+
+            <Link
+              to="/admin"
+              onClick={closeMenu}
+              className="mt-4 inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-white/40 transition hover:text-[#d6a85f]"
+            >
+              Staff console <ArrowUpRight size={13} />
+            </Link>
           </div>
         </div>
       </div>
