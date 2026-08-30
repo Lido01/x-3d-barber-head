@@ -1,5 +1,6 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import (
     AllowAny,
     IsAuthenticated,
@@ -14,9 +15,10 @@ from drf_spectacular.utils import (
     OpenApiTypes,
 )
 
-from .models import Booking
+from .models import Booking, Barber
 from .serializers import (
     AvailabilitySerializer,
+    BarberSerializer,
     BookingSerializer,
 )
 from .services import (
@@ -366,4 +368,53 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         return Response(
             response_data
+        )
+
+
+class BarberViewSet(viewsets.ModelViewSet):
+    """
+    API for the barbers who work in the shop.
+
+    Public customers can view active barbers.
+
+    Admin/staff users can create, update and delete barbers, and control
+    whether they are shown to customers.
+    """
+
+    serializer_class = BarberSerializer
+
+    parser_classes = [
+        MultiPartParser,
+        FormParser,
+        JSONParser,
+    ]
+
+    def get_permissions(self):
+        """
+        Public:
+            GET barbers
+
+        Admin:
+            POST
+            PUT
+            PATCH
+            DELETE
+        """
+
+        if self.action in [
+            "list",
+            "retrieve",
+        ]:
+            return [AllowAny()]
+
+        return [IsAdminUser()]
+
+    def get_queryset(self):
+        queryset = Barber.objects.all()
+
+        if self.request.user.is_authenticated and self.request.user.is_staff:
+            return queryset
+
+        return queryset.filter(
+            is_active=True
         )

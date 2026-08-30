@@ -127,6 +127,13 @@ export default function Services() {
                         Book this service
                         <ArrowUpRight size={15} strokeWidth={2.2} />
                       </Link>
+
+                      <Link
+                        to={`/services/${service.id}`}
+                        className="mt-3 inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
+                      >
+                        View details
+                      </Link>
                     </div>
                   </article>
                 );

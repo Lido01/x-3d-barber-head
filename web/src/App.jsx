@@ -1,19 +1,40 @@
-import { Routes, Route } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import RequireAdmin from "./components/RequireAdmin";
+import AdminLayout from "./components/admin/AdminLayout";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
 
 import Home from "./pages/Home";
+import Gallery from "./pages/Gallery";
 import Haircuts from "./pages/Haircuts";
 import Barbers from "./pages/Barbers";
 import Services from "./pages/Services";
+import ServiceDetail from "./pages/ServiceDetail";
 import Booking from "./pages/Booking";
 import Payment from "./pages/Payment";
 import BookingSuccess from "./pages/BookingSuccess";
 import NotFound from "./pages/NotFound";
+
 import AdminLogin from "./pages/admin/AdminLogin";
+import AdminOverview from "./pages/admin/AdminOverview";
+import AdminBookings from "./pages/admin/AdminBookings";
 import AdminPayments from "./pages/admin/AdminPayments";
+import AdminServices from "./pages/admin/AdminServices";
+import AdminGallery from "./pages/admin/AdminGallery";
+import AdminTestimonials from "./pages/admin/AdminTestimonials";
+
+/**
+ * Staff-only screen chunk. Each admin route is wrapped in RequireAdmin
+ * and rendered inside the shared sidebar layout.
+ */
+function AdminScreen({ children }) {
+  return (
+    <RequireAdmin>
+      <AdminLayout>{children}</AdminLayout>
+    </RequireAdmin>
+  );
+}
 
 export default function App() {
   return (
@@ -23,10 +44,13 @@ export default function App() {
 
         <main>
           <Routes>
+            {/* Public site */}
             <Route path="/" element={<Home />} />
             <Route path="/services" element={<Services />} />
+            <Route path="/services/:id" element={<ServiceDetail />} />
             <Route path="/haircuts" element={<Haircuts />} />
             <Route path="/barbers" element={<Barbers />} />
+            <Route path="/gallery" element={<Gallery />} />
 
             {/* Public booking flow - deliberately unauthenticated. */}
             <Route path="/booking" element={<Booking />} />
@@ -38,13 +62,26 @@ export default function App() {
 
             {/* Staff only. */}
             <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin" element={<AdminScreen><AdminOverview /></AdminScreen>} />
+            <Route
+              path="/admin/bookings"
+              element={<AdminScreen><AdminBookings /></AdminScreen>}
+            />
             <Route
               path="/admin/payments"
-              element={
-                <RequireAdmin>
-                  <AdminPayments />
-                </RequireAdmin>
-              }
+              element={<AdminScreen><AdminPayments /></AdminScreen>}
+            />
+            <Route
+              path="/admin/services"
+              element={<AdminScreen><AdminServices /></AdminScreen>}
+            />
+            <Route
+              path="/admin/gallery"
+              element={<AdminScreen><AdminGallery /></AdminScreen>}
+            />
+            <Route
+              path="/admin/testimonials"
+              element={<AdminScreen><AdminTestimonials /></AdminScreen>}
             />
 
             <Route path="*" element={<NotFound />} />
