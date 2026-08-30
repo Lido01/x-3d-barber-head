@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, LogOut, RefreshCw, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Check, RefreshCw, X } from "lucide-react";
 
 import StatusBadge from "../../components/StatusBadge";
 import Alert from "../../components/ui/Alert";
@@ -32,7 +31,7 @@ const FILTERS = [
 ];
 
 export default function AdminPayments() {
-  const { account, signOut } = useAdminAuth();
+  const { account } = useAdminAuth();
 
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -118,76 +117,64 @@ export default function AdminPayments() {
   };
 
   return (
-    <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-[1100px]">
-        <div className="flex flex-wrap items-end justify-between gap-5">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-              Staff
-            </p>
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
+            Staff · Management
+          </p>
 
-            <h1 className="mt-4 font-serif text-4xl leading-none sm:text-5xl">
-              Payments
-            </h1>
+          <h1 className="mt-4 font-serif text-4xl leading-none sm:text-5xl">
+            Payments
+          </h1>
 
-            {account?.username && (
-              <p className="mt-3 text-xs text-white/35">
-                Signed in as {account.username}
-              </p>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={load}
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
-            >
-              <RefreshCw size={13} />
-              Refresh
-            </button>
-
-            <button
-              type="button"
-              onClick={signOut}
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white/50 transition hover:border-[#e05a4f]/50 hover:text-[#e0776b]"
-            >
-              <LogOut size={13} />
-              Sign out
-            </button>
-          </div>
+          <p className="mt-3 text-xs text-white/35">
+            {account?.username
+              ? `Signed in as ${account.username}`
+              : "Verify customer payments"}
+          </p>
         </div>
 
-        {/* filters */}
-        <div className="mt-9 flex gap-2 overflow-x-auto pb-2">
-          {FILTERS.map((option) => {
-            const active = filter === option.key;
+        <button
+          type="button"
+          onClick={load}
+          className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
+        >
+          <RefreshCw size={13} />
+          Refresh
+        </button>
+      </div>
 
-            const count =
-              option.key === "all"
-                ? payments.length
-                : payments.filter((row) => row.status === option.key).length;
+      {/* filters */}
+      <div className="mt-7 flex gap-2 overflow-x-auto pb-2">
+        {FILTERS.map((option) => {
+          const active = filter === option.key;
 
-            return (
-              <button
-                key={option.key}
-                type="button"
-                onClick={() => setFilter(option.key)}
-                className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs transition ${
-                  active
-                    ? "border-[#d6a85f] bg-[#d6a85f] text-black"
-                    : "border-white/10 text-white/50 hover:border-white/40"
-                }`}
-              >
-                {option.label}
-                <span className={active ? "text-black/60" : "text-white/30"}>
-                  {" "}
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+          const count =
+            option.key === "all"
+              ? payments.length
+              : payments.filter((row) => row.status === option.key).length;
+
+          return (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setFilter(option.key)}
+              className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs transition ${
+                active
+                  ? "border-[#d6a85f] bg-[#d6a85f] text-black"
+                  : "border-white/10 text-white/50 hover:border-white/40"
+              }`}
+            >
+              {option.label}
+              <span className={active ? "text-black/60" : "text-white/30"}>
+                {" "}
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
         {actionError && (
           <Alert
@@ -400,13 +387,6 @@ export default function AdminPayments() {
             })}
           </div>
         )}
-
-        <p className="mt-10 text-center text-[11px] text-white/25">
-          <Link to="/" className="transition hover:text-white/60">
-            Back to the site
-          </Link>
-        </p>
-      </div>
     </div>
   );
 }
