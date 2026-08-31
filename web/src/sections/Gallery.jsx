@@ -5,75 +5,86 @@ import { useGallery } from "../hooks/useGallery";
 import { mediaUrl } from "../services/api";
 import Alert from "../components/ui/Alert";
 import Spinner from "../components/ui/Spinner";
+import Reveal from "../components/Reveal";
+import ParallaxSection from "../components/ParallaxSection";
 
 /**
- * "Recent work" grid on the home page.
+ * Image-backed "Recent work" band. The gallery backdrop stays fixed
+ * while the cards and links scroll up and overlay it.
  *
- * Fed by GET /api/gallery/gallery/ — no mock data. Clicking a post
- * opens the detail modal via onSelect, or the customer can browse the
- * full gallery.
+ * Fed by GET /api/gallery/gallery/ — no mock data.
  */
 export default function Gallery({ onSelect }) {
   const { posts, loading, error, reload } = useGallery();
 
   return (
-    <section id="gallery" className="bg-[#090909] px-5 py-20 sm:px-8 sm:py-28 lg:px-10">
-      <div className="mx-auto max-w-[1440px]">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <p className="text-[10px] uppercase tracking-[.35em] text-[#d6a85f]">
-              Recent work
-            </p>
-            <h2 className="mt-4 font-serif text-5xl sm:text-6xl">
-              The <span className="italic text-[#d6a85f]">gallery.</span>
-            </h2>
-            <p className="mt-5 max-w-xs text-sm leading-6 text-white/45">
-              Real cuts from the chair — tap a look to explore the style and
-              find the right booking time.
-            </p>
-          </div>
+    <ParallaxSection
+      id="gallery"
+      image="/media/gallery/1740692046956.jpeg"
+      overlay="from-black/95 via-black/70 to-black/95"
+      contentClassName="py-20 sm:py-24"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <Reveal>
+          <p className="text-[10px] uppercase tracking-[.35em] text-[#d6a85f]">
+            Recent work
+          </p>
+          <h2 className="mt-4 font-serif text-5xl sm:text-6xl">
+            The <span className="italic text-[#d6a85f]">gallery.</span>
+          </h2>
+          <p className="mt-5 max-w-xs text-sm leading-6 text-white/55">
+            Real cuts from the chair — tap a look to explore the style and
+            find the right booking time.
+          </p>
+        </Reveal>
 
+        <Reveal delay={120}>
           <Link
             to="/gallery"
             className="inline-flex items-center gap-2 text-xs uppercase tracking-[.2em] text-[#d6a85f] transition hover:text-[#e5bd7a]"
           >
             View full gallery <ArrowRight size={14} />
           </Link>
+        </Reveal>
+      </div>
+
+      {loading && (
+        <div className="mt-12 flex items-center justify-center rounded-2xl border border-white/10 bg-black/40 py-20 backdrop-blur-md">
+          <Spinner label="Loading the gallery..." />
         </div>
+      )}
 
-        {loading && (
-          <div className="mt-12 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-20">
-            <Spinner label="Loading the gallery..." />
-          </div>
-        )}
+      {!loading && error && (
+        <Alert
+          tone="error"
+          title="Could not load the gallery"
+          details={error.fieldErrors}
+          onRetry={reload}
+          className="mt-12"
+        >
+          {error.message}
+        </Alert>
+      )}
 
-        {!loading && error && (
-          <Alert
-            tone="error"
-            title="Could not load the gallery"
-            details={error.fieldErrors}
-            onRetry={reload}
-            className="mt-12"
-          >
-            {error.message}
-          </Alert>
-        )}
+      {!loading && !error && posts.length === 0 && (
+        <Alert tone="info" title="Nothing here yet" className="mt-12">
+          The shop hasn't shared any looks yet. Check back soon.
+        </Alert>
+      )}
 
-        {!loading && !error && posts.length === 0 && (
-          <Alert tone="info" title="Nothing here yet" className="mt-12">
-            The shop hasn't shared any looks yet. Check back soon.
-          </Alert>
-        )}
-
-        {!loading && !error && posts.length > 0 && (
-          <div className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {posts.map((post, index) => (
+      {!loading && !error && posts.length > 0 && (
+        <div className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {posts.map((post, index) => (
+            <Reveal
+              key={post.id}
+              delay={index * 70}
+              className={`group relative min-h-60 ${
+                index === 0 || index === 3 ? "sm:col-span-2" : ""
+              }`}
+            >
               <button
-                key={post.id}
                 onClick={() => onSelect(post)}
-                className={`group relative min-h-60 overflow-hidden border border-white/10 text-left transition hover:border-[#d6a85f]/50 ${
-                  index === 0 || index === 3 ? "sm:col-span-2" : ""
-                }`}
+                className="relative h-full w-full overflow-hidden border border-white/10 text-left transition hover:border-[#d6a85f]/50"
               >
                 <img
                   src={mediaUrl(post.image)}
@@ -91,10 +102,10 @@ export default function Gallery({ onSelect }) {
                   <ArrowUpRight className="mb-1 shrink-0 text-white/80" size={18} />
                 </div>
               </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
+            </Reveal>
+          ))}
+        </div>
+      )}
+    </ParallaxSection>
   );
 }

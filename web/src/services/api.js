@@ -8,16 +8,9 @@ import {
   setTokens,
 } from "../utils/adminToken";
 
-/**
- * The single Axios instance for the whole app.
- *
- * Everything the frontend knows about the API goes through here:
- * there is no second client and no hardcoded localhost anywhere
- * else in src/.
- */
 
 const ROOT = (
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+  import.meta.env.VITE_API_BASE_URL || "http://10.240.41.114"
 ).replace(/\/+$/, "");
 
 /** Absolute root of the Django server, e.g. for media URLs. */
