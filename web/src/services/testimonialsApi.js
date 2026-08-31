@@ -33,13 +33,20 @@ export function listApprovedTestimonials({ signal } = {}) {
 /**
  * Submit a new customer testimonial. It is created with `pending`
  * status and only appears publicly once an admin approves it.
+ *
+ * `photo` is an optional File object sent as multipart/form-data so
+ * customers can attach a picture of their cut with the review.
  */
-export function submitTestimonial({ customerName, message, rating }) {
-  const payload = {
-    customer_name: customerName,
-    message,
-    rating,
-  };
+export function submitTestimonial({ customerName, message, rating, photo = null }) {
+  const payload = new FormData();
+
+  payload.append("customer_name", customerName);
+  payload.append("message", message);
+  payload.append("rating", String(rating));
+
+  if (photo) {
+    payload.append("photo", photo);
+  }
 
   return api
     .post("/testimonials/testimonials/", payload)

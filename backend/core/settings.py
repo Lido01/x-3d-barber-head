@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-k(=rr7mg&(#nqaag+4=n6-bjd*i9$!49dte)1id&raq=!uofh9
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -51,7 +51,7 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.gallery",
     "apps.testimonials",
-    # "ai_agent",
+    "apps.ai_agent",
 ]
 
 MIDDLEWARE = [
@@ -142,10 +142,22 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 
 # added by lidetu for customization
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+#     "http://localhost:5173",
+#     "http://127.0.0.1:5173",
+    
+#     # ➕ Add these network configurations:
+#     "http://192.168.1.15:3000", # If using Create React App
+#     "http://192.168.1.15:5173", # If using Vite
+# ]
+CORS_ALLOW_ALL_ORIGINS = True 
+# ALLOWED_HOSTS = [
+#     "localhost",
+#     "127.0.0.1",
+#     "10.240.41.23", 
+# ]
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
