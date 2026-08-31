@@ -51,7 +51,7 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.gallery",
     "apps.testimonials",
-    # "ai_agent",
+    "apps.ai_agent",
 ]
 
 MIDDLEWARE = [
