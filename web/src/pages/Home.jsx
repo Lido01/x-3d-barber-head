@@ -1,15 +1,23 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
+
 import Hero from "../sections/Hero";
-import Testimonials from "../sections/Testimonials";
+import Marquee from "../sections/Marquee";
+import QuickBook from "../sections/QuickBook";
 import Gallery from "../sections/Gallery";
+import Testimonials from "../sections/Testimonials";
 import About from "../sections/About";
+
 import { mediaUrl } from "../services/api";
 
 export default function Home() {
   const [look, setLook] = useState(null);
+
   return (
     <>
       <Hero />
+      <Marquee />
+      <QuickBook />
       <Gallery onSelect={setLook} />
       <Testimonials />
       <About />
@@ -41,12 +49,22 @@ function LookModal({ post, close }) {
           <p className="mt-4 text-sm leading-6 text-white/55">
             {post.description || "Fresh from the chair. Book this look and make it yours."}
           </p>
-          <button
-            onClick={close}
-            className="mt-6 text-xs uppercase tracking-[.2em] text-[#d6a85f]"
-          >
-            Close details
-          </button>
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Link
+              to="/booking"
+              className="flex-1 rounded-full bg-[#d6a85f] px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
+            >
+              Book this look
+            </Link>
+
+            <button
+              onClick={close}
+              className="flex-1 rounded-full border border-white/15 px-6 py-3 text-sm text-white/70 transition hover:bg-white/5"
+            >
+              Close details
+            </button>
+          </div>
         </div>
       </div>
     </div>
