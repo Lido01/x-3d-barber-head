@@ -297,13 +297,6 @@ export default function BookingSuccess() {
 
         <div className="mt-10 flex flex-wrap gap-3">
           <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-5 py-3 text-sm font-semibold text-white transition hover:border-white/25 hover:bg-white/[0.09]"
-          >
-            Back home
-          </Link>
-
-          <Link
             to="/services"
             className="inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
           >

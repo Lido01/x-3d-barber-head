@@ -1,5 +1,4 @@
-import { ArrowLeft, Scissors, Star } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Scissors, Star } from "lucide-react";
 
 import Alert from "../components/ui/Alert";
 import Spinner from "../components/ui/Spinner";
@@ -17,13 +16,6 @@ export default function Barbers() {
   return (
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1440px]">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-white/40 hover:text-white"
-        >
-          <ArrowLeft size={14} />
-          Back home
-        </Link>
 
         <div className="mt-12 max-w-4xl">
           <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">

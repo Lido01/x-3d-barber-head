@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Clock3, X } from "lucide-react";
+import { ArrowUpRight, Clock3, X } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import Alert from "../components/ui/Alert";
@@ -61,13 +61,6 @@ export default function Haircuts() {
   return (
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-28 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1440px]">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-xs uppercase tracking-[.2em] text-white/40 transition hover:text-white"
-        >
-          <ArrowLeft size={14} /> Back home
-        </Link>
-
         <div className="mt-12 max-w-4xl">
           <p className="text-[10px] uppercase tracking-[.35em] text-[#d6a85f]">
             Haircut collection

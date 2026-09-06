@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CalendarDays, Clock3, Scissors } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { CalendarDays, Clock3, Scissors } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import BarberPicker from "../components/booking/BarberPicker";
 import ServicePicker from "../components/booking/ServicePicker";
@@ -230,14 +230,6 @@ export default function Booking() {
   return (
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1200px]">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-white/40 hover:text-white"
-        >
-          <ArrowLeft size={14} />
-          Back home
-        </Link>
-
         <div className="mt-12 grid gap-12 lg:grid-cols-[0.75fr_1.25fr] lg:gap-20">
           {/* ---------------- editorial column ---------------- */}
           <div>
