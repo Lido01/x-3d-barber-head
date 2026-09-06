@@ -9,8 +9,13 @@ import {
 } from "../utils/adminToken";
 
 
+const browserApiRoot =
+  typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : "http://127.0.0.1:8000";
+
 const ROOT = (
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+  import.meta.env.VITE_API_BASE_URL || browserApiRoot
 ).replace(/\/+$/, "");
 
 /** Absolute root of the Django server, e.g. for media URLs. */
