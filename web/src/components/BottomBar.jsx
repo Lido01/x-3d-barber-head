@@ -110,7 +110,7 @@ export default function BottomBar() {
         <button
           type="button"
           onClick={() => setMoreOpen((value) => !value)}
-          className={tabClass}
+          className={tabClass(false)}
         >
           <Sparkles size={20} strokeWidth={2} />
           <span>More</span>
