@@ -10,7 +10,7 @@ import {
 
 
 const ROOT = (
-  import.meta.env.VITE_API_BASE_URL || "http://10.240.41.114"
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
 ).replace(/\/+$/, "");
 
 /** Absolute root of the Django server, e.g. for media URLs. */
