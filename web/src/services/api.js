@@ -124,6 +124,18 @@ export function mediaUrl(path) {
   }
 
   if (/^https?:\/\//i.test(path)) {
+    const url = new URL(path);
+
+    // Django builds absolute media URLs from the request host. When the
+    // frontend is opened through a LAN address, those URLs can still point
+    // at loopback and therefore resolve on the wrong machine.
+    if (
+      url.pathname.startsWith("/media/") &&
+      ["localhost", "127.0.0.1", "0.0.0.0"].includes(url.hostname)
+    ) {
+      return `${ROOT}${url.pathname}${url.search}${url.hash}`;
+    }
+
     return path;
   }
 
