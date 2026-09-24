@@ -1,8 +1,6 @@
 import { AtSign, MapPin, Phone, Clock3 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import Button from "./Button";
-
 /**
  * Shared public footer. Hidden on /admin/* routes (which have their own
  * sidebar) via useLocation.
@@ -12,7 +10,7 @@ export default function Footer() {
   // The Navbar hides the same way.
   return (
     <footer className="border-t border-white/10 bg-[#070707] px-5 pb-28 pt-16 sm:px-8 lg:px-10 lg:pb-10">
-      <div className="mx-auto grid max-w-[1440px] gap-12 lg:grid-cols-[1.2fr_0.6fr_0.6fr_0.9fr]">
+      <div className="mx-auto grid gap-4 lg:grid-cols-[1.2fr_0.6fr_0.6fr_0.9fr]">
         <div>
           <Link to="/" className="inline-flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d6a85f] font-serif text-lg text-black">
@@ -42,19 +40,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div>
-          <p className="text-[10px] uppercase tracking-[.25em] text-white/30">
-            Explore
-          </p>
-          <ul className="mt-4 space-y-3 text-sm text-white/50">
-            <li><Link className="transition hover:text-white" to="/services">Services</Link></li>
-            <li><Link className="transition hover:text-white" to="/haircuts">Haircuts</Link></li>
-            <li><Link className="transition hover:text-white" to="/barbers">Barbers</Link></li>
-            <li><Link className="transition hover:text-white" to="/gallery">Gallery</Link></li>
-          </ul>
-        </div>
-
-        <div>
+        <div className="justify-self-end">
           <p className="text-[10px] uppercase tracking-[.25em] text-white/30">
             Visit
           </p>
@@ -63,22 +49,12 @@ export default function Footer() {
             <li className="flex gap-2"><Clock3 size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" /> Daily 09:00 — 21:00</li>
           </ul>
         </div>
-
-        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-          <p className="font-serif text-xl">Ready for a fresh look?</p>
-          <p className="mt-2 text-sm text-white/40">
-            Book your chair online in under a minute.
-          </p>
-          <Button to="/booking" className="mt-4 w-full py-3">
-            Book now
-          </Button>
-        </div>
       </div>
 
-      <div className="mx-auto mt-14 flex max-w-[1440px] flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white/30 sm:flex-row">
+      {/* <div className="mx-auto mt-14 flex max-w-[1440px] flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white/30 sm:flex-row">
         <p>© {new Date().getFullYear()} NOIR Barber Studio. All rights reserved.</p>
         <p>Made for the craft of the cut.</p>
-      </div>
+      </div> */}
     </footer>
   );
 }
