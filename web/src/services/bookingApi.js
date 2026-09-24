@@ -89,14 +89,6 @@ export function createBooking({
   return api.post("/bookings/", payload).then((response) => response.data);
 }
 
-/**
- * Barbers — GET /api/barbers/
- *
- * NOTE: this endpoint does not exist in the backend yet. Barber is a
- * model registered in Django admin but has no serializer, viewset or
- * route. Gated behind VITE_ENABLE_BARBER_SELECTION so the app makes
- * no request until the endpoint is added.
- */
 export function listBarbers({ signal } = {}) {
   return api.get("/barbers/", { signal }).then((response) => response.data);
 }
