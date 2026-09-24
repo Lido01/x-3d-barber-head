@@ -5,7 +5,7 @@ import gsap from "gsap";
 import Button from "../components/Button";
 import { mediaUrl } from "../services/api";
 
-const BG = "/media/services/barber-images.jpeg";
+const BG = "/media/services/demo-skin-fade.jpg";
 
 export default function Hero() {
   const intro = useRef(null);
@@ -91,7 +91,7 @@ export default function Hero() {
 
             <div className="flex items-center gap-2 text-xs text-white/50">
               <CalendarDays size={14} className="text-[#d6a85f]" />
-              1,200+ cuts
+              Open daily 09:00 — 21:00
             </div>
 
             <div className="h-4 w-px bg-white/10" />
