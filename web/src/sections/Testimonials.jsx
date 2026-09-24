@@ -112,7 +112,7 @@ export default function Testimonials() {
 
   return (
     <ParallaxSection
-      image="/media/testimonials/photo_2024-11-06_13-33-59.jpg"
+      image="/media/testimonials/demo-adonay.jpg"
       overlay="from-black/95 via-black/75 to-black/95"
       contentClassName="py-20 sm:py-24"
     >
@@ -154,41 +154,49 @@ export default function Testimonials() {
           )}
 
           {!loading && !error && testimonials.length > 0 && (
-            <div className="mt-12 grid gap-4 lg:grid-cols-2">
+            <div className="mt-12 grid gap-5 sm:grid-cols-2">
               {testimonials.map((item, index) => (
                 <Reveal
                   key={item.id}
                   delay={index * 90}
-                  className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[.025]"
+                  className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[.025]"
                 >
-                  <div className="flex-1 p-6 sm:p-7">
+                  <div className="relative aspect-[4/3] overflow-hidden bg-[#1a1a1a]">
+                    {item.photo ? (
+                      <img
+                        src={mediaUrl(item.photo)}
+                        alt={`${item.customer_name}'s finished haircut`}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full flex-col items-center justify-center bg-gradient-to-br from-[#38332b] via-[#1b1b1b] to-[#0b0b0b]">
+                        <span className="font-serif text-5xl text-[#d6a85f]/50">N</span>
+                        <span className="mt-3 text-[10px] uppercase tracking-[0.25em] text-white/35">
+                          Finished at NOIR
+                        </span>
+                      </div>
+                    )}
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/10" />
+                    <span className="absolute left-4 top-4 border border-white/15 bg-black/35 px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] text-white/70 backdrop-blur">
+                      Fresh cut
+                    </span>
+                  </div>
+
+                  <div className="p-5 sm:p-6">
                     <div className="flex gap-1 text-[#d6a85f]">
                       {Array.from({ length: item.rating }).map((_, i) => (
-                        <Star key={i} size={13} fill="currentColor" />
+                        <Star key={i} size={14} fill="currentColor" />
                       ))}
                     </div>
                     <p className="mt-4 text-sm leading-7 text-white/75">
                       “{item.message}”
                     </p>
-                  </div>
-
-                  <div className="flex items-center gap-3 border-t border-white/10 px-6 py-4">
-                    {item.photo ? (
-                      <img
-                        src={mediaUrl(item.photo)}
-                        alt={item.customer_name}
-                        className="h-11 w-11 rounded-full border border-white/10 object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#d6a85f]/15 font-serif text-lg text-[#d6a85f]">
-                        {item.customer_name?.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-
-                    <div>
+                    <div className="mt-5 flex items-center justify-between gap-3 border-t border-white/10 pt-4">
                       <p className="font-semibold">{item.customer_name}</p>
-                      <p className="mt-0.5 text-[10px] uppercase tracking-[.2em] text-white/35">
-                        {item.customer_phone ? "Customer visit" : "Verified visit"}
+                      <p className="text-[10px] uppercase tracking-[.2em] text-white/35">
+                        {item.customer_phone ? "Customer visit" : "NOIR guest"}
                       </p>
                     </div>
                   </div>
