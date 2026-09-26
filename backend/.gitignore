@@ -37,7 +37,7 @@ venv/
 *__pycache__/
 *.py[cod]
 
-services/
+/services/
 media/
 payment_receipts/
 
@@ -51,3 +51,14 @@ db.sqlite3
 # Web assets and build outputs
 ../web/public/
 ../web/src/assets/
+
+# Seed photography. This is the source pool `manage.py seed_demo_content`
+# copies from into media/ for a local demo database. It is binary, it is
+# reproducible, and it is not source — it stays out of the repository.
+seed_assets/
+
+# The 3D barber head model lives under web/public/models and is ~32 MB of
+# GLB. It is fetched/authored locally, never committed.
+../web/public/models/
+*.glb
+*.gltf

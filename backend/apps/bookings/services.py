@@ -14,8 +14,9 @@ Future AI flow:
     database
 """
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import localdate
 
@@ -87,6 +88,22 @@ def validate_slot(start_time, end_time):
             {
                 "end_time": [
                     "End time must be after start time."
+                ]
+            }
+        )
+
+
+def validate_business_hours(start_time, end_time):
+    if (
+        start_time < settings.BOOKING_OPENING_TIME
+        or end_time > settings.BOOKING_CLOSING_TIME
+    ):
+        raise ValidationError(
+            {
+                "start_time": [
+                    "Appointments must be between "
+                    f"{settings.BOOKING_OPENING_TIME:%H:%M} and "
+                    f"{settings.BOOKING_CLOSING_TIME:%H:%M}."
                 ]
             }
         )
@@ -203,6 +220,11 @@ def create_booking(
     )
 
     validate_slot(
+        start_time,
+        end_time,
+    )
+
+    validate_business_hours(
         start_time,
         end_time,
     )
@@ -401,6 +423,11 @@ def update_booking(
         new_end,
     )
 
+    validate_business_hours(
+        new_start,
+        new_end,
+    )
+
     # ---------------------------------------------------------
     # LOCK BARBER
     # ---------------------------------------------------------
@@ -537,14 +564,12 @@ def get_available_times(
 
     current = datetime.combine(
         booking_date,
-        time(0, 0),
+        settings.BOOKING_OPENING_TIME,
     )
 
-    # Last possible starting point is calculated
-    # from the service duration.
     day_end = datetime.combine(
-        booking_date + timedelta(days=1),
-        time(0, 0),
+        booking_date,
+        settings.BOOKING_CLOSING_TIME,
     )
 
     while current < day_end:
@@ -556,8 +581,10 @@ def get_available_times(
             service.duration,
         )
 
-        # A service cannot extend into the next day.
-        if end_time <= start_time:
+        if (
+            end_time <= start_time
+            or end_time > settings.BOOKING_CLOSING_TIME
+        ):
             break
 
         # -----------------------------------------------------

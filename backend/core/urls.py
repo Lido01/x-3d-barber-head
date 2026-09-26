@@ -36,6 +36,8 @@ urlpatterns = [
     path("api/gallery/", include("apps.gallery.urls")),
     path("api/testimonials/", include("apps.testimonials.urls")),
     
+    path("api/", include("apps.ai_agent.urls")),
+    
 
     path(
         "api/schema/",

@@ -12,6 +12,7 @@ class GalleryPostSerializer(serializers.ModelSerializer):
             "description",
             "image",
             "style_name",
+            "service",
             "is_active",
             "created_at",
             "updated_at",

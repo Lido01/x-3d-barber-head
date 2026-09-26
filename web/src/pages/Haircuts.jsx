@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Clock3, X } from "lucide-react";
+import { ArrowUpRight, Clock3, X } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import Alert from "../components/ui/Alert";
@@ -33,8 +33,7 @@ export default function Haircuts() {
           rows.push({ ...style, service });
         }
       } else {
-        // A service with no styles is still a bookable look.
-        rows.push({ ...service, isServiceRoot: true });
+        rows.push({ ...service, service, isServiceRoot: true });
       }
     }
 
@@ -42,14 +41,23 @@ export default function Haircuts() {
   }, [services]);
 
   const categories = useMemo(
-    () => ["All", ...new Set(haircuts.map((cut) => cut.category))],
+    () => [
+      "All",
+      ...new Set(
+        haircuts
+          .map((cut) => cut.category || cut.service?.name)
+          .filter(Boolean)
+      ),
+    ],
     [haircuts]
   );
 
   const shown =
     category === "All"
       ? haircuts
-      : haircuts.filter((cut) => cut.category === category);
+      : haircuts.filter(
+          (cut) => (cut.category || cut.service?.name) === category
+        );
 
   useEffect(() => {
     document.body.style.overflow = selected ? "hidden" : "";
@@ -61,24 +69,10 @@ export default function Haircuts() {
   return (
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-28 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1440px]">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-xs uppercase tracking-[.2em] text-white/40 transition hover:text-white"
-        >
-          <ArrowLeft size={14} /> Back home
-        </Link>
-
         <div className="mt-12 max-w-4xl">
-          <p className="text-[10px] uppercase tracking-[.35em] text-[#d6a85f]">
-            Haircut collection
-          </p>
-          <h1 className="mt-5 font-serif text-5xl leading-[.85] tracking-tight sm:text-7xl lg:text-9xl">
+          <h3 className="mt-5 font-serif text-5xl leading-[.85] tracking-tight sm:text-7xl lg:text-9xl">
             Find Your<span className="italic text-[#d6a85f]">signature.</span>
-          </h1>
-          <p className="mt-8 max-w-xl text-sm leading-7 text-white/45 sm:text-base">
-            Browse our looks, then open any one for a closer view before
-            booking your chair.
-          </p>
+          </h3>
         </div>
 
         {loading && (
@@ -126,7 +120,7 @@ export default function Haircuts() {
             <div className="mt-9 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {shown.map((cut) => (
                 <button
-                  key={`${cut.service?.id}|| "root"}`}
+                  key={`${cut.service?.id || "root"}-${cut.id || cut.name}`}
                   onClick={() => setSelected(cut)}
                   className="group relative min-h-[420px] overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
                 >
@@ -142,10 +136,10 @@ export default function Haircuts() {
                   <div className="absolute inset-0 bg-gradient-to-t from-[#090909] via-[#090909]/25 to-black/10" />
                   <div className="absolute left-6 right-6 top-6 flex items-center justify-between">
                     <span className="font-serif text-4xl text-white/50">
-                      {cut.service?.id}
+                      {cut.service?.id || "N"}
                     </span>
                     <span className="border border-white/20 bg-black/30 px-3 py-1 text-[9px] uppercase tracking-widest text-white/80 backdrop-blur">
-                      {cut.service?.name}
+                      {cut.service?.name || "NOIR service"}
                     </span>
                   </div>
                   <div className="absolute bottom-6 left-6 right-6">
@@ -153,7 +147,7 @@ export default function Haircuts() {
                       <div>
                         <h2 className="font-serif text-3xl">{cut.name}</h2>
                         <p className="mt-2 max-w-sm text-xs leading-6 text-white/65">
-                          {cut.description || cut.service.description}
+                          {cut.description || cut.service?.description}
                         </p>
                       </div>
                       <ArrowUpRight
@@ -184,7 +178,7 @@ export default function Haircuts() {
 }
 
 function CutModal({ cut, close }) {
-  const hasImage = cut.service ? cut.image : cut.image;
+  const hasImage = cut.image;
 
   return (
     <div

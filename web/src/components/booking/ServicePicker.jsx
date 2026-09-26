@@ -1,16 +1,13 @@
-import { Check, Clock3 } from "lucide-react";
+import { ChevronDown, Clock3 } from "lucide-react";
 
 import { mediaUrl } from "../../services/api";
 import { formatDuration, formatPrice } from "../../utils/format";
 import Alert from "../ui/Alert";
 import Spinner from "../ui/Spinner";
 
-/**
- * Step 1 - pick a service.
- *
- * Every field shown comes from ServiceSerializer: name, description,
- * price, duration and the optional image.
- */
+const SELECT =
+  "w-full appearance-none rounded-xl border border-white/10 bg-[#181818] px-4 py-4 pr-12 text-sm text-white outline-none transition focus:border-[#d6a85f]/50 disabled:cursor-not-allowed disabled:opacity-60";
+
 export default function ServicePicker({
   services,
   loading,
@@ -49,70 +46,64 @@ export default function ServicePicker({
     );
   }
 
+  const selectedService = services.find(
+    (service) => String(service.id) === String(selectedId)
+  );
+  const selectedImage = selectedService && mediaUrl(selectedService.image);
+
   return (
-    <div className="grid gap-2">
-      {services.map((service) => {
-        const selected = String(service.id) === String(selectedId);
-        const image = mediaUrl(service.image);
+    <div className="space-y-3">
+      <div className="relative">
+        <select
+          value={selectedId || ""}
+          onChange={(event) => {
+            const service = services.find(
+              (item) => String(item.id) === event.target.value
+            );
+            if (service) {
+              onSelect(service);
+            }
+          }}
+          disabled={disabled}
+          aria-label="Choose a service"
+          className={SELECT}
+        >
+          <option value="">Choose a service...</option>
+          {services.map((service) => (
+            <option key={service.id} value={service.id}>
+              {service.name} — {formatPrice(service.price)} · {formatDuration(service.duration)}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          size={17}
+          className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#d6a85f]"
+        />
+      </div>
 
-        return (
-          <button
-            type="button"
-            key={service.id}
-            onClick={() => onSelect(service)}
-            disabled={disabled}
-            aria-pressed={selected}
-            className={`flex items-center gap-4 rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
-              selected
-                ? "border-[#d6a85f]/50 bg-[#d6a85f]/10"
-                : "border-white/10 bg-white/[0.02] hover:bg-white/[0.05]"
-            }`}
-          >
-            {image && (
-              <img
-                src={image}
-                alt=""
-                className="h-14 w-14 shrink-0 rounded-lg border border-white/10 object-cover"
-              />
-            )}
-
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-3">
-                <p
-                  className={`text-sm font-medium ${
-                    selected ? "text-white" : "text-white/75"
-                  }`}
-                >
-                  {service.name}
-                </p>
-
-                <span
-                  className={`shrink-0 text-sm font-semibold ${
-                    selected ? "text-[#d6a85f]" : "text-white/60"
-                  }`}
-                >
-                  {formatPrice(service.price)}
-                </span>
-              </div>
-
-              {service.description && (
-                <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/35">
-                  {service.description}
-                </p>
-              )}
-
-              <p className="mt-2 flex items-center gap-1.5 text-[11px] text-white/40">
-                <Clock3 size={12} />
-                {formatDuration(service.duration)}
+      {selectedService && (
+        <div className="flex items-center gap-3 rounded-xl border border-[#d6a85f]/20 bg-[#d6a85f]/[0.05] p-3">
+          {selectedImage && (
+            <img
+              src={selectedImage}
+              alt=""
+              className="h-16 w-20 shrink-0 rounded-lg object-cover"
+            />
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-white">{selectedService.name}</p>
+            {selectedService.description && (
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/40">
+                {selectedService.description}
               </p>
-            </div>
-
-            {selected && (
-              <Check size={16} className="shrink-0 self-start text-[#d6a85f]" />
             )}
-          </button>
-        );
-      })}
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-[#d6a85f]">
+              <Clock3 size={12} />
+              {formatPrice(selectedService.price)} · {formatDuration(selectedService.duration)}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

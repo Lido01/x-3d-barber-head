@@ -86,12 +86,15 @@ class ServiceViewSet(viewsets.ViewSet):
     @extend_schema(
         responses={200: ServiceSerializer(many=True)},
         description=(
-            "Return all active barber services. "
+            "Return active services publicly and all services to staff. "
             "Each service includes its active haircut styles."
         ),
     )
     def list(self, request):
-        services = ServiceService.list_active()
+        if request.user.is_authenticated and request.user.is_staff:
+            services = ServiceService.list_all()
+        else:
+            services = ServiceService.list_active()
 
         serializer = ServiceSerializer(
             services,

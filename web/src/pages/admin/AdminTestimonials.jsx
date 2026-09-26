@@ -24,7 +24,7 @@ export default function AdminTestimonials() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState("pending");
+  const [filter, setFilter] = useState("all");
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState(null);
 
@@ -207,11 +207,11 @@ export default function AdminTestimonials() {
                     {item.photo ? (
                       <img
                         src={mediaUrl(item.photo)}
-                        alt={item.customer_name}
-                        className="h-12 w-12 rounded-full object-cover"
+                        alt={`${item.customer_name}'s haircut`}
+                        className="h-24 w-32 rounded-xl object-cover"
                       />
                     ) : (
-                      <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-[#181818] font-serif text-lg text-[#d6a85f]">
+                      <span className="flex h-24 w-32 items-center justify-center rounded-xl border border-white/10 bg-[#181818] font-serif text-2xl text-[#d6a85f]">
                         {item.customer_name?.charAt(0)?.toUpperCase() || "?"}
                       </span>
                     )}

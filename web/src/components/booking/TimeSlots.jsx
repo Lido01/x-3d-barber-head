@@ -1,14 +1,12 @@
+import { ChevronDown } from "lucide-react";
+
 import { groupSlotsByPartOfDay } from "../../utils/format";
 import Alert from "../ui/Alert";
 import Spinner from "../ui/Spinner";
 
-/**
- * Step 3 - pick a start time.
- *
- * The list comes from GET /api/bookings/availability/ and is rendered
- * exactly as Django returned it. Slots are only grouped by part of day
- * for readability; none are filtered out, added or reordered here.
- */
+const SELECT =
+  "w-full appearance-none rounded-xl border border-white/10 bg-[#181818] px-4 py-4 pr-12 text-sm text-white outline-none transition focus:border-[#d6a85f]/50 disabled:cursor-not-allowed disabled:opacity-60";
+
 export default function TimeSlots({
   times,
   loading,
@@ -61,44 +59,38 @@ export default function TimeSlots({
     );
   }
 
-  const groups = groupSlotsByPartOfDay(times);
+  const availableTimes = Array.isArray(times) ? times : [];
+  const groups = groupSlotsByPartOfDay(availableTimes);
 
   return (
-    <div className="space-y-5">
-      {groups.map((group) => (
-        <div key={group.key}>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-white/25">
-            {group.label}
-          </p>
-
-          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
-            {group.slots.map((slot) => {
-              const selected = slot === selectedTime;
-
-              return (
-                <button
-                  type="button"
-                  key={slot}
-                  onClick={() => onSelect(slot)}
-                  disabled={disabled}
-                  aria-pressed={selected}
-                  className={`rounded-xl border px-2 py-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                    selected
-                      ? "border-[#d6a85f]/50 bg-[#d6a85f]/10 text-[#d6a85f]"
-                      : "border-white/10 text-white/45 hover:bg-white/[0.05] hover:text-white/70"
-                  }`}
-                >
+    <div className="space-y-2">
+      <div className="relative">
+        <select
+          value={selectedTime || ""}
+          onChange={(event) => onSelect(event.target.value)}
+          disabled={disabled}
+          aria-label="Choose an available time"
+          className={SELECT}
+        >
+          <option value="">Choose a time...</option>
+          {groups.map((group) => (
+            <optgroup key={group.key} label={group.label}>
+              {group.slots.map((slot) => (
+                <option key={slot} value={slot}>
                   {slot}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <ChevronDown
+          size={17}
+          className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#d6a85f]"
+        />
+      </div>
       <p className="text-[10px] leading-5 text-white/25">
-        Times are provided by the shop's schedule and refresh whenever you
-        change the service or date.
+        {availableTimes.length} live slots available. Times refresh with your service,
+        date, or barber selection.
       </p>
     </div>
   );

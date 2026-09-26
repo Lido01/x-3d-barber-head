@@ -42,7 +42,7 @@ export default function AdminOverview() {
       loadSection(listBookings),
       loadSection(listPayments),
       loadSection(listAllServices),
-      loadSection(listGalleryPosts),
+      loadSection(() => listGalleryPosts({ requiresAuth: true })),
       loadSection(listAllTestimonials),
     ]).then(([bookings, payments, services, gallery, testimonials]) => {
       if (!active) {

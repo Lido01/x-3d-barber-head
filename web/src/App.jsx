@@ -6,6 +6,7 @@ import Footer from "./components/Footer";
 import RequireAdmin from "./components/RequireAdmin";
 import AdminLayout from "./components/admin/AdminLayout";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
+import { LanguageProvider } from "./i18n/LanguageContext";
 
 import Home from "./pages/Home";
 import Gallery from "./pages/Gallery";
@@ -40,9 +41,11 @@ function AdminScreen({ children }) {
 
 export default function App() {
   return (
-    <AdminAuthProvider>
-      <Shell />
-    </AdminAuthProvider>
+    <LanguageProvider>
+      <AdminAuthProvider>
+        <Shell />
+      </AdminAuthProvider>
+    </LanguageProvider>
   );
 }
 

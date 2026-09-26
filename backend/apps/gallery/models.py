@@ -1,5 +1,7 @@
 from django.db import models
 
+from apps.services.models import Service
+
 
 class GalleryPost(models.Model):
     title = models.CharField(max_length=150)
@@ -12,6 +14,14 @@ class GalleryPost(models.Model):
     style_name = models.CharField(
         max_length=100,
         blank=True
+    )
+
+    service = models.ForeignKey(
+        Service,
+        on_delete=models.SET_NULL,
+        related_name="gallery_posts",
+        null=True,
+        blank=True,
     )
 
     is_active = models.BooleanField(

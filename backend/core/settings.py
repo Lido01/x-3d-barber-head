@@ -10,12 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
+from datetime import time, timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-from datetime import timedelta
 
 
 # Quick-start development settings - unsuitable for production
@@ -123,6 +123,9 @@ LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
 
+BOOKING_OPENING_TIME = time(9, 0)
+BOOKING_CLOSING_TIME = time(21, 0)
+
 USE_I18N = True
 
 USE_TZ = True
@@ -141,23 +144,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 
-# added by lidetu for customization
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:3000",
-#     "http://127.0.0.1:3000",
-#     "http://localhost:5173",
-#     "http://127.0.0.1:5173",
-    
-#     # ➕ Add these network configurations:
-#     "http://192.168.1.15:3000", # If using Create React App
-#     "http://192.168.1.15:5173", # If using Vite
-# ]
-CORS_ALLOW_ALL_ORIGINS = True 
-# ALLOWED_HOSTS = [
-#     "localhost",
-#     "127.0.0.1",
-#     "10.240.41.23", 
-# ]
+CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -203,3 +190,13 @@ DEFAULT_FROM_EMAIL = "noreply@barber.local"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+from dotenv import load_dotenv
+
+load_dotenv(BASE_DIR / ".env")
+
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")
+AI_API_KEY = os.getenv("AI_API_KEY")
+AI_MODEL = os.getenv(
+    "AI_MODEL",
+    "gemini-2.5-flash",
+)

@@ -12,11 +12,11 @@ dist
 dist-ssr
 *.local
 
-# Local environment (.env.example stays tracked)
+# Local environment. .env is ignored, .env.example is the tracked template —
+# the negation has to come after every .env* pattern or git never re-includes it.
 .env
 .env.*
 !.env.example
-.env.example
 
 # Editor directories and files
 .vscode/*

@@ -9,15 +9,14 @@ import {
 } from "../utils/adminToken";
 
 
-const ROOT = (
-  import.meta.env.VITE_API_BASE_URL || "http://10.240.41.114"
-).replace(/\/+$/, "");
+const configuredApiRoot = (import.meta.env.VITE_API_BASE_URL || "").trim();
+const ROOT = configuredApiRoot.replace(/\/+$/, "");
 
-/** Absolute root of the Django server, e.g. for media URLs. */
+/** Root of the Django server when one is configured. */
 export const API_ROOT = ROOT;
 
 const api = axios.create({
-  baseURL: `${ROOT}/api`,
+  baseURL: ROOT ? `${ROOT}/api` : "/api",
   timeout: 20000,
 
   // Accept is safe to pin. Content-Type is deliberately NOT set:
@@ -119,6 +118,18 @@ export function mediaUrl(path) {
   }
 
   if (/^https?:\/\//i.test(path)) {
+    const url = new URL(path);
+
+    // Django builds absolute media URLs from the request host. When the
+    // frontend is opened through a LAN address, those URLs can still point
+    // at loopback and therefore resolve on the wrong machine.
+    if (
+      url.pathname.startsWith("/media/") &&
+      ["localhost", "127.0.0.1", "0.0.0.0"].includes(url.hostname)
+    ) {
+      return `${ROOT}${url.pathname}${url.search}${url.hash}`;
+    }
+
     return path;
   }
 

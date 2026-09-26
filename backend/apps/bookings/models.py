@@ -21,6 +21,10 @@ class Barber(models.Model):
         blank=True,
     )
 
+    bio = models.TextField(
+        blank=True,
+    )
+
     image = models.ImageField(
         upload_to="barbers/",
         blank=True,

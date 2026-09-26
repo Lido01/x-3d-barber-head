@@ -19,6 +19,10 @@ class ServiceService:
         )
 
     @staticmethod
+    def list_all():
+        return Service.objects.prefetch_related("styles")
+
+    @staticmethod
     def get_active(service_id):
         return get_object_or_404(
             Service.objects

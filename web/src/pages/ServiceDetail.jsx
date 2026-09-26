@@ -54,15 +54,8 @@ export default function ServiceDetail() {
   return (
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-28 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1200px]">
-        <Link
-          to="/services"
-          className="inline-flex items-center gap-2 text-xs uppercase tracking-[.2em] text-white/40 transition hover:text-white"
-        >
-          <ArrowLeft size={14} /> Back to services
-        </Link>
-
         {loading && (
-          <div className="mt-16 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
+          <div className="mt-16 flex items-center justify-center  border border-white/10 bg-[#111] py-24">
             <Spinner label="Loading service details..." />
           </div>
         )}
@@ -98,10 +91,10 @@ export default function ServiceDetail() {
                 <img
                   src={mediaUrl(service.image)}
                   alt={service.name}
-                  className="mt-10 aspect-[4/3] w-full max-w-xl rounded-2xl border border-white/10 object-cover"
+                  className="mt-10 aspect-[4/3] w-full max-w-xl  border border-white/10 object-cover"
                 />
               ) : (
-                <div className="mt-10 flex aspect-[4/3] w-full max-w-xl items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-[#242424] to-[#0d0d0d]">
+                <div className="mt-10 flex aspect-[4/3] w-full max-w-xl items-center justify-center  border border-white/10 bg-gradient-to-br from-[#242424] to-[#0d0d0d]">
                   <Scissors size={40} className="text-[#d6a85f]/40" />
                 </div>
               )}
@@ -109,7 +102,6 @@ export default function ServiceDetail() {
               {styles.length > 0 && (
                 <div className="mt-10">
                   <div className="flex items-center gap-2">
-                    <Sparkles size={15} className="text-[#d6a85f]" />
                     <p className="text-[10px] uppercase tracking-[.3em] text-white/45">
                       Available styles
                     </p>
@@ -150,7 +142,7 @@ export default function ServiceDetail() {
 
             {/* ---------- booking summary ---------- */}
             <div>
-              <div className="rounded-[2rem] border border-white/10 bg-[#111] p-7 sm:p-8">
+              <div className="border border-white/10 bg-[#111] p-7 sm:p-8">
                 <p className="text-[10px] uppercase tracking-[.3em] text-[#d6a85f]">
                   This service
                 </p>

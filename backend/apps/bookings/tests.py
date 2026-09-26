@@ -1,10 +1,11 @@
 from datetime import date, time, timedelta
 
+from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.services.models import Service
-from .models import Booking
+from .models import Barber, Booking
 from .services import get_available_times
 
 
@@ -17,6 +18,13 @@ class BookingApiTests(APITestCase):
         self.inactive_service = Service.objects.create(
             name="Unavailable", price="100.00", duration=30, is_active=False
         )
+        self.barber = Barber.objects.create(name="Test Barber")
+        self.admin = get_user_model().objects.create_user(
+            username="bookings-admin",
+            password="test-password",
+            is_staff=True,
+        )
+        self.client.force_authenticate(self.admin)
 
     def payload(self, service, start_time="10:00", booking_date=None, notes=""):
         return {
@@ -44,7 +52,7 @@ class BookingApiTests(APITestCase):
         overlap = self.client.post("/api/bookings/", self.payload(self.short_service, "10:30"), format="json")
         self.assertEqual(overlap.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("start_time", overlap.data)
-        self.assertEqual(overlap.data["start_time"][0], "This time is already booked.")
+        self.assertEqual(overlap.data["start_time"][0], "No barber is available during this time.")
 
         listing = self.client.get("/api/bookings/")
         self.assertEqual(listing.status_code, status.HTTP_200_OK)
@@ -80,9 +88,9 @@ class BookingApiTests(APITestCase):
         self.assertIn("start_time", response.data)
 
     def test_booking_after_closing_time_is_rejected(self):
-        # 17:30 + 45 min = 18:15 > 18:00 closing.
+        # 20:30 + 45 min = 21:15 > 21:00 closing.
         response = self.client.post(
-            "/api/bookings/", self.payload(self.medium_service, start_time="17:30"), format="json"
+            "/api/bookings/", self.payload(self.medium_service, start_time="20:30"), format="json"
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("start_time", response.data)
@@ -121,7 +129,7 @@ class BookingApiTests(APITestCase):
         payload = self.payload(self.short_service, "10:30")
         response = self.client.put(f"/api/bookings/{second.data['id']}/", payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["start_time"][0], "This time is already booked.")
+        self.assertEqual(response.data["start_time"][0], "This barber is already booked during this time.")
         self.assertTrue(Booking.objects.filter(pk=first.data["id"]).exists())
 
     def test_cancelled_booking_frees_its_slot(self):
@@ -170,7 +178,7 @@ class BookingApiTests(APITestCase):
     def test_availability_hides_overlapping_slots_and_respects_duration(self):
         Booking.objects.create(
             customer_name="Existing", customer_phone="123", service=self.medium_service,
-            booking_date=self.booking_date, start_time=time(10, 0), end_time=time(10, 45),
+            barber=self.barber, booking_date=self.booking_date, start_time=time(10, 0), end_time=time(10, 45),
         )
         times = get_available_times(booking_date=self.booking_date, service=self.long_service)
         self.assertNotIn("09:30", times)
