@@ -25,6 +25,16 @@ import { detectLanguage, writeStoredLanguage } from "./languageStorage";
 
 const LanguageContext = createContext(null);
 
+/**
+ * Browser tab title per locale. The studio name is a brand and stays Latin;
+ * the descriptor follows the visitor.
+ */
+const PAGE_TITLES = {
+  en: "NOIR Barbers — Addis Ababa",
+  am: "NOIR ባሪቦች — አዲስ አበባ",
+  om: "NOIR Ragoota — Adaabaabaa",
+};
+
 export function LanguageProvider({ children }) {
   const [locale, setLocale] = useState(() => detectLanguage() || DEFAULT_LANGUAGE);
 
@@ -47,6 +57,18 @@ export function LanguageProvider({ children }) {
 
     return () => {
       root.lang = previous;
+    };
+  }, [locale]);
+
+  // The tab title is the one string a visitor sees before any content renders,
+  // so it has to follow the language too.
+  useEffect(() => {
+    const previous = document.title;
+
+    document.title = PAGE_TITLES[locale] || PAGE_TITLES[DEFAULT_LANGUAGE];
+
+    return () => {
+      document.title = previous;
     };
   }, [locale]);
 
