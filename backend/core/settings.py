@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
-from datetime import timedelta
+from datetime import time, timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -122,6 +122,9 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
+
+BOOKING_OPENING_TIME = time(9, 0)
+BOOKING_CLOSING_TIME = time(21, 0)
 
 USE_I18N = True
 
