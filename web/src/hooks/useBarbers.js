@@ -2,20 +2,10 @@ import { useEffect, useState } from "react";
 
 import { listBarbers } from "../services/bookingApi";
 
-/**
- * Barbers for the optional "choose your barber" step.
- *
- * The backend has no barber endpoint yet, so this is gated behind
- * VITE_ENABLE_BARBER_SELECTION and makes no request while the flag is
- * off - the booking flow then relies on Django's automatic barber
- * assignment, which already works and returns barber_name.
- *
- * Flip the flag to true once GET /api/barbers/ exists.
- */
 export function useBarbers() {
   const enabled =
-    String(import.meta.env.VITE_ENABLE_BARBER_SELECTION).toLowerCase() ===
-    "true";
+    String(import.meta.env.VITE_ENABLE_BARBER_SELECTION ?? "true")
+      .toLowerCase() !== "false";
 
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(enabled);
