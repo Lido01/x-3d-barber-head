@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ArrowDown, CalendarDays, MapPin, Star } from "lucide-react";
+import { CalendarDays, MapPin } from "lucide-react";
 import gsap from "gsap";
 
 import Button from "../components/Button";
