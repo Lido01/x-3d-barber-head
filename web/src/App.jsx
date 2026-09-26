@@ -4,6 +4,7 @@ import Navbar from "./components/Navbar";
 import BottomBar from "./components/BottomBar";
 import Footer from "./components/Footer";
 import RequireAdmin from "./components/RequireAdmin";
+import ScrollToTop from "./components/ScrollToTop";
 import AdminLayout from "./components/admin/AdminLayout";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
 import { LanguageProvider } from "./i18n/LanguageContext";
@@ -56,9 +57,11 @@ function Shell() {
 
   return (
     <div className="min-h-screen bg-[#090909] text-[#f4f0e8]">
+      <ScrollToTop />
+
       <Navbar />
 
-      <main className="pb-20 lg:pb-0">
+      <main id="main-content" tabIndex={-1} className="pb-20 outline-none lg:pb-0">
         <Routes>
           {/* Public site */}
           <Route path="/" element={<Home />} />
