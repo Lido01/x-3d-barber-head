@@ -4,6 +4,7 @@ import Button from "../components/Button";
 import Reveal from "../components/Reveal";
 import ParallaxSection from "../components/ParallaxSection";
 import { useLanguage } from "../i18n/LanguageContext";
+import { studioLocation } from "../data/studioLocation";
 
 export default function About() {
   const { t } = useLanguage();
@@ -31,11 +32,15 @@ export default function About() {
           <div className="mt-9 space-y-4 border-t border-white/15 pt-6 text-sm text-white/80">
             <p className="flex gap-3">
               <MapPin size={18} className="shrink-0 text-[#d6a85f]" />{" "}
-              <span>{t("about.address")}</span>
+              <span>
+                {studioLocation.addressLines.building}
+                <br />
+                {studioLocation.addressLines.street}, {studioLocation.addressLines.city}
+              </span>
             </p>
             <p className="flex gap-3">
               <Clock3 size={18} className="shrink-0 text-[#d6a85f]" />{" "}
-              <span>{t("about.hours")}</span>
+              <span>{t("findUs.openDaily")}</span>
             </p>
           </div>
 
