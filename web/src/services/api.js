@@ -9,20 +9,14 @@ import {
 } from "../utils/adminToken";
 
 
-const browserApiRoot =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8000`
-    : "http://127.0.0.1:8000";
+const configuredApiRoot = (import.meta.env.VITE_API_BASE_URL || "").trim();
+const ROOT = configuredApiRoot.replace(/\/+$/, "");
 
-const ROOT = (
-  import.meta.env.VITE_API_BASE_URL || browserApiRoot
-).replace(/\/+$/, "");
-
-/** Absolute root of the Django server, e.g. for media URLs. */
+/** Root of the Django server when one is configured. */
 export const API_ROOT = ROOT;
 
 const api = axios.create({
-  baseURL: `${ROOT}/api`,
+  baseURL: ROOT ? `${ROOT}/api` : "/api",
   timeout: 20000,
 
   // Accept is safe to pin. Content-Type is deliberately NOT set:
