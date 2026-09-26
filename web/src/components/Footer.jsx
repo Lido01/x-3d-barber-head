@@ -1,11 +1,16 @@
 import { AtSign, MapPin, Phone, Clock3 } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import LanguageSwitcher from "./LanguageSwitcher";
+import { useLanguage } from "../i18n/LanguageContext";
+
 /**
  * Shared public footer. Hidden on /admin/* routes (which have their own
  * sidebar) via useLocation.
  */
 export default function Footer() {
+  const { t } = useLanguage();
+
   // Deliberately a cheap check — the admin screen owns its layout.
   // The Navbar hides the same way.
   return (
@@ -20,19 +25,18 @@ export default function Footer() {
           </Link>
 
           <p className="mt-5 max-w-sm text-sm leading-6 text-white/40">
-            A modern Addis Ababa grooming studio where classic barbering meets
-            personal style.
+            {t("footer.tagline")}
           </p>
 
           <div className="mt-6 flex gap-3">
             <button
-              aria-label="Social"
+              aria-label={t("footer.social")}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-white/50 transition hover:border-[#d6a85f] hover:text-[#d6a85f]"
             >
               <AtSign size={16} />
             </button>
             <button
-              aria-label="Phone"
+              aria-label={t("footer.phone")}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-white/50 transition hover:border-[#d6a85f] hover:text-[#d6a85f]"
             >
               <Phone size={16} />
@@ -42,19 +46,24 @@ export default function Footer() {
 
         <div className="justify-self-end">
           <p className="text-[10px] uppercase tracking-[.25em] text-white/30">
-            Visit
+            {t("footer.visit")}
           </p>
           <ul className="mt-4 space-y-3 text-sm text-white/50">
-            <li className="flex gap-2"><MapPin size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" /> Bole Road, Addis Ababa</li>
-            <li className="flex gap-2"><Clock3 size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" /> Daily 09:00 — 21:00</li>
+            <li className="flex gap-2"><MapPin size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" /> {t("footer.address")}</li>
+            <li className="flex gap-2"><Clock3 size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" /> {t("footer.hours")}</li>
           </ul>
         </div>
       </div>
 
-      {/* <div className="mx-auto mt-14 flex max-w-[1440px] flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white/30 sm:flex-row">
-        <p>© {new Date().getFullYear()} NOIR Barber Studio. All rights reserved.</p>
-        <p>Made for the craft of the cut.</p>
-      </div> */}
+      {/* Language on desktop, where the header switcher is out of reach. */}
+      <div className="mx-auto mt-12 hidden max-w-[1440px] lg:block">
+        <p className="text-[10px] uppercase tracking-[.25em] text-white/30">
+          {t("common.language")}
+        </p>
+        <div className="mt-3">
+          <LanguageSwitcher variant="pills" />
+        </div>
+      </div>
     </footer>
   );
 }
