@@ -1,4 +1,4 @@
-import { Scissors, Star } from "lucide-react";
+import { Scissors } from "lucide-react";
 
 import Alert from "../components/ui/Alert";
 import Spinner from "../components/ui/Spinner";
@@ -98,11 +98,16 @@ export default function Barbers() {
                         </h2>
                       </div>
 
-                      <div className="flex items-center gap-1 text-xs text-[#d6a85f]">
-                        <Star size={12} fill="currentColor" />
-                        4.9
-                      </div>
+                      <span className="rounded-full border border-[#d6a85f]/20 px-2.5 py-1 text-[10px] text-[#d6a85f]">
+                        {barber.experience || "NOIR team"}
+                      </span>
                     </div>
+
+                    {barber.bio && (
+                      <p className="mt-5 text-sm leading-6 text-white/45">
+                        {barber.bio}
+                      </p>
+                    )}
 
                     {(barber.specialty || barber.experience) && (
                       <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-5 text-xs text-white/40">

@@ -177,6 +177,7 @@ class BarberSerializer(serializers.ModelSerializer):
             "role",
             "specialty",
             "experience",
+            "bio",
             "image",
             "phone",
             "is_active",
