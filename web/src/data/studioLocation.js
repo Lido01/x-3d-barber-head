@@ -111,7 +111,6 @@ export function openStreetMapLink() {
  * Google account.
  */
 export function directionsUrl(travelmode = "driving") {
-  const { latitude: lat, longitude: lng } = studioLocation.coordinates;
   const destination = encodeURIComponent(
     `${studioLocation.placeLabel}, ${studioLocation.fullAddress}`
   );
