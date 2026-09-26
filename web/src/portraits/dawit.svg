@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" width="480" height="480" role="img" aria-label="Illustrated portrait of a fictional NOIR guest">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101c1f"/>
+      <stop offset="1" stop-color="#08090a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.26" cy="0.2" r="0.85">
+      <stop offset="0" stop-color="#6fc7d4" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#6fc7d4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#191512"/>
+      <stop offset="0.55" stop-color="#241d18"/>
+      <stop offset="1" stop-color="#0d0b0a" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="480" height="480" fill="url(#bg)"/>
+  <rect width="480" height="480" fill="url(#glow)"/>
+
+  <g opacity="0.14" stroke="#6fc7d4" stroke-width="1">
+    <path d="M480 130 L300 0" fill="none"/>
+    <path d="M480 170 L320 0" fill="none"/>
+  </g>
+
+  <path d="M100 480 C100 388 170 348 240 348 C310 348 380 388 380 480 Z" fill="#141414"/>
+  <path d="M100 480 C100 388 170 348 240 348 C310 348 380 388 380 480 Z" fill="none" stroke="#6fc7d4" stroke-opacity="0.3" stroke-width="2"/>
+
+  <g fill="none" stroke="#6fc7d4" stroke-width="9" stroke-linecap="round">
+    <path d="M156 196 C150 132 208 100 240 100 C272 100 330 132 324 196"/>
+  </g>
+  <g fill="#0f2a2e">
+    <rect x="138" y="188" width="34" height="52" rx="16"/>
+    <rect x="308" y="188" width="34" height="52" rx="16"/>
+  </g>
+  <g fill="none" stroke="#6fc7d4" stroke-opacity="0.65" stroke-width="2">
+    <rect x="138" y="188" width="34" height="52" rx="16"/>
+    <rect x="308" y="188" width="34" height="52" rx="16"/>
+  </g>
+
+  <rect x="212" y="286" width="56" height="70" fill="#6b4632"/>
+  <rect x="212" y="286" width="22" height="70" fill="#000" opacity="0.18"/>
+
+  <ellipse cx="240" cy="224" rx="72" ry="88" fill="#6b4632"/>
+  <ellipse cx="240" cy="224" rx="72" ry="88" fill="none" stroke="#000" stroke-opacity="0.25" stroke-width="2"/>
+
+  <path d="M168 214 C168 152 200 128 240 128 C280 128 312 152 312 214 C312 190 300 176 288 172 C272 184 208 184 192 172 C180 176 168 190 168 214 Z" fill="url(#fade)"/>
+
+  <g fill="#0c0908">
+    <ellipse cx="214" cy="222" rx="7" ry="8"/>
+    <ellipse cx="266" cy="222" rx="7" ry="8"/>
+  </g>
+  <g stroke="#0c0908" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.8">
+    <path d="M196 208 C204 202 224 202 232 208"/>
+    <path d="M248 208 C256 202 276 202 284 208"/>
+  </g>
+  <path d="M222 252 C232 258 248 258 258 252" fill="none" stroke="#4a2c1e" stroke-width="5" stroke-linecap="round"/>
+  <path d="M224 254 C233 258 247 258 256 254" fill="none" stroke="#f4f0e8" stroke-opacity="0.75" stroke-width="2.5" stroke-linecap="round"/>
+
+  <g opacity="0.55" stroke="#6fc7d4" stroke-width="2" fill="none">
+    <rect x="112" y="150" width="26" height="18" rx="5"/>
+    <rect x="342" y="150" width="26" height="18" rx="5"/>
+  </g>
+</svg>

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" width="480" height="480" role="img" aria-label="Illustrated portrait of a fictional NOIR guest">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#241c10"/>
+      <stop offset="1" stop-color="#0a0908"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.72" cy="0.22" r="0.8">
+      <stop offset="0" stop-color="#e0b45f" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#e0b45f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="curl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1c10"/>
+      <stop offset="1" stop-color="#140d07"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="480" height="480" fill="url(#bg)"/>
+  <rect width="480" height="480" fill="url(#glow)"/>
+
+  <g opacity="0.14" stroke="#e0b45f" stroke-width="2" fill="none">
+    <path d="M60 60 L110 60 L110 24"/>
+    <path d="M420 420 L370 420 L370 456"/>
+  </g>
+
+  <path d="M100 480 C100 388 170 348 240 348 C310 348 380 388 380 480 Z" fill="#181512"/>
+  <path d="M100 480 C100 388 170 348 240 348 C310 348 380 388 380 480 Z" fill="none" stroke="#e0b45f" stroke-opacity="0.32" stroke-width="2"/>
+
+  <rect x="212" y="288" width="56" height="70" fill="#8a5636"/>
+  <rect x="212" y="288" width="22" height="70" fill="#000" opacity="0.18"/>
+
+  <ellipse cx="240" cy="228" rx="70" ry="86" fill="#8a5636"/>
+  <ellipse cx="240" cy="228" rx="70" ry="86" fill="none" stroke="#000" stroke-opacity="0.25" stroke-width="2"/>
+
+  <path d="M240 104 C286 104 318 128 322 164 C300 146 272 138 240 138 C208 138 180 146 158 164 C162 128 194 104 240 104 Z" fill="#151b1e"/>
+  <path d="M240 92 L316 168 L240 152 L164 168 Z" fill="#101418"/>
+  <path d="M158 164 C180 146 208 138 240 138 C272 138 300 146 322 164" fill="none" stroke="#e0b45f" stroke-opacity="0.4" stroke-width="2"/>
+  <ellipse cx="240" cy="96" rx="9" ry="7" fill="#101418"/>
+
+  <g fill="url(#curl)">
+    <circle cx="196" cy="182" r="19"/>
+    <circle cx="222" cy="170" r="21"/>
+    <circle cx="252" cy="168" r="22"/>
+    <circle cx="282" cy="180" r="20"/>
+    <circle cx="184" cy="200" r="14"/>
+    <circle cx="298" cy="200" r="14"/>
+  </g>
+  <g fill="none" stroke="#d9a86a" stroke-opacity="0.2" stroke-width="2">
+    <circle cx="222" cy="170" r="21"/>
+    <circle cx="252" cy="168" r="22"/>
+  </g>
+
+  <g fill="#0c0907">
+    <ellipse cx="214" cy="228" rx="7" ry="8"/>
+    <ellipse cx="266" cy="228" rx="7" ry="8"/>
+  </g>
+  <g stroke="#0c0907" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.8">
+    <path d="M196 214 C204 208 224 208 232 214"/>
+    <path d="M248 214 C256 208 276 208 284 214"/>
+  </g>
+  <path d="M216 256 C228 266 252 266 264 256" fill="none" stroke="#57341f" stroke-width="5" stroke-linecap="round"/>
+  <path d="M219 258 C230 264 250 264 261 258" fill="none" stroke="#f4f0e8" stroke-opacity="0.8" stroke-width="3" stroke-linecap="round"/>
+</svg>
