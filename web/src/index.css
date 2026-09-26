@@ -1,14 +1,27 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap");
+/*
+ * DM Serif Display and Manrope carry no Ethiopic coverage, so Amharic would
+ * fall back to whatever the OS happens to have and look nothing like the rest
+ * of the site. Noto Sans/Serif Ethiopic are added to the front of the stack
+ * instead: Latin glyphs still come from the display faces, Ge'ez comes from
+ * Noto. Afaan Oromo is Latin script and needs no extra font.
+ */
+@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;500;600;700&family=Noto+Serif+Ethiopic:wght@400;600&display=swap");
 
 @import "tailwindcss";
 
 :root {
-  font-family: "Manrope", sans-serif;
+  font-family: "Manrope", "Noto Sans Ethiopic", sans-serif;
   color: #f4f0e8;
   background: #090909;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Ge'ez script sits on a taller x-height than Latin, so headings need a
+   little more leading to stop the ascenders clipping. */
+:root:lang(am) {
+  line-height: 1.65;
 }
 
 html {
@@ -43,7 +56,7 @@ button {
 }
 
 .font-serif {
-  font-family: "DM Serif Display", Georgia, serif;
+  font-family: "DM Serif Display", "Noto Serif Ethiopic", Georgia, serif;
 }
 
 /* Scrollbar */
