@@ -7,11 +7,13 @@ import { LANGUAGE_SHORT } from "../i18n/languages";
 /**
  * Language picker.
  *
- * Two shapes from one component:
+ * Three shapes from one component:
  *   - "dropdown" (default) sits in the desktop header. Collapsed to a small
  *     pill showing the active language, expands on click.
- *   - "list" renders every language expanded, for the mobile bottom-bar sheet
- *     where a popover anchored to the bottom of the screen would be awkward.
+ *   - "list" renders every language as a full-width row, for the mobile
+ *     bottom-bar sheet where a popover anchored to the bottom of the screen
+ *     would be awkward.
+ *   - "pills" renders them as a wrapped row of small pills, for the footer.
  *
  * Deliberately one tap to open and one tap to choose — no hover menus, since
  * the same control has to work on a phone.
@@ -101,6 +103,46 @@ export default function LanguageSwitcher({ variant = "dropdown", className = "" 
           );
         })}
       </ul>
+    );
+  }
+
+  if (variant === "pills") {
+    return (
+      <div
+        className={`flex flex-wrap gap-2 ${className}`}
+        role="group"
+        aria-label={t("common.changeLanguage")}
+      >
+        {languages.map((language) => {
+          const selected = language.code === locale;
+
+          return (
+            <button
+              key={language.code}
+              type="button"
+              onClick={() => setLanguage(language.code)}
+              aria-current={selected}
+              className={`flex items-center gap-2 rounded-full border px-4 py-2 text-[12px] font-medium tracking-[.05em] transition ${
+                selected
+                  ? "border-[#d6a85f] bg-[#d6a85f] text-black"
+                  : "border-white/12 text-white/60 hover:border-[#d6a85f]/45 hover:text-white"
+              }`}
+            >
+              {language.native}
+
+              {language.beta && (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[.1em] ${
+                    selected ? "bg-black/15 text-black/70" : "bg-[#d6a85f]/15 text-[#d6a85f]"
+                  }`}
+                >
+                  {t("common.beta")}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     );
   }
 
