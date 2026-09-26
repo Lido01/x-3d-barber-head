@@ -6,7 +6,9 @@ import Marquee from "../sections/Marquee";
 import QuickBook from "../sections/QuickBook";
 import Gallery from "../sections/Gallery";
 import Testimonials from "../sections/Testimonials";
+import FeaturedGuests from "../sections/FeaturedGuests";
 import About from "../sections/About";
+import FindUs from "../sections/FindUs";
 
 import { useLanguage } from "../i18n/LanguageContext";
 import { mediaUrl } from "../services/api";
@@ -21,7 +23,9 @@ export default function Home() {
       <QuickBook />
       <Gallery onSelect={setLook} />
       <Testimonials />
+      <FeaturedGuests />
       <About />
+      <FindUs />
       {look && <LookModal post={look} close={() => setLook(null)} />}
     </>
   );
