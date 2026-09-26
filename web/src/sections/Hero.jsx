@@ -3,12 +3,22 @@ import { ArrowDown, CalendarDays, MapPin, Star } from "lucide-react";
 import gsap from "gsap";
 
 import Button from "../components/Button";
+import { useLanguage } from "../i18n/LanguageContext";
 import { mediaUrl } from "../services/api";
 
 const BG = "/media/services/demo-skin-fade.jpg";
 
 export default function Hero() {
   const intro = useRef(null);
+  const { t, language } = useLanguage();
+
+  // "YOUR IDENTITY." is two short Latin words. The Amharic and Oromo
+  // equivalents are considerably longer, so they need a smaller clamp or the
+  // headline overflows the viewport on a phone.
+  const headlineSize =
+    language.code === "en"
+      ? "text-[clamp(4rem,9vw,8rem)]"
+      : "text-[clamp(2.5rem,6.5vw,5.5rem)]";
 
   // Entrance: stagger the eyebrow, headline, copy, CTAs and trust bar.
   useEffect(() => {
@@ -36,7 +46,7 @@ export default function Hero() {
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/60" />
 
       {/* soft ambient glow */}
-      <div className="pointer-events-none absolute right-[-10%] top-[10%] h-[420px] w-[420px] rounded-full bg-[#d6a85f]/10 blur-[140px]" />
+      <div className="pointer-events-none absolute right-[-10%] top-[10%] h-[420px] w-[420px]  bg-[#d6a85f]/10 blur-[140px]" />
 
       <div className="relative z-10 mx-auto w-full max-w-[1440px] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
         <div className="max-w-3xl">
@@ -45,19 +55,16 @@ export default function Hero() {
           {/* Heading */}
           <h1
             data-hero-fade
-            className="font-serif text-[clamp(4rem,9vw,8rem)] font-medium leading-[0.85] tracking-[-0.055em] text-[#f4f0e8]"
+            className={`font-serif font-medium leading-[0.95] tracking-[-0.03em] text-[#f4f0e8] ${headlineSize}`}
           >
-            YOUR <span className="italic shimmer-text"> STYLE.</span>
-            <br />
-            YOUR IDENTITY.
+            {t("hero.titleLead")} <span className="italic shimmer-text">{t("hero.titleTail")}</span>
           </h1>
 
           <p
             data-hero-fade
             className="mt-8 max-w-lg text-base leading-7 text-white/60 sm:text-lg"
           >
-            A modern grooming studio built around precision, confidence, and
-            the craft of the perfect cut.
+            {t("hero.body")}
           </p>
 
           {/* Buttons */}
@@ -65,9 +72,9 @@ export default function Hero() {
             data-hero-fade
             className="mt-9 flex flex-col gap-3 sm:flex-row"
           >
-            <Button to="/booking">Book Your Chair</Button>
+            <Button to="/booking">{t("hero.primaryCta")}</Button>
             <Button to="/haircuts" variant="secondary" className="border-white/20 bg-black/30 backdrop-blur-sm hover:bg-black/50">
-              Explore Haircuts
+              {t("hero.secondaryCta")}
             </Button>
           </div>
 
@@ -76,40 +83,21 @@ export default function Hero() {
             data-hero-fade
             className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-white/10 pt-6"
           >
-            <div className="flex items-center gap-2">
-              <div className="flex gap-0.5 text-[#d6a85f]">
-                <Star size={13} fill="currentColor" />
-                <Star size={13} fill="currentColor" />
-                <Star size={13} fill="currentColor" />
-                <Star size={13} fill="currentColor" />
-                <Star size={13} fill="currentColor" />
-              </div>
-              <span className="text-xs text-white/50">4.9 / 5</span>
+            <div className="h-4 w-px bg-white/10" />
+
+            <div className="flex items-center gap-2 text-xs text-white/50">
+              <CalendarDays size={14} />
+              {t("hero.openDaily")}
             </div>
 
             <div className="h-4 w-px bg-white/10" />
 
             <div className="flex items-center gap-2 text-xs text-white/50">
-              <CalendarDays size={14} className="text-[#d6a85f]" />
-              Open daily 09:00 — 21:00
-            </div>
-
-            <div className="h-4 w-px bg-white/10" />
-
-            <div className="flex items-center gap-2 text-xs text-white/50">
-              <MapPin size={14} className="text-[#d6a85f]" />
-              Addis Ababa
+              <MapPin size={14} />
+              {t("hero.city")}
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Scroll indicator */}
-      <div className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 md:flex">
-        <span className="text-[8px] uppercase tracking-[0.3em] text-white/40">
-          Scroll to explore
-        </span>
-        <ArrowDown size={15} className="animate-bounce text-[#d6a85f]" />
       </div>
     </section>
   );
