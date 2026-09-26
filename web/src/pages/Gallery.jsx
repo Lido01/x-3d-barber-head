@@ -140,7 +140,7 @@ function PostModal({ post, close }) {
             </p>
           </div>
           <Link
-            to="/booking"
+            to={post.service ? `/booking?service=${post.service}` : "/booking"}
             onClick={close}
             className="mt-8 block bg-[#d6a85f] px-5 py-3 text-center text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
           >

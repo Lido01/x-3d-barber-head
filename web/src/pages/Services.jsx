@@ -20,10 +20,6 @@ export default function Services() {
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-28 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1440px]">
         <div className="mt-12 max-w-4xl">
-          <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-            Services &amp; pricing
-          </p>
-
           <h1 className="mt-5 font-serif text-5xl leading-[0.85] tracking-tight sm:text-7xl lg:text-8xl">
             Book the
             <br />
@@ -38,7 +34,7 @@ export default function Services() {
 
         <div className="mt-14">
           {loading && (
-            <div className="flex justify-center rounded-2xl border border-white/10 bg-[#111] py-20">
+            <div className="flex justify-center  border border-white/10 bg-[#111] py-20">
               <Spinner label="Loading services..." />
             </div>
           )}
@@ -74,7 +70,7 @@ export default function Services() {
                 return (
                   <article
                     key={service.id}
-                    className="group flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#111] transition hover:border-[#d6a85f]/40"
+                    className="group flex flex-col overflow-hidden  border border-white/10 bg-[#111] transition hover:border-[#d6a85f]/40"
                   >
                     {image ? (
                       <img
@@ -114,7 +110,7 @@ export default function Services() {
 
                       <Link
                         to={`/booking?service=${service.id}`}
-                        className="mt-5 inline-flex items-center justify-center gap-2 rounded-full bg-[#d6a85f] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
+                        className="mt-5 inline-flex items-center justify-center gap-2  bg-[#d6a85f] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
                       >
                         Book this service
                         <ArrowUpRight size={15} strokeWidth={2.2} />
@@ -122,7 +118,7 @@ export default function Services() {
 
                       <Link
                         to={`/services/${service.id}`}
-                        className="mt-3 inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
+                        className="mt-3 inline-flex items-center justify-center gap-2  border border-white/15 px-5 py-3 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
                       >
                         View details
                       </Link>
