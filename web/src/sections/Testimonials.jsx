@@ -210,7 +210,12 @@ export default function Testimonials() {
                         onClick={() => setRating(value)}
                         onMouseEnter={() => setHover(value)}
                         onMouseLeave={() => setHover(0)}
-                        aria-label={t("testimonials.rating.many", { count: value })}
+                        aria-label={t(
+                          value === 1
+                            ? "testimonials.rating.one"
+                            : "testimonials.rating.many",
+                          { count: value }
+                        )}
                         aria-pressed={value === rating}
                         className="p-0.5 transition-transform hover:scale-110"
                       >
