@@ -14,6 +14,8 @@ Translated:
 - quick book steps
 - the home gallery band
 - testimonials, including the review form
+- the featured guest wall
+- the "find us" map and directions
 - footer
 - the seeded guest reviews themselves
 
