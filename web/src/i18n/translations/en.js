@@ -44,8 +44,6 @@ export default {
     titleLead: "A chair made for your",
     titleAccent: "next chapter.",
     body: "NOIR is a modern grooming studio where classic barbering meets personal style. Every session starts with a conversation and finishes with a finish you can clearly see is yours.",
-    address: "5th Floor, Posta, Adama",
-    hours: "Open daily, 09:00 \u2014 21:00",
     cta: "Reserve your chair",
   },
 
@@ -94,8 +92,6 @@ export default {
     social: "Social",
     phone: "Phone",
     visit: "Visit",
-    address: "Bole Road, Addis Ababa",
-    hours: "Daily 09:00 \u2014 21:00",
   },
 
   testimonials: {
@@ -168,6 +164,11 @@ export default {
     landmarkParking: "Paid street parking on Bole Road",
     landmarkEntrance: "Stairwell beside the gold NOIR sign",
     minutesAway: "About {minutes} min",
+    mode: {
+      walking: "Walk",
+      transit: "Transit",
+      driving: "Drive",
+    },
     mapTitle: "Map showing the location of NOIR Barbers on Bole Road",
     mapNote: "Map data (c) OpenStreetMap contributors",
   },

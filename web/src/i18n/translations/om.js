@@ -43,8 +43,6 @@ export default {
     titleLead: "Kursi",
     titleAccent: "waggaa darbeef qopheeffamuuf qophaa'e.",
     body: "NOIR stuudiyoo daayinaa mootummaa kan ragoota mootummaa itti fufa qopphina qofti dhalaa waliin wabiiqate. Yeroo kamiyyuu, yoo eegamee, yoo xumuramee ilaalama akkaata isaatiif taatee.",
-    address: "Kifle 5, Poostaa, Adaamaa",
-    hours: "Guyya hundaa, 09:00 — 21:00 banaa",
     cta: "Kursi kee fudhadhuu",
   },
 
@@ -93,8 +91,6 @@ export default {
     social: "Hawaasa",
     phone: "Bilbila",
     visit: "Daawwadhuu",
-    address: "Kafrii Bollee, Adaabaabaa",
-    hours: "Guyya hundaa 09:00 — 21:00",
   },
 
   testimonials: {
@@ -168,6 +164,11 @@ export default {
     landmarkParking: "Kaffaltii daayinaa kafrii Bollee",
     landmarkEntrance: "Gombii NOIR daandii",
     minutesAway: "Daaqiiqawwan {minutes} fakka ta'u",
+    mode: {
+      walking: "Deemtuu",
+      transit: "Karraa",
+      driving: "Booqaa",
+    },
     mapTitle: "Kafrii Bollee NOIR Ragoota dhufuuf dhaabbata",
     mapNote: "Ochuu kafrii qabiyyeffamaa OpenStreetMap",
   },

@@ -43,8 +43,6 @@ export default {
     titleLead: "ለቀጣዩ",
     titleAccent: "ደረጃዎ የተዘጋጀ ወንበት።",
     body: "NOIR የጥንታዊ ወንዶች ፀጉር መቆረጥ ጥበብ ከግል ዘይቤ ጋር የሚገናኝበት ዘመናዊ የአዳማ የውበትና የፅዳት ስቱዲዮ ነው። እያንዳንዱ ቀጠሮ በውይይት ሲጀምር የሚጠናቀቀውም በግልጽ የእርስዎ መሆኑ በታይቷው ገጽታ ይሰጣል።",
-    address: "5ኛ ፎልውር፣ ፖስታ፣ አዳማ",
-    hours: "በየቀኑ፣ 09:00 — 21:00 ይከፍታል",
     cta: "ወንበትዎን ይያዙ",
   },
 
@@ -93,8 +91,6 @@ export default {
     social: "ማህበራዊ",
     phone: "ስልክ",
     visit: "ይገኙን",
-    address: "ቦሌ መንገድ፣ አዲስ አበባ",
-    hours: "በየቀኑ 09:00 — 21:00",
   },
 
   testimonials: {
@@ -168,6 +164,11 @@ export default {
     landmarkParking: "በቦሌ መንገድ የሚከፈለው ቦታ ማስቀመጫ",
     landmarkEntrance: "ከወርድ NOIR ምልክት ጎክ ያለው ደረጃ እርምጃ",
     minutesAway: "በ{minutes} ደቂቃ ያንሱ",
+    mode: {
+      walking: "በእርራት",
+      transit: "በትራን",
+      driving: "በእሱት",
+    },
     mapTitle: "ካርታ የቦሌ መንገድ ላይ የNOIR ባሪቦችን የመሆን ቦታ ያሳያል",
     mapNote: "የካርታ መረጃ የOpenStreetMap ተሟላላዎች",
   },
