@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -20,12 +21,25 @@ class ServiceApiTests(APITestCase):
             duration=20,
             is_active=False,
         )
+        self.admin = get_user_model().objects.create_user(
+            username="services-admin",
+            password="test-password",
+            is_staff=True,
+        )
+        self.client.force_authenticate(self.admin)
 
     def test_list_only_returns_active_services(self):
+        self.client.force_authenticate(user=None)
         response = self.client.get("/api/services/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual([item["id"] for item in response.data], [self.active_service.id])
+
+    def test_staff_list_includes_inactive_services(self):
+        response = self.client.get("/api/services/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.inactive_service.id, [item["id"] for item in response.data])
 
     def test_inactive_service_is_hidden_but_can_be_reactivated(self):
         detail_response = self.client.get(f"/api/services/{self.inactive_service.id}/")
@@ -63,7 +77,7 @@ class ServiceApiTests(APITestCase):
     def test_rejects_invalid_price_and_duration(self):
         response = self.client.post(
             "/api/services/",
-            {"name": "Invalid", "price": "0.00", "duration": 0},
+            {"name": "Invalid", "price": "-1.00", "duration": 0},
             format="json",
         )
 

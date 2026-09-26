@@ -9,7 +9,7 @@ import {
   createService,
   deleteHaircutStyle,
   deleteService,
-  listServices,
+  listAllServices,
   updateService,
 } from "../../services/servicesApi";
 import { formatDuration, formatPrice } from "../../utils/format";
@@ -45,7 +45,7 @@ export default function AdminServices() {
     setLoading(true);
     setError(null);
 
-    return listServices()
+    return listAllServices()
       .then((data) => {
         setServices(Array.isArray(data) ? data : data?.results || []);
         setLoading(false);

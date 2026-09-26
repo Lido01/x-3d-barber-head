@@ -1,0 +1,86 @@
+# ---------------------------------------------------------------------------
+# Root ignore file.
+#
+# The repo is a Django + Vite split (backend/, web/). Individual projects keep
+# their own .gitignore, but the large binary assets that must never reach git
+# are listed here so they stay ignored no matter which directory they land in.
+# ---------------------------------------------------------------------------
+
+# --- Python / Django -------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Node / Vite -----------------------------------------------------------
+node_modules/
+dist/
+dist-ssr/
+.vite/
+
+# --- Secrets and local env -------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Databases -------------------------------------------------------------
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+
+# ---------------------------------------------------------------------------
+# Binary assets and generated media — never commit these.
+# ---------------------------------------------------------------------------
+
+# Uploaded / generated media served by Django under /media/
+backend/media/
+media/
+
+# Seed photography used only to populate the local dev database.
+backend/seed_assets/
+seed_assets/
+
+# The 3D barber head model. ~32 MB of GLB, far too large for git history.
+*.glb
+*.gltf
+*.fbx
+*.obj
+*.blend
+*.hdr
+*.exr
+web/public/models/
+
+# Vite template leftovers and anything under the static dirs.
+web/public/
+web/src/assets/
+web/dist/
+
+# Receipt uploads from the payment flow
+backend/payment_receipts/
+payment_receipts/
+
+# ---------------------------------------------------------------------------
+# Editor and OS noise
+# ---------------------------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- Logs ------------------------------------------------------------------
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Local documentation overrides ----------------------------------------
+docs/road_maap.md
+docs/system_flow.md

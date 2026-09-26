@@ -2,6 +2,7 @@ import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useGallery } from "../hooks/useGallery";
+import { useLanguage } from "../i18n/LanguageContext";
 import { mediaUrl } from "../services/api";
 import Alert from "../components/ui/Alert";
 import Spinner from "../components/ui/Spinner";
@@ -16,25 +17,25 @@ import ParallaxSection from "../components/ParallaxSection";
  */
 export default function Gallery({ onSelect }) {
   const { posts, loading, error, reload } = useGallery();
+  const { t } = useLanguage();
 
   return (
     <ParallaxSection
       id="gallery"
-      image="/media/gallery/1740692046956.jpeg"
+      image="/media/gallery/demo-soft-texture.jpg"
       overlay="from-black/95 via-black/70 to-black/95"
-      contentClassName="py-20 sm:py-24"
+      contentClassName="py-10 sm:py-14"
     >
       <div className="flex flex-wrap items-end justify-between gap-6">
         <Reveal>
           <p className="text-[10px] uppercase tracking-[.35em] text-[#d6a85f]">
-            Recent work
+            {t("gallery.recentWork")}
           </p>
-          <h2 className="mt-4 font-serif text-5xl sm:text-6xl">
-            The <span className="italic text-[#d6a85f]">gallery.</span>
+          <h2 className="mt-4 font-serif text-4xl sm:text-6xl">
+            {t("gallery.titleLead")} <span className="italic text-[#d6a85f]">{t("gallery.titleAccent")}</span>
           </h2>
           <p className="mt-5 max-w-xs text-sm leading-6 text-white/55">
-            Real cuts from the chair — tap a look to explore the style and
-            find the right booking time.
+            {t("gallery.body")}
           </p>
         </Reveal>
 
@@ -43,21 +44,21 @@ export default function Gallery({ onSelect }) {
             to="/gallery"
             className="inline-flex items-center gap-2 text-xs uppercase tracking-[.2em] text-[#d6a85f] transition hover:text-[#e5bd7a]"
           >
-            View full gallery <ArrowRight size={14} />
+            {t("gallery.viewAll")} <ArrowRight size={14} />
           </Link>
         </Reveal>
       </div>
 
       {loading && (
         <div className="mt-12 flex items-center justify-center rounded-2xl border border-white/10 bg-black/40 py-20 backdrop-blur-md">
-          <Spinner label="Loading the gallery..." />
+          <Spinner label={t("gallery.loading")} />
         </div>
       )}
 
       {!loading && error && (
         <Alert
           tone="error"
-          title="Could not load the gallery"
+          title={t("gallery.errorTitle")}
           details={error.fieldErrors}
           onRetry={reload}
           className="mt-12"
@@ -67,8 +68,8 @@ export default function Gallery({ onSelect }) {
       )}
 
       {!loading && !error && posts.length === 0 && (
-        <Alert tone="info" title="Nothing here yet" className="mt-12">
-          The shop hasn't shared any looks yet. Check back soon.
+        <Alert tone="info" title={t("gallery.emptyTitle")} className="mt-12">
+          {t("gallery.emptyBody")}
         </Alert>
       )}
 
@@ -95,7 +96,7 @@ export default function Gallery({ onSelect }) {
                 <div className="absolute inset-x-4 bottom-4 flex items-end justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-[9px] uppercase tracking-[.2em] text-[#d6a85f]">
-                      {post.style_name || "Recent work"}
+                      {post.style_name || t("gallery.recentWork")}
                     </p>
                     <p className="mt-1 truncate font-serif text-xl">{post.title}</p>
                   </div>

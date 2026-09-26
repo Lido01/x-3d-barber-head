@@ -8,34 +8,20 @@ from drf_spectacular.utils import (
     OpenApiResponse,
 )
 
-from .serializers import (
-    AIAvailabilityRequestSerializer,
-    AIBookingRequestSerializer,
-    AIChatSerializer,
-    AIServiceRequestSerializer,
-)
-from .services import AIAgentService
+from .agent import BarberBookingAgent
+from .serializers import AIChatSerializer
 
 
 class AIAgentViewSet(viewsets.ViewSet):
     """
-    Public AI booking assistant API.
+    Public AI barber booking assistant.
 
-    Customers do not need an account to use the assistant.
-
-    The AI agent can eventually:
-    - understand customer messages
-    - find services
-    - show haircut styles
-    - check availability
-    - create bookings
+    Customers do not need an account.
     """
 
-    permission_classes = [AllowAny]
-
-    # ---------------------------------------------------------
-    # CHAT
-    # ---------------------------------------------------------
+    permission_classes = [
+        AllowAny,
+    ]
 
     @extend_schema(
         request=AIChatSerializer,
@@ -43,11 +29,16 @@ class AIAgentViewSet(viewsets.ViewSet):
             200: OpenApiResponse(
                 description="AI assistant response."
             ),
+            400: OpenApiResponse(
+                description="Invalid request."
+            ),
+            500: OpenApiResponse(
+                description="AI provider configuration/error."
+            ),
         },
         description=(
-            "Main public AI assistant endpoint. "
-            "Natural-language understanding will be "
-            "connected in the next step."
+            "Chat with the AI barber booking assistant. "
+            "Customers do not need to register or log in."
         ),
     )
     @action(
@@ -56,6 +47,7 @@ class AIAgentViewSet(viewsets.ViewSet):
         url_path="chat",
     )
     def chat(self, request):
+
         serializer = AIChatSerializer(
             data=request.data
         )
@@ -64,162 +56,65 @@ class AIAgentViewSet(viewsets.ViewSet):
             raise_exception=True
         )
 
-        message = serializer.validated_data["message"]
+        data = serializer.validated_data
 
-        return Response(
-            {
-                "success": True,
-                "message": (
-                    "AI agent endpoint is working."
-                ),
-                "user_message": message,
-                "next_step": (
-                    "Connect the AI model to "
-                    "the booking tools."
-                ),
-            }
-        )
-
-    # ---------------------------------------------------------
-    # SERVICES
-    # ---------------------------------------------------------
-
-    @extend_schema(
-        responses={
-            200: OpenApiResponse(
-                description="Available barber services."
+        state = {
+            "customer_name": data.get(
+                "customer_name",
+                "",
             ),
-        },
-        description=(
-            "Return all active barber services "
-            "available to the AI assistant."
-        ),
-    )
-    @action(
-        detail=False,
-        methods=["get"],
-        url_path="services",
-    )
-    def services(self, request):
-        return Response(
-            AIAgentService.services()
-        )
-
-    # ---------------------------------------------------------
-    # SERVICE DETAILS
-    # ---------------------------------------------------------
-
-    @extend_schema(
-        request=AIServiceRequestSerializer,
-        responses={
-            200: OpenApiResponse(
-                description="Service details."
+            "customer_phone": data.get(
+                "customer_phone",
+                "",
             ),
-        },
-        description=(
-            "Return details and haircut styles "
-            "for a specific active service."
-        ),
-    )
-    @action(
-        detail=False,
-        methods=["get"],
-        url_path="service/(?P<service_id>[^/.]+)",
-    )
-    def service_details(
-        self,
-        request,
-        service_id=None,
-    ):
-        result = AIAgentService.service_details(
-            int(service_id)
-        )
+            "service_id": data.get(
+                "service_id",
+            ),
+            "booking_date": (
+                str(data["booking_date"])
+                if data.get("booking_date")
+                else None
+            ),
+            "start_time": (
+                str(data["start_time"])
+                if data.get("start_time")
+                else None
+            ),
+        }
 
-        if not result.get("success"):
-            return Response(
-                result,
-                status=status.HTTP_404_NOT_FOUND,
+        try:
+
+            agent = BarberBookingAgent(
+                state=state
             )
 
-        return Response(result)
+            result = agent.process(
+                data["message"]
+            )
 
-    # ---------------------------------------------------------
-    # AVAILABILITY
-    # ---------------------------------------------------------
+            return Response(
+                result,
+                status=status.HTTP_200_OK,
+            )
 
-    @extend_schema(
-        request=AIAvailabilityRequestSerializer,
-        responses={
-            200: OpenApiResponse(
-                description="Available appointment times."
-            ),
-        },
-        description=(
-            "Check available booking times "
-            "for a service on a specific date."
-        ),
-    )
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="availability",
-    )
-    def availability(self, request):
-        serializer = AIAvailabilityRequestSerializer(
-            data=request.data
-        )
+        except RuntimeError as exc:
 
-        serializer.is_valid(
-            raise_exception=True
-        )
+            return Response(
+                {
+                    "success": False,
+                    "error": str(exc),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        except Exception as exc:
 
-        result = AIAgentService.availability(
-            service_id=serializer.validated_data[
-                "service_id"
-            ],
-            booking_date=serializer.validated_data[
-                "booking_date"
-            ],
-        )
-
-        return Response(result)
-
-    # ---------------------------------------------------------
-    # BOOKING
-    # ---------------------------------------------------------
-
-    @extend_schema(
-        request=AIBookingRequestSerializer,
-        responses={
-            201: OpenApiResponse(
-                description="Booking created."
-            ),
-        },
-        description=(
-            "Create a booking through the AI "
-            "booking system. Customer login is "
-            "not required."
-        ),
-    )
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="booking",
-    )
-    def booking(self, request):
-        serializer = AIBookingRequestSerializer(
-            data=request.data
-        )
-
-        serializer.is_valid(
-            raise_exception=True
-        )
-
-        result = AIAgentService.create_booking(
-            **serializer.validated_data
-        )
-
-        return Response(
-            result,
-            status=status.HTTP_201_CREATED,
-        )
+            return Response(
+                {
+                    "success": False,
+                    "error": (
+                        "The AI assistant is temporarily "
+                        "unavailable."
+                    ),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

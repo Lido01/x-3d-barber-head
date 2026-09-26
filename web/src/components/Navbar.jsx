@@ -3,15 +3,8 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { Scissors } from "lucide-react";
 
 import Button from "./Button";
-
-const links = [
-  { label: "Home", to: "/" },
-  { label: "Services", to: "/services" },
-  { label: "Haircuts", to: "/haircuts" },
-  { label: "Barbers", to: "/barbers" },
-  { label: "Gallery", to: "/gallery" },
-  { label: "About", to: "/#about" },
-];
+import LanguageSwitcher from "./LanguageSwitcher";
+import { useLanguage } from "../i18n/LanguageContext";
 
 /**
  * Desktop top navigation (desktop-first apps keep a classic header).
@@ -22,7 +15,19 @@ const links = [
  */
 export default function Navbar() {
   const location = useLocation();
+  const { t } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
+
+  // Keyed off the translation function so the labels re-resolve on a
+  // language change instead of freezing at first render.
+  const links = [
+    { label: t("nav.home"), to: "/" },
+    { label: t("nav.services"), to: "/services" },
+    { label: t("nav.haircuts"), to: "/haircuts" },
+    { label: t("nav.barbers"), to: "/barbers" },
+    { label: t("nav.gallery"), to: "/gallery" },
+    { label: t("nav.about"), to: "/#about" },
+  ];
 
   useEffect(() => {
     const handleScroll = () => {
@@ -131,11 +136,13 @@ export default function Navbar() {
 
         {/* Desktop CTA */}
         <div className="hidden items-center gap-6 lg:flex">
+          <LanguageSwitcher />
+
           <Link
             to="/admin"
             className="text-[13px] font-medium tracking-[0.08em] text-white/40 transition hover:text-white"
           >
-            Staff
+            {t("nav.staff")}
           </Link>
 
           <Button
@@ -143,7 +150,7 @@ export default function Navbar() {
             className="px-4 py-2.5"
             icon={false}
           >
-            Book a Chair
+            {t("nav.bookChair")}
           </Button>
         </div>
       </div>

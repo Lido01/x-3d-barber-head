@@ -9,6 +9,9 @@ import {
   UserRound,
 } from "lucide-react";
 
+import LanguageSwitcher from "./LanguageSwitcher";
+import { useLanguage } from "../i18n/LanguageContext";
+
 /**
  * Mobile-first bottom app bar (Telegram-style).
  *
@@ -23,6 +26,7 @@ import {
  */
 export default function BottomBar() {
   const location = useLocation();
+  const { t } = useLanguage();
   const [hidden, setHidden] = useState(false);
   const lastScroll = useRef(0);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -60,7 +64,7 @@ export default function BottomBar() {
     "flex flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 text-[10px] font-medium transition-colors";
 
   const tabClass = (active) =>
-    `${base} ${active ? "text-[#d6a85f]" : "text-white/45 active:text-white/80"}`;
+    `${base} ${active ? "text-white" : "text-white/45 active:text-white/80"}`;
 
   return (
     <nav
@@ -80,40 +84,40 @@ export default function BottomBar() {
         {/* Home */}
         <NavLink to="/" end className={tabClass}>
           <Home size={20} strokeWidth={2} />
-          <span>Home</span>
+          <span>{t("nav.home")}</span>
         </NavLink>
 
         {/* Services */}
         <NavLink to="/services" className={tabClass}>
           <LayoutGrid size={20} strokeWidth={2} />
-          <span>Services</span>
+          <span>{t("nav.services")}</span>
         </NavLink>
 
         {/* Book — centre FAB */}
         <Link
           to="/booking"
-          aria-label="Book a chair"
-          className="relative -mt-9 flex h-16 w-16 flex-col items-center justify-center rounded-full bg-[#d6a85f] text-black shadow-[0_10px_30px_rgba(214,168,95,0.45)] transition active:scale-95"
+          aria-label={t("nav.bookChair")}
+          className="relative -mt-9 flex h-16 w-16 flex-col items-center justify-center rounded-full bg-[#f4c883] text-black shadow-[0_10px_30px_rgba(214,168,95,0.45)] transition active:scale-95"
         >
           <span className="pulse-ring absolute inset-0 rounded-full" />
           <Scissors size={20} strokeWidth={2.4} />
-          <span className="mt-0.5 text-[9px] font-bold">Book</span>
+          <span className="mt-0.5 text-[9px] font-bold">{t("nav.bookChair")}</span>
         </Link>
 
         {/* Barbers */}
         <NavLink to="/barbers" className={tabClass}>
           <UserRound size={20} strokeWidth={2} />
-          <span>Barbers</span>
+          <span>{t("nav.barbers")}</span>
         </NavLink>
 
         {/* More (gallery + menu) */}
         <button
           type="button"
           onClick={() => setMoreOpen((value) => !value)}
-          className={tabClass}
+          className={tabClass(false)}
         >
           <Sparkles size={20} strokeWidth={2} />
-          <span>More</span>
+          <span>{t("nav.menu")}</span>
         </button>
       </div>
 
@@ -131,8 +135,8 @@ export default function BottomBar() {
             onClick={() => setMoreOpen(false)}
             className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
           >
-            <LayoutGrid size={18} className="text-[#d6a85f]" />
-            Gallery
+            <LayoutGrid size={18}  />
+            {t("nav.gallery")}
           </NavLink>
 
           <NavLink
@@ -140,8 +144,8 @@ export default function BottomBar() {
             onClick={() => setMoreOpen(false)}
             className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
           >
-            <Sparkles size={18} className="text-[#d6a85f]" />
-            Haircuts
+            <Sparkles size={18} />
+            {t("nav.haircuts")}
           </NavLink>
 
           <NavLink
@@ -149,8 +153,8 @@ export default function BottomBar() {
             onClick={() => setMoreOpen(false)}
             className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
           >
-            <CalendarDays size={18} className="text-[#d6a85f]" />
-            About
+            <CalendarDays size={18} />
+            {t("nav.about")}
           </NavLink>
 
           <Link
@@ -158,9 +162,18 @@ export default function BottomBar() {
             onClick={() => setMoreOpen(false)}
             className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
           >
-            <UserRound size={18} className="text-[#d6a85f]" />
-            Staff
+            <UserRound size={18} />
+            {t("nav.staff")}
           </Link>
+        </div>
+
+        {/* Language — full width so the native names stay readable */}
+        <div className="border-t border-white/10 p-3 pt-4">
+          <p className="mb-2.5 px-1 text-[9px] uppercase tracking-[.28em] text-white/30">
+            {t("common.language")}
+          </p>
+
+          <LanguageSwitcher variant="list" />
         </div>
       </div>
 
@@ -168,7 +181,7 @@ export default function BottomBar() {
       {moreOpen && (
         <button
           type="button"
-          aria-label="Close menu"
+          aria-label={t("nav.closeMenu")}
           onClick={() => setMoreOpen(false)}
           className="fixed inset-0 z-[-1] bg-black/60"
         />
