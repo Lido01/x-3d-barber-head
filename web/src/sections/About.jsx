@@ -1,4 +1,4 @@
-import { Clock3, MapPin, Sparkles } from "lucide-react";
+import { Clock3, MapPin } from "lucide-react";
 
 import Button from "../components/Button";
 import Reveal from "../components/Reveal";
