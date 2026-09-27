@@ -67,3 +67,8 @@ silently does nothing.
 direction. It does not affect `scroll-margin-top`, so nothing extra is needed
 for it, but it does mean the last section needs bottom padding on small
 screens — `App.jsx` already puts `pb-20` on `<main>` for that.
+
+The staff console has its own fixed bottom tab bar, which is always visible
+rather than scroll-reactive — a barber tapping through payments mid-shift
+should not have the bar slide away. `AdminLayout` handles the clearance with
+`pb-28`; see [`small-device-layout.md`](small-device-layout.md).
