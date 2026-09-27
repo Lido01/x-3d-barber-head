@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" width="480" height="480" role="img" aria-label="Illustrated portrait of a fictional NOIR guest">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#231520"/>
+      <stop offset="1" stop-color="#0a080a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.7" cy="0.2" r="0.85">
+      <stop offset="0" stop-color="#e07fb0" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#e07fb0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="braid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1a1e"/>
+      <stop offset="1" stop-color="#150c10"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="480" height="480" fill="url(#bg)"/>
+  <rect width="480" height="480" fill="url(#glow)"/>
+
+  <g opacity="0.13" stroke="#e07fb0" stroke-width="1" fill="none">
+    <path d="M40 240 A200 200 0 0 1 440 240"/>
+  </g>
+
+  <path d="M100 480 C100 388 170 348 240 348 C310 348 380 388 380 480 Z" fill="#1a1518"/>
+  <path d="M100 480 C100 388 170 348 240 348 C310 348 380 388 380 480 Z" fill="none" stroke="#e07fb0" stroke-opacity="0.3" stroke-width="2"/>
+
+  <g fill="url(#braid)">
+    <circle cx="240" cy="96" r="34"/>
+    <circle cx="240" cy="86" r="22" fill="#2f1d22"/>
+  </g>
+  <path d="M240 60 C258 60 268 72 264 86 C256 78 246 74 236 76 C226 78 220 84 216 90 C210 74 222 60 240 60 Z" fill="#e07fb0" fill-opacity="0.28"/>
+
+  <rect x="212" y="288" width="56" height="70" fill="#a9714a"/>
+  <rect x="212" y="288" width="22" height="70" fill="#000" opacity="0.16"/>
+
+  <ellipse cx="240" cy="226" rx="70" ry="86" fill="#a9714a"/>
+  <ellipse cx="240" cy="226" rx="70" ry="86" fill="none" stroke="#000" stroke-opacity="0.25" stroke-width="2"/>
+
+  <g fill="url(#braid)">
+    <path d="M240 118 C286 118 310 144 310 178 C296 158 272 148 240 148 C208 148 184 158 170 178 C170 144 194 118 240 118 Z"/>
+    <rect x="166" y="164" width="15" height="150" rx="7.5"/>
+    <rect x="185" y="176" width="15" height="164" rx="7.5"/>
+    <rect x="204" y="184" width="15" height="172" rx="7.5"/>
+    <rect x="276" y="184" width="15" height="172" rx="7.5"/>
+    <rect x="295" y="176" width="15" height="164" rx="7.5"/>
+    <rect x="310" y="164" width="15" height="150" rx="7.5"/>
+  </g>
+  <g fill="none" stroke="#e07fb0" stroke-opacity="0.2" stroke-width="2">
+    <rect x="204" y="184" width="15" height="172" rx="7.5"/>
+    <rect x="276" y="184" width="15" height="172" rx="7.5"/>
+  </g>
+
+  <g fill="#0d0807">
+    <ellipse cx="214" cy="226" rx="7" ry="8"/>
+    <ellipse cx="266" cy="226" rx="7" ry="8"/>
+  </g>
+  <g stroke="#0d0807" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.8">
+    <path d="M196 212 C204 206 224 206 232 212"/>
+    <path d="M248 212 C256 206 276 206 284 212"/>
+  </g>
+  <path d="M216 252 C226 264 254 264 264 252" fill="none" stroke="#6d4026" stroke-width="5" stroke-linecap="round"/>
+  <path d="M219 255 C228 263 252 263 261 255" fill="none" stroke="#f4f0e8" stroke-opacity="0.85" stroke-width="3" stroke-linecap="round"/>
+</svg>

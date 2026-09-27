@@ -29,6 +29,27 @@ html {
   background: #090909;
 }
 
+/*
+ * The header is position: fixed and 78px tall, so a section reached through a
+ * hash link (the nav "About" link points at /#about) would otherwise park its
+ * top edge underneath it. Every scroll target gets clearance equal to the
+ * header plus a little breathing room.
+ *
+ * .scroll-target is there for the case where a hash points at something that
+ * is not a <section>.
+ */
+section[id],
+.scroll-target {
+  scroll-margin-top: 96px;
+}
+
+/* The <main> landmark takes programmatic focus after a route change so
+   keyboard and screen-reader users land on the new content. It is not in the
+   tab order, so it should never paint a focus ring. */
+#main-content:focus {
+  outline: none;
+}
+
 body {
   margin: 0;
   min-width: 320px;

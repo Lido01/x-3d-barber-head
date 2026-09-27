@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import LanguageSwitcher from "./LanguageSwitcher";
 import { useLanguage } from "../i18n/LanguageContext";
+import { studioLocation } from "../data/studioLocation";
 
 /**
  * Shared public footer. Hidden on /admin/* routes (which have their own
@@ -49,8 +50,14 @@ export default function Footer() {
             {t("footer.visit")}
           </p>
           <ul className="mt-4 space-y-3 text-sm text-white/50">
-            <li className="flex gap-2"><MapPin size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" /> {t("footer.address")}</li>
-            <li className="flex gap-2"><Clock3 size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" /> {t("footer.hours")}</li>
+            <li className="flex gap-2">
+              <MapPin size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" />{" "}
+              {studioLocation.addressLines.street}, {studioLocation.addressLines.city}
+            </li>
+            <li className="flex gap-2">
+              <Clock3 size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" />{" "}
+              {t("findUs.openDaily")}
+            </li>
           </ul>
         </div>
       </div>

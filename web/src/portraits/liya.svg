@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" width="480" height="480" role="img" aria-label="Illustrated portrait of a fictional NOIR guest">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#20161a"/>
+      <stop offset="1" stop-color="#0a0a0a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.74" cy="0.18" r="0.85">
+      <stop offset="0" stop-color="#e08a8a" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#e08a8a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#2b1c14"/>
+      <stop offset="1" stop-color="#120c09"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="480" height="480" fill="url(#bg)"/>
+  <rect width="480" height="480" fill="url(#glow)"/>
+
+  <g opacity="0.16" stroke="#d6a85f" stroke-width="1">
+    <path d="M0 400 L480 250" fill="none"/>
+    <path d="M0 430 L480 280" fill="none"/>
+  </g>
+
+  <path d="M104 480 C104 392 172 350 240 350 C308 350 376 392 376 480 Z" fill="#171717"/>
+  <path d="M104 480 C104 392 172 350 240 350 C308 350 376 392 376 480 Z" fill="none" stroke="#d6a85f" stroke-opacity="0.35" stroke-width="2"/>
+  <rect x="212" y="288" width="56" height="70" fill="#8f5f3f"/>
+  <rect x="212" y="288" width="22" height="70" fill="#000" opacity="0.18"/>
+
+  <ellipse cx="240" cy="222" rx="74" ry="90" fill="#8f5f3f"/>
+  <ellipse cx="240" cy="222" rx="74" ry="90" fill="none" stroke="#000" stroke-opacity="0.25" stroke-width="2"/>
+
+  <g fill="url(#hair)">
+    <path d="M240 118 C168 118 148 176 152 224 C150 196 168 168 196 160 C214 176 250 182 272 168 C300 178 320 200 322 228 C330 178 306 118 240 118 Z"/>
+    <path d="M150 210 C142 250 138 292 132 330 C128 356 146 364 154 350 C162 336 158 300 164 264 Z"/>
+    <path d="M330 210 C338 250 342 292 348 330 C352 356 334 364 326 350 C318 336 322 300 316 264 Z"/>
+  </g>
+
+  <g fill="#120c09">
+    <ellipse cx="212" cy="220" rx="7" ry="9"/>
+    <ellipse cx="268" cy="220" rx="7" ry="9"/>
+  </g>
+  <g stroke="#120c09" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.75">
+    <path d="M190 202 C198 195 224 195 232 202"/>
+    <path d="M250 202 C258 195 284 195 292 202"/>
+  </g>
+  <path d="M218 252 C228 262 252 262 262 252" fill="none" stroke="#5c3524" stroke-width="5" stroke-linecap="round"/>
+  <path d="M222 254 C232 260 248 260 258 254" fill="none" stroke="#e08a8a" stroke-opacity="0.5" stroke-width="2"/>
+
+  <circle cx="164" cy="252" r="9" fill="none" stroke="#d6a85f" stroke-width="3"/>
+  <circle cx="316" cy="252" r="9" fill="none" stroke="#d6a85f" stroke-width="3"/>
+
+  <g opacity="0.5" stroke="#e08a8a" stroke-width="2" fill="none">
+    <circle cx="240" cy="222" r="118" stroke-dasharray="3 12"/>
+  </g>
+</svg>
