@@ -31,7 +31,7 @@ export default {
   },
 
   hero: {
-    titleLead: "YOUR STYLE.",
+    titleLead: "YOUR STYLE",
     titleTail: "YOUR IDENTITY.",
     body: "A modern grooming studio built around precision, confidence, and the craft of the perfect cut.",
     primaryCta: "Book Your Chair",

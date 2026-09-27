@@ -77,10 +77,6 @@ export default function FindUs() {
         <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
           {/* ---------- details ---------- */}
           <Reveal>
-            <p className="text-[10px] uppercase tracking-[.35em] text-[#d6a85f]">
-              {t("findUs.eyebrow")}
-            </p>
-
             <h2 className="mt-4 font-serif text-4xl leading-[1.05] sm:text-6xl">
               {t("findUs.titleLead")}
               <br />
@@ -96,7 +92,7 @@ export default function FindUs() {
             {/* Address + hours */}
             <div className="mt-8 space-y-3 border-t border-white/10 pt-6 text-sm text-white/70">
               <p className="flex gap-3">
-                <MapPin size={17} className="mt-0.5 shrink-0 text-[#d6a85f]" />
+                <MapPin size={17} className="mt-0.5 shrink-0" />
                 <span>
                   {addressLines.building}
                   <br />
@@ -107,7 +103,7 @@ export default function FindUs() {
               </p>
 
               <p className="flex gap-3">
-                <Clock3 size={17} className="mt-0.5 shrink-0 text-[#d6a85f]" />
+                <Clock3 size={17} className="mt-0.5 shrink-0" />
                 <span>
                   {t("findUs.openDaily")}
                 </span>
@@ -119,37 +115,12 @@ export default function FindUs() {
               <p className="text-[10px] uppercase tracking-[.25em] text-white/30">
                 {t("findUs.getDirections")}
               </p>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {TRAVEL_MODES.map((value) => {
-                  const Icon = MODE_ICONS[value];
-                  const selected = value === mode;
-
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setMode(value)}
-                      aria-pressed={selected}
-                      className={`inline-flex items-center gap-2 border px-3.5 py-2 text-[12px] font-medium tracking-wide transition ${
-                        selected
-                          ? "border-[#d6a85f] bg-[#d6a85f] text-black"
-                          : "border-white/12 text-white/60 hover:border-[#d6a85f]/45 hover:text-white"
-                      }`}
-                    >
-                      <Icon size={14} />
-                      {t(`findUs.mode.${value}`)}
-                    </button>
-                  );
-                })}
-              </div>
-
               <div className="mt-4 flex flex-wrap gap-3">
                 <a
                   href={directionsUrl(mode)}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="inline-flex items-center gap-2  bg-[#d6a85f] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
+                  className="inline-flex items-center gap-2  bg-[#f3d29d] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
                 >
                   <Navigation size={15} />
                   {t("findUs.getDirections")}
@@ -197,41 +168,6 @@ export default function FindUs() {
               </div>
             </div>
 
-            {/* Landmarks */}
-            <div className="mt-10">
-              <p className="text-[10px] uppercase tracking-[.25em] text-white/30">
-                {t("findUs.howToFind")}
-              </p>
-
-              <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-                {studioLocation.landmarks.map((landmark) => {
-                  const Icon = LANDMARK_ICONS[landmark.icon] || MapPin;
-
-                  return (
-                    <li
-                      key={landmark.id}
-                      className="flex items-center gap-3 border border-white/10 bg-white/[0.02] p-3"
-                    >
-                      <Icon size={16} className="shrink-0 text-[#d6a85f]" />
-
-                      <span className="min-w-0 flex-1 text-[12px] leading-5 text-white/60">
-                        {t(landmark.labelKey)}
-                      </span>
-
-                      <span className="shrink-0 text-[10px] tracking-wide text-white/30">
-                        {t("findUs.minutesAway", {
-                          minutes: landmark.approxMinutes,
-                        })}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-
-              <p className="mt-3 text-[11px] leading-5 text-white/25">
-                {t("findUs.approxNote")}
-              </p>
-            </div>
           </Reveal>
 
           {/* ---------- map ---------- */}

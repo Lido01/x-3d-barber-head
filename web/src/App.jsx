@@ -61,7 +61,7 @@ function Shell() {
 
       <Navbar />
 
-      <main id="main-content" tabIndex={-1} className="pb-20 outline-none lg:pb-0">
+      <main id="main-content" tabIndex={-1} className="outline-none lg:pb-0">
         <Routes>
           {/* Public site */}
           <Route path="/" element={<Home />} />

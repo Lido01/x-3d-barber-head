@@ -24,14 +24,10 @@ export default function About() {
           </h2>
         </Reveal>
 
-        <Reveal delay={120} className="lg:pt-10">
-          <p className="max-w-md text-base leading-7 text-white/70">
-            {t("about.body")}
-          </p>
-
-          <div className="mt-9 space-y-4 border-t border-white/15 pt-6 text-sm text-white/80">
+        <Reveal delay={120} className="">
+          <div className="space-y-4 border-t border-white/15 pt-6 text-sm text-white/80">
             <p className="flex gap-3">
-              <MapPin size={18} className="shrink-0 text-[#d6a85f]" />{" "}
+              <MapPin size={18} className="shrink-0" />{" "}
               <span>
                 {studioLocation.addressLines.building}
                 <br />
@@ -39,12 +35,12 @@ export default function About() {
               </span>
             </p>
             <p className="flex gap-3">
-              <Clock3 size={18} className="shrink-0 text-[#d6a85f]" />{" "}
+              <Clock3 size={18} className="shrink-0" />{" "}
               <span>{t("findUs.openDaily")}</span>
             </p>
           </div>
 
-          <Button to="/booking" className="mt-10 bg-[#d6a85f] text-black hover:bg-[#e5bd7a]">
+          <Button to="/booking" className="mt-10 bg-[rgb(234,208,167)] text-black hover:bg-[#e5bd7a]">
             {t("about.cta")}
           </Button>
         </Reveal>

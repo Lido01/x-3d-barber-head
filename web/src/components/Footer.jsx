@@ -51,11 +51,11 @@ export default function Footer() {
           </p>
           <ul className="mt-4 space-y-3 text-sm text-white/50">
             <li className="flex gap-2">
-              <MapPin size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" />{" "}
+              <MapPin size={15} className="mt-0.5 shrink-0" />{" "}
               {studioLocation.addressLines.street}, {studioLocation.addressLines.city}
             </li>
             <li className="flex gap-2">
-              <Clock3 size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" />{" "}
+              <Clock3 size={15} className="mt-0.5 shrink-0" />{" "}
               {t("findUs.openDaily")}
             </li>
           </ul>
@@ -63,14 +63,14 @@ export default function Footer() {
       </div>
 
       {/* Language on desktop, where the header switcher is out of reach. */}
-      <div className="mx-auto mt-12 hidden max-w-[1440px] lg:block">
+      {/* <div className="mx-auto mt-12 hidden max-w-[1440px] lg:block">
         <p className="text-[10px] uppercase tracking-[.25em] text-white/30">
           {t("common.language")}
         </p>
         <div className="mt-3">
           <LanguageSwitcher variant="pills" />
         </div>
-      </div>
+      </div> */}
     </footer>
   );
 }
