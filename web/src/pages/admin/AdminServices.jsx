@@ -1,8 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, RefreshCw, Scissors, Trash2, X } from "lucide-react";
+import {
+  Pencil,
+  Plus,
+  RefreshCw,
+  Scissors,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import Alert from "../../components/ui/Alert";
-import Spinner from "../../components/ui/Spinner";
+import {
+  AdminButton,
+  AdminEmpty,
+  AdminLoading,
+  AdminPageHeader,
+  AdminPanel,
+} from "../../components/admin/AdminUi";
 import { mediaUrl } from "../../services/api";
 import {
   createHaircutStyle,
@@ -14,8 +27,25 @@ import {
 } from "../../services/servicesApi";
 import { formatDuration, formatPrice } from "../../utils/format";
 
+/**
+ * Services and their haircut styles.
+ *
+ * The create/edit form and the per-service style form are the two places
+ * this screen used to be awkward on a phone: a file input and a submit
+ * button side by side in a flex row overflowed at 360px. Both are now
+ * single-column with full-width controls, and a file input is given an
+ * explicit `w-full min-w-0` because a native file picker refuses to
+ * shrink below its intrinsic width otherwise.
+ */
+
 const INPUT =
-  "w-full rounded-xl border border-white/10 bg-[#181818] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50";
+  "w-full min-w-0 rounded-xl border border-white/10 bg-[#181818] px-4 py-3 text-base text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50 sm:text-sm";
+
+const LABEL =
+  "block text-[10px] uppercase tracking-[0.25em] text-white/35";
+
+const FILE_INPUT =
+  "w-full min-w-0 text-xs text-white/60 file:mr-3 file:rounded-full file:border-0 file:bg-[#d6a85f] file:px-4 file:py-2.5 file:text-xs file:font-semibold file:text-black";
 
 const EMPTY = {
   name: "",
@@ -30,6 +60,7 @@ export default function AdminServices() {
   const [error, setError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [editing, setEditing] = useState(null); // null | "new" | service
   const [form, setForm] = useState(EMPTY);
@@ -40,19 +71,23 @@ export default function AdminServices() {
   const [styleServiceId, setStyleServiceId] = useState(null);
   const [styleName, setStyleName] = useState("");
   const [styleImage, setStyleImage] = useState(null);
+  const [styleSaving, setStyleSaving] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
+    setRefreshing(true);
 
     return listAllServices()
       .then((data) => {
         setServices(Array.isArray(data) ? data : data?.results || []);
         setLoading(false);
+        setRefreshing(false);
       })
       .catch((apiError) => {
         setError(apiError);
         setLoading(false);
+        setRefreshing(false);
       });
   }, []);
 
@@ -89,7 +124,10 @@ export default function AdminServices() {
     setActionError(null);
 
     if (!form.name.trim()) {
-      setActionError({ message: "A service name is required.", fieldErrors: {} });
+      setActionError({
+        message: "A service name is required.",
+        fieldErrors: {},
+      });
       return;
     }
 
@@ -109,6 +147,7 @@ export default function AdminServices() {
       } else {
         await updateService(editing.id, payload);
       }
+
       setEditing(null);
       load();
     } catch (apiError) {
@@ -143,11 +182,12 @@ export default function AdminServices() {
   const handleAddStyle = async (serviceId, event) => {
     event.preventDefault();
 
-    if (!styleName.trim()) {
+    if (!styleName.trim() || styleSaving) {
       return;
     }
 
     setActionError(null);
+    setStyleSaving(true);
 
     try {
       await createHaircutStyle(serviceId, {
@@ -160,6 +200,8 @@ export default function AdminServices() {
       load();
     } catch (apiError) {
       setActionError(apiError);
+    } finally {
+      setStyleSaving(false);
     }
   };
 
@@ -180,55 +222,39 @@ export default function AdminServices() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-            Staff · Management
-          </p>
-          <h1 className="mt-4 font-serif text-4xl leading-none sm:text-5xl">
-            Services
-          </h1>
-          <p className="mt-3 text-xs text-white/35">
-            Pricing, durations and haircut styles on the site.
-          </p>
-        </div>
+      <AdminPageHeader
+        eyebrow="Staff · Management"
+        title="Services"
+        description="Pricing, durations and haircut styles on the site."
+        actions={
+          <>
+            <AdminButton
+              onClick={load}
+              icon={RefreshCw}
+              disabled={refreshing}
+            >
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </AdminButton>
 
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={load}
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
-          >
-            <RefreshCw size={13} /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => (editing === null ? openNew() : setEditing(null))}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold text-black transition ${
-              editing === null
-                ? "bg-[#d6a85f] hover:bg-[#e5bd7a]"
-                : "border border-white/15 text-white/60 hover:text-white"
-            }`}
-          >
-            {editing === null ? (
-              <>
-                <Plus size={14} /> Add service
-              </>
-            ) : (
-              <>
-                <X size={14} /> Cancel
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+            <AdminButton
+              tone={editing === null ? "primary" : "neutral"}
+              icon={editing === null ? Plus : X}
+              onClick={() =>
+                editing === null ? openNew() : setEditing(null)
+              }
+            >
+              {editing === null ? "Add service" : "Cancel"}
+            </AdminButton>
+          </>
+        }
+      />
 
       {actionError && (
         <Alert
           tone="error"
           title="Action failed"
           details={actionError.fieldErrors}
-          className="mt-6"
+          className="mt-5"
         >
           {actionError.message}
         </Alert>
@@ -238,17 +264,15 @@ export default function AdminServices() {
         <form
           onSubmit={handleSave}
           noValidate
-          className="mt-7 rounded-2xl border border-white/10 bg-[#111] p-6"
+          className="mt-6 rounded-2xl border border-white/10 bg-[#111] p-4 sm:p-6"
         >
           <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
             {editing === "new" ? "Add a service" : `Edit #${editing.id}`}
           </p>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Name
-              </label>
+            <div className="min-w-0">
+              <label className={LABEL}>Name</label>
               <input
                 value={form.name}
                 onChange={(event) =>
@@ -257,14 +281,14 @@ export default function AdminServices() {
                 className={`${INPUT} mt-2`}
               />
             </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Price (ETB)
-              </label>
+
+            <div className="min-w-0">
+              <label className={LABEL}>Price (ETB)</label>
               <input
                 type="number"
                 min="0"
                 step="0.01"
+                inputMode="decimal"
                 value={form.price}
                 onChange={(event) =>
                   setForm((f) => ({ ...f, price: event.target.value }))
@@ -275,62 +299,63 @@ export default function AdminServices() {
           </div>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Duration (minutes)
-              </label>
+            <div className="min-w-0">
+              <label className={LABEL}>Duration (minutes)</label>
               <input
                 type="number"
                 min="1"
+                inputMode="numeric"
                 value={form.duration}
                 onChange={(event) =>
-                  setForm((f) => ({ ...f, duration: event.target.value }))
+                  setForm((f) => ({
+                    ...f,
+                    duration: event.target.value,
+                  }))
                 }
                 className={`${INPUT} mt-2`}
               />
             </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                Image
-              </label>
+
+            <div className="min-w-0">
+              <label className={LABEL}>Image</label>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => setImageFile(event.target.files[0] || null)}
-                className="mt-2 w-full text-xs text-white/60 file:mr-3 file:rounded-full file:border-0 file:bg-[#d6a85f] file:px-4 file:py-2 file:text-xs file:font-semibold file:text-black"
+                onChange={(event) =>
+                  setImageFile(event.target.files[0] || null)
+                }
+                className={`mt-2 ${FILE_INPUT}`}
               />
             </div>
           </div>
 
           <div className="mt-4">
-            <label className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-              Description
-            </label>
+            <label className={LABEL}>Description</label>
             <textarea
               value={form.description}
               onChange={(event) =>
-                setForm((f) => ({ ...f, description: event.target.value }))
+                setForm((f) => ({
+                  ...f,
+                  description: event.target.value,
+                }))
               }
               rows={2}
               className={`${INPUT} mt-2 resize-none`}
             />
           </div>
 
-          <button
+          <AdminButton
             type="submit"
+            tone="primary"
             disabled={saving}
-            className="mt-5 rounded-full bg-[#d6a85f] px-6 py-2.5 text-xs font-semibold text-black transition hover:bg-[#e5bd7a] disabled:opacity-60"
+            className="mt-5 w-full sm:w-auto"
           >
             {saving ? "Saving..." : "Save service"}
-          </button>
+          </AdminButton>
         </form>
       )}
 
-      {loading && (
-        <div className="mt-8 flex justify-center rounded-2xl border border-white/10 bg-[#111] py-16">
-          <Spinner label="Loading services..." />
-        </div>
-      )}
+      {loading && <AdminLoading label="Loading services..." />}
 
       {!loading && error && (
         <Alert
@@ -345,64 +370,66 @@ export default function AdminServices() {
       )}
 
       {!loading && !error && services.length === 0 && (
-        <Alert tone="info" title="Nothing here yet" onRetry={load} className="mt-8">
-          Add a service to get started.
-        </Alert>
+        <AdminEmpty
+          title="Nothing here yet"
+          body="Add a service to get started."
+          onRetry={load}
+        />
       )}
 
       {!loading && !error && services.length > 0 && (
-        <div className="mt-8 grid gap-4">
+        <div className="mt-5 grid gap-3">
           {services.map((service) => {
             const styles = Array.isArray(service.styles) ? service.styles : [];
             const busy = busyId === service.id;
 
             return (
-              <article
-                key={service.id}
-                className="rounded-2xl border border-white/10 bg-[#111] p-5"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="flex min-w-0 items-center gap-4">
+              <AdminPanel key={service.id}>
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+                  <div className="flex min-w-0 items-center gap-3 sm:gap-4">
                     {service.image ? (
                       <img
                         src={mediaUrl(service.image)}
                         alt={service.name}
-                        className="h-16 w-16 rounded-xl object-cover"
+                        className="h-14 w-14 shrink-0 rounded-xl object-cover sm:h-16 sm:w-16"
                       />
                     ) : (
-                      <span className="flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-[#2a2a2a] to-[#111]">
+                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#2a2a2a] to-[#111] sm:h-16 sm:w-16">
                         <Scissors size={20} className="text-[#d6a85f]/50" />
                       </span>
                     )}
+
                     <div className="min-w-0">
-                      <h2 className="font-serif text-xl text-white">
+                      <h2 className="break-words font-serif text-lg text-white sm:text-xl">
                         {service.name}
                       </h2>
                       <p className="mt-1 text-[11px] text-white/45">
                         {formatPrice(service.price)} ·{" "}
                         {formatDuration(service.duration)}
-                        {styles.length > 0 ? ` · ${styles.length} styles` : ""}
+                        {styles.length > 0
+                          ? ` · ${styles.length} styles`
+                          : ""}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
+                  <div className="flex shrink-0 gap-2">
+                    <AdminButton
+                      icon={Pencil}
                       onClick={() => openEdit(service)}
                       disabled={busy}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-2 text-[11px] font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white disabled:opacity-60"
                     >
-                      <Pencil size={12} /> Edit
-                    </button>
-                    <button
-                      type="button"
+                      Edit
+                    </AdminButton>
+
+                    <AdminButton
+                      tone="danger"
+                      icon={Trash2}
                       onClick={() => handleDelete(service)}
                       disabled={busy}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-[#e05a4f]/40 px-3 py-2 text-[11px] font-semibold text-[#e0776b] transition hover:bg-[#e05a4f]/10 disabled:opacity-60"
                     >
-                      <Trash2 size={12} /> Delete
-                    </button>
+                      Delete
+                    </AdminButton>
                   </div>
                 </div>
 
@@ -411,14 +438,16 @@ export default function AdminServices() {
                     {styles.map((style) => (
                       <span
                         key={style.id}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/70"
+                        className="inline-flex min-h-9 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/70"
                       >
                         {style.name}
                         <button
                           type="button"
-                          onClick={() => handleDeleteStyle(service.id, style.id)}
+                          onClick={() =>
+                            handleDeleteStyle(service.id, style.id)
+                          }
                           aria-label={`Delete style ${style.name}`}
-                          className="text-white/35 transition hover:text-[#e0776b]"
+                          className="flex h-6 w-6 items-center justify-center rounded-full text-white/35 transition hover:text-[#e0776b]"
                         >
                           <Trash2 size={12} />
                         </button>
@@ -430,57 +459,67 @@ export default function AdminServices() {
                 <div className="mt-4 border-t border-white/10 pt-4">
                   {styleServiceId === service.id ? (
                     <form
-                      onSubmit={(event) => handleAddStyle(service.id, event)}
-                      className="flex flex-wrap items-end gap-3"
+                      onSubmit={(event) =>
+                        handleAddStyle(service.id, event)
+                      }
+                      className="grid gap-3"
                     >
-                      <div className="min-w-48 flex-1">
-                        <label className="text-[10px] uppercase tracking-[0.2em] text-white/35">
+                      <div className="min-w-0">
+                        <label className={LABEL}>
                           New style name
                         </label>
                         <input
                           value={styleName}
-                          onChange={(event) => setStyleName(event.target.value)}
-                          className={`${INPUT} mt-1 py-2.5`}
+                          onChange={(event) =>
+                            setStyleName(event.target.value)
+                          }
+                          className={`${INPUT} mt-1`}
                           placeholder="e.g. High Fade"
                         />
                       </div>
-                      <div>
+
+                      <div className="min-w-0">
+                        <label className={LABEL}>Image (optional)</label>
                         <input
                           type="file"
                           accept="image/jpeg,image/png,image/webp"
                           onChange={(event) =>
-                            setStyleImage(event.target.files[0] || null)
+                            setStyleImage(
+                              event.target.files[0] || null
+                            )
                           }
-                          className="text-xs text-white/50 file:mr-2 file:rounded-full file:border-0 file:bg-[#d6a85f] file:px-3 file:py-2 file:text-[11px] file:font-semibold file:text-black"
+                          className={`mt-1 ${FILE_INPUT}`}
                         />
                       </div>
-                      <div className="flex gap-2">
-                        <button
+
+                      <div className="flex flex-wrap gap-2">
+                        <AdminButton
                           type="submit"
-                          className="rounded-full bg-[#d6a85f] px-4 py-2.5 text-[11px] font-semibold text-black transition hover:bg-[#e5bd7a]"
+                          tone="primary"
+                          disabled={styleSaving}
                         >
-                          Add style
-                        </button>
-                        <button
-                          type="button"
+                          {styleSaving ? "Adding..." : "Add style"}
+                        </AdminButton>
+
+                        <AdminButton
                           onClick={() => setStyleServiceId(null)}
-                          className="rounded-full border border-white/15 px-4 py-2.5 text-[11px] font-semibold text-white/60 hover:text-white"
+                          disabled={styleSaving}
                         >
                           Cancel
-                        </button>
+                        </AdminButton>
                       </div>
                     </form>
                   ) : (
                     <button
                       type="button"
                       onClick={() => setStyleServiceId(service.id)}
-                      className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-[#d6a85f] transition hover:text-[#e5bd7a]"
+                      className="inline-flex min-h-10 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-[#d6a85f] transition hover:text-[#e5bd7a]"
                     >
                       <Plus size={13} /> Add haircut style
                     </button>
                   )}
                 </div>
-              </article>
+              </AdminPanel>
             );
           })}
         </div>
