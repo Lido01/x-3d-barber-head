@@ -6,17 +6,26 @@ import api from "./api";
  * Public (AllowAny):
  *   GET  /api/testimonials/testimonials/         approved only
  *   GET  /api/testimonials/testimonials/{id}/    approved
+ *
+ * Signed-in customer (IsAuthenticated):
  *   POST /api/testimonials/testimonials/         submit (created pending)
+ *   GET  /api/testimonials/testimonials/mine/    own reviews, every state
  *
  * Admin only (IsAdminUser):
  *   POST   /api/testimonials/testimonials/{id}/approve/
  *   POST   /api/testimonials/testimonials/{id}/reject/
  *   DELETE /api/testimonials/testimonials/{id}/
  *
+ * A review is written by an account, not by a name typed into a form:
+ * `customer_name` and `user` are read-only on the server, so
+ * `submitTestimonial` sends neither and the published name comes from
+ * the token.
+ *
  * TestimonialSerializer item shape:
  *
  *   {
- *     id, customer_name, customer_phone,
+ *     id, user: 4 | null,
+ *     customer_name, customer_phone,
  *     message, rating: 5,
  *     photo: "/media/testimonials/..." | null,
  *     status: "pending" | "approved" | "rejected",
@@ -31,16 +40,22 @@ export function listApprovedTestimonials({ signal } = {}) {
 }
 
 /**
- * Submit a new customer testimonial. It is created with `pending`
- * status and only appears publicly once an admin approves it.
+ * Submit a new customer review.
  *
- * `photo` is an optional File object sent as multipart/form-data so
- * customers can attach a picture of their cut with the review.
+ * `photo` is an optional File sent as multipart/form-data so a customer
+ * can attach a picture of their cut with the review.
+ *
+ * The request carries the customer session's token: the server 401s
+ * without it, which is what stops a review appearing on the wall from
+ * an account nobody can trace.
  */
-export function submitTestimonial({ customerName, message, rating, photo = null }) {
+export function submitTestimonial({
+  message,
+  rating,
+  photo = null,
+}) {
   const payload = new FormData();
 
-  payload.append("customer_name", customerName);
   payload.append("message", message);
   payload.append("rating", String(rating));
 
@@ -49,7 +64,21 @@ export function submitTestimonial({ customerName, message, rating, photo = null 
   }
 
   return api
-    .post("/testimonials/testimonials/", payload)
+    .post("/testimonials/testimonials/", payload, {
+      requiresAuth: true,
+      authScope: "customer",
+    })
+    .then((response) => response.data);
+}
+
+/** The signed-in customer's own reviews, in every state. */
+export function listMyTestimonials({ signal } = {}) {
+  return api
+    .get("/testimonials/testimonials/mine/", {
+      requiresAuth: true,
+      authScope: "customer",
+      signal,
+    })
     .then((response) => response.data);
 }
 
