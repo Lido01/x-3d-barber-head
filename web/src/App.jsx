@@ -4,9 +4,11 @@ import Navbar from "./components/Navbar";
 import BottomBar from "./components/BottomBar";
 import Footer from "./components/Footer";
 import RequireAdmin from "./components/RequireAdmin";
+import RequireCustomer from "./components/RequireCustomer";
 import ScrollToTop from "./components/ScrollToTop";
 import AdminLayout from "./components/admin/AdminLayout";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
+import { CustomerAuthProvider } from "./context/CustomerAuthContext";
 import { LanguageProvider } from "./i18n/LanguageContext";
 
 import Home from "./pages/Home";
@@ -18,6 +20,9 @@ import ServiceDetail from "./pages/ServiceDetail";
 import Booking from "./pages/Booking";
 import Payment from "./pages/Payment";
 import BookingSuccess from "./pages/BookingSuccess";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
 
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -44,24 +49,41 @@ export default function App() {
   return (
     <LanguageProvider>
       <AdminAuthProvider>
-        <Shell />
+        <CustomerAuthProvider>
+          <Shell />
+        </CustomerAuthProvider>
       </AdminAuthProvider>
     </LanguageProvider>
+  );
+}
+
+/** Screens that own their whole viewport, chrome included. */
+const BARE_PATHS = ["/admin", "/login", "/register", "/account"];
+
+function isBare(pathname) {
+  return BARE_PATHS.some(
+    (path) =>
+      pathname === path ||
+      pathname.startsWith(`${path}/`)
   );
 }
 
 /** Renders the public nav/footer, then the routed content. */
 function Shell() {
   const location = useLocation();
-  const isAdmin = location.pathname.startsWith("/admin");
+  const bare = isBare(location.pathname);
 
   return (
     <div className="min-h-screen bg-[#090909] text-[#f4f0e8]">
       <ScrollToTop />
 
-      <Navbar />
+      {!bare && <Navbar />}
 
-      <main id="main-content" tabIndex={-1} className="outline-none lg:pb-0">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="outline-none lg:pb-0"
+      >
         <Routes>
           {/* Public site */}
           <Route path="/" element={<Home />} />
@@ -77,6 +99,18 @@ function Shell() {
           <Route
             path="/booking/success/:bookingId"
             element={<BookingSuccess />}
+          />
+
+          {/* Customer account. Needed to leave a review, not to book. */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route
+            path="/account"
+            element={
+              <RequireCustomer>
+                <Account />
+              </RequireCustomer>
+            }
           />
 
           {/* Staff only. */}
@@ -107,8 +141,8 @@ function Shell() {
         </Routes>
       </main>
 
-      {!isAdmin && <Footer />}
-      {!isAdmin && <BottomBar />}
+      {!bare && <Footer />}
+      {!bare && <BottomBar />}
     </div>
   );
 }
