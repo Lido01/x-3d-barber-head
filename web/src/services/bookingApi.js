@@ -14,6 +14,13 @@ import api from "./api";
  *   PATCH  /api/bookings/{id}/
  *   DELETE /api/bookings/{id}/
  *   POST   /api/bookings/{id}/cancel/
+ *   POST   /api/bookings/{id}/confirm/
+ *   POST   /api/bookings/{id}/complete/
+ *
+ * `status` is read-only on the serializer, so the only way to move a
+ * booking is one of the three transitions. The server refuses an
+ * illegal one: confirm rejects a cancelled booking, complete rejects
+ * anything that is not confirmed.
  *
  * Booking response shape (confirmed live against BookingSerializer):
  *
@@ -111,4 +118,29 @@ export function cancelBooking(id) {
   return api
     .post(`/bookings/${id}/cancel/`, null, { requiresAuth: true })
     .then((response) => response.data);
+}
+
+/**
+ * Staff-only confirmation.
+ *
+ * Verifying a payment already confirms its booking, so this is for the
+ * walk-in or cash customer who has no receipt to verify.
+ */
+export function confirmBooking(id) {
+  return api
+    .post(`/bookings/${id}/confirm/`, null, { requiresAuth: true })
+    .then((response) => response.data);
+}
+
+/** Staff-only completion: the customer has been in the chair. */
+export function completeBooking(id) {
+  return api
+    .post(`/bookings/${id}/complete/`, null, { requiresAuth: true })
+    .then((response) => response.data);
+}
+
+export function deleteBooking(id) {
+  return api
+    .delete(`/bookings/${id}/`, { requiresAuth: true })
+    .then(() => undefined);
 }
