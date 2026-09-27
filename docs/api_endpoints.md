@@ -1,3 +1,31 @@
+# X 3D Barber — API Endpoints (superseded)
+
+> **This file is out of date. The canonical API reference is
+> [`../api_endpoint.md`](../api_endpoint.md) at the repository root.**
+>
+> Two copies of this document had drifted apart. Rather than keep
+> updating both — and have the wrong one win — this one is left as a
+> pointer. Anything you read below may contradict the current API.
+>
+> Specifically, the sections that changed most recently:
+>
+> * **§1 Authentication** — the document below still says testimonials
+>   need no account. Submitting a review now requires a customer
+>   account; reading the wall does not.
+> * **§4 Bookings** — the document below has no `confirm` or `complete`
+>   transition, so it reads as though `cancel` is the only thing staff
+>   can do to a booking.
+> * **§6 Testimonials** — the endpoints below are missing the
+>   `testimonials/` path segment on some routes, and there is no
+>   `/mine/` endpoint.
+>
+> For the design behind those changes see
+> [`customer-accounts.md`](customer-accounts.md).
+
+---
+
+<!-- Everything below is the stale copy. Kept for reference only. -->
+
 # X 3D Barber — API Endpoints
 
 Complete backend API reference for the X 3D Barber website.
