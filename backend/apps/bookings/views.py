@@ -23,6 +23,8 @@ from .serializers import (
 )
 from .services import (
     cancel_booking,
+    complete_booking,
+    confirm_booking,
     get_available_times,
 )
 
@@ -258,6 +260,92 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking = self.get_object()
 
         booking = cancel_booking(
+            booking
+        )
+
+        return Response(
+            self.get_serializer(
+                booking
+            ).data
+        )
+
+    # ---------------------------------------------------------
+    # CONFIRM BOOKING
+    # ---------------------------------------------------------
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: BookingSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "Booking cannot be confirmed."
+                ),
+            ),
+        },
+        description=(
+            "Admin-only confirmation. "
+            "Verifying a payment already confirms its "
+            "booking; this is for the case where a walk-in "
+            "or a cash customer needs confirming on its own."
+        ),
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="confirm",
+    )
+    def confirm(
+        self,
+        request,
+        pk=None,
+    ):
+        booking = self.get_object()
+
+        booking = confirm_booking(
+            booking
+        )
+
+        return Response(
+            self.get_serializer(
+                booking
+            ).data
+        )
+
+    # ---------------------------------------------------------
+    # COMPLETE BOOKING
+    # ---------------------------------------------------------
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: BookingSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "Only a confirmed booking can be "
+                    "completed."
+                ),
+            ),
+        },
+        description=(
+            "Admin-only completion. Marks a confirmed "
+            "appointment as served once the customer has "
+            "left the chair."
+        ),
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="complete",
+    )
+    def complete(
+        self,
+        request,
+        pk=None,
+    ):
+        booking = self.get_object()
+
+        booking = complete_booking(
             booking
         )
 
