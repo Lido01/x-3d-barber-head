@@ -4,12 +4,21 @@ from .models import Testimonial
 
 
 class TestimonialSerializer(serializers.ModelSerializer):
+    """
+    Reading a review, and writing one on behalf of a signed-in customer.
+
+    `customer_name` is derived from the account in the view, so it is
+    not something the client can set. `user` is exposed so the
+    storefront can tell "this review is yours" apart from the wall, and
+    so a customer can recognise their own review in the admin screen.
+    """
 
     class Meta:
         model = Testimonial
 
         fields = [
             "id",
+            "user",
             "customer_name",
             "customer_phone",
             "message",
@@ -22,6 +31,8 @@ class TestimonialSerializer(serializers.ModelSerializer):
 
         read_only_fields = [
             "id",
+            "user",
+            "customer_name",
             "status",
             "created_at",
             "updated_at",
@@ -31,6 +42,16 @@ class TestimonialSerializer(serializers.ModelSerializer):
         if value < 1 or value > 5:
             raise serializers.ValidationError(
                 "Rating must be between 1 and 5."
+            )
+
+        return value
+
+    def validate_message(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Please share your experience."
             )
 
         return value
