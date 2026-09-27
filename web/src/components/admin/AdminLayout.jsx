@@ -241,12 +241,16 @@ export default function AdminLayout({ children }) {
         </div>
       )}
 
-      {/* Content. pb clears the fixed tab bar on a phone. */}
-      <main className="lg:pl-64">
+      {/* Content. pb clears the fixed tab bar on a phone.
+          A <div>, not a <main>: App.jsx already renders the page's single
+          <main id="main-content"> landmark around every route, and nesting
+          a second one is invalid - screen readers announce the landmark
+          list with a duplicate and no way to tell them apart. */}
+      <div className="lg:pl-64">
         <div className="mx-auto w-full max-w-[1600px] px-4 pb-28 pt-5 sm:px-6 sm:pt-8 lg:px-10 lg:pb-16 lg:pt-10">
           {children}
         </div>
-      </main>
+      </div>
 
       {/* Mobile tab bar */}
       <nav
