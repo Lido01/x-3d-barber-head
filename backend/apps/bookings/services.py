@@ -651,3 +651,38 @@ def confirm_booking(booking):
     )
 
     return booking
+
+
+@transaction.atomic
+def complete_booking(booking):
+    """
+    Mark a booking as done once the customer has been in the chair.
+
+    Only a confirmed booking can be completed: a customer who never
+    paid and never confirmed should be cancelled rather than silently
+    counted as served.
+    """
+
+    if booking.status == Booking.Status.COMPLETED:
+        return booking
+
+    if booking.status != Booking.Status.CONFIRMED:
+        raise ValidationError(
+            {
+                "status": [
+                    "Only a confirmed booking can be completed. "
+                    f"This one is {booking.status}."
+                ]
+            }
+        )
+
+    booking.status = Booking.Status.COMPLETED
+
+    booking.save(
+        update_fields=[
+            "status",
+            "updated_at",
+        ]
+    )
+
+    return booking
