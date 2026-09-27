@@ -17,7 +17,7 @@ export default function AuthShell({
   footer,
 }) {
   return (
-    <div className="min-h-screen bg-[#090909]">
+    <div className="min-h-[var(--viewport-height)] bg-[#090909]">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0d0d0d]/95 px-4 py-3 backdrop-blur sm:px-6">
         <div className="mx-auto flex max-w-md items-center gap-3">
           <Link

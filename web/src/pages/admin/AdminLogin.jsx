@@ -62,7 +62,7 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#090909]">
+    <div className="flex min-h-[var(--viewport-height)] flex-col bg-[#090909]">
       <header className="border-b border-white/10 bg-[#0d0d0d] px-4 py-3 sm:px-6">
         <div className="mx-auto flex max-w-md items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#181818]">

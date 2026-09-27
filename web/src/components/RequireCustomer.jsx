@@ -18,7 +18,7 @@ export default function RequireCustomer({ children }) {
 
   if (isChecking) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#090909]">
+      <div className="flex min-h-[var(--viewport-height)] items-center justify-center bg-[#090909]">
         <Spinner label="Checking your session..." />
       </div>
     );

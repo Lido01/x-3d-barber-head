@@ -147,7 +147,7 @@ export default function AdminLayout({ children }) {
   );
 
   return (
-    <div className="min-h-screen bg-[#090909]">
+    <div className="min-h-[var(--viewport-height)] bg-[#090909]">
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col overflow-y-auto border-r border-white/10 bg-[#0d0d0d] lg:flex">
         {brand}
