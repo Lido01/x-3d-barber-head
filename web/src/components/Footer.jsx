@@ -1,7 +1,6 @@
 import { AtSign, MapPin, Phone, Clock3 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import LanguageSwitcher from "./LanguageSwitcher";
 import { useLanguage } from "../i18n/LanguageContext";
 import { studioLocation } from "../data/studioLocation";
 

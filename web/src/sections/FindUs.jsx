@@ -1,23 +1,17 @@
 import { useState } from "react";
 import {
-  Car,
+  Bike,
   Check,
   Clock3,
   Copy,
-  DoorOpen,
   ExternalLink,
-  Footprints,
   MapPin,
   Navigation,
-  Plane,
-  TrainFront,
-  Bike,
 } from "lucide-react";
 
 import Reveal from "../components/Reveal";
 import { useLanguage } from "../i18n/LanguageContext";
 import {
-  TRAVEL_MODES,
   directionsUrl,
   openStreetMapEmbedUrl,
   openStreetMapLink,
@@ -25,21 +19,8 @@ import {
   studioLocation,
 } from "../data/studioLocation";
 
-const MODE_ICONS = {
-  walking: Footprints,
-  transit: TrainFront,
-  driving: Car,
-};
-
-const LANDMARK_ICONS = {
-  plane: Plane,
-  train: TrainFront,
-  car: Car,
-  door: DoorOpen,
-};
-
 /**
- * "Find us" — an embedded OpenStreetMap plus real directions links.
+ * "Find us" - an embedded OpenStreetMap plus real directions links.
  *
  * Why OSM for the map and Google for the routing: the OSM embed is a plain
  * iframe with no API key, so it cannot break on an expired key, a billing
@@ -48,7 +29,6 @@ const LANDMARK_ICONS = {
  */
 export default function FindUs() {
   const { t } = useLanguage();
-  const [mode, setMode] = useState("driving");
   const [copied, setCopied] = useState(false);
 
   const { addressLines } = studioLocation;
@@ -117,7 +97,7 @@ export default function FindUs() {
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <a
-                  href={directionsUrl(mode)}
+                  href={directionsUrl()}
                   target="_blank"
                   rel="noreferrer noopener"
                   className="inline-flex items-center gap-2  bg-[#f3d29d] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"

@@ -3,10 +3,8 @@ import { Link } from "react-router-dom";
 
 import Hero from "../sections/Hero";
 import Marquee from "../sections/Marquee";
-import QuickBook from "../sections/QuickBook";
 import Gallery from "../sections/Gallery";
 import Testimonials from "../sections/Testimonials";
-import FeaturedGuests from "../sections/FeaturedGuests";
 import About from "../sections/About";
 import FindUs from "../sections/FindUs";
 
@@ -20,10 +18,8 @@ export default function Home() {
     <>
       <Hero />
       <Marquee />
-      {/* <QuickBook /> */}
       <Gallery onSelect={setLook} />
       <Testimonials />
-      {/* <FeaturedGuests /> */}
       <About />
       <FindUs />
       {look && <LookModal post={look} close={() => setLook(null)} />}
