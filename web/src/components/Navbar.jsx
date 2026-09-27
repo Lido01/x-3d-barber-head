@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Scissors } from "lucide-react";
+import { CircleUser, Scissors } from "lucide-react";
 
 import Button from "./Button";
 import LanguageSwitcher from "./LanguageSwitcher";
+import {
+  customerDisplayName,
+  useCustomerAuth,
+} from "../context/CustomerAuthContext";
 import { useLanguage } from "../i18n/LanguageContext";
 
 /**
@@ -16,6 +20,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 export default function Navbar() {
   const location = useLocation();
   const { t } = useLanguage();
+  const { isAuthenticated, account } = useCustomerAuth();
   const [scrolled, setScrolled] = useState(false);
 
   // Keyed off the translation function so the labels re-resolve on a
@@ -144,6 +149,29 @@ export default function Navbar() {
           >
             {t("nav.staff")}
           </Link>
+
+          {/* A signed-in customer gets their name and a way back to
+              their reviews; a visitor gets a plain sign-in link. */}
+          {isAuthenticated ? (
+            <Link
+              to="/account"
+              title={customerDisplayName(account)}
+              className="flex items-center gap-2 text-[13px] font-medium tracking-[0.08em] text-white/70 transition hover:text-white"
+            >
+              <CircleUser size={16} />
+              <span className="max-w-32 truncate">
+                {customerDisplayName(account)}
+              </span>
+            </Link>
+          ) : (
+            <Link
+              to="/login"
+              state={{ from: location.pathname }}
+              className="text-[13px] font-medium tracking-[0.08em] text-white/40 transition hover:text-white"
+            >
+              {t("account.signInTitle")}
+            </Link>
+          )}
 
           <Button
             to="/booking"

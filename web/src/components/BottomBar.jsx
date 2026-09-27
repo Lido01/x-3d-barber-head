@@ -2,14 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   CalendarDays,
+  CircleUser,
   Home,
   LayoutGrid,
+  LogIn,
   Scissors,
   Sparkles,
   UserRound,
 } from "lucide-react";
 
 import LanguageSwitcher from "./LanguageSwitcher";
+import { useCustomerAuth } from "../context/CustomerAuthContext";
 import { useLanguage } from "../i18n/LanguageContext";
 
 /**
@@ -27,6 +30,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 export default function BottomBar() {
   const location = useLocation();
   const { t } = useLanguage();
+  const { isAuthenticated } = useCustomerAuth();
   const [hidden, setHidden] = useState(false);
   const lastScroll = useRef(0);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -165,6 +169,29 @@ export default function BottomBar() {
             <UserRound size={18} />
             {t("nav.staff")}
           </Link>
+
+          {/* Account entry point. A signed-in customer goes straight to
+              their reviews; a visitor is sent to sign in. */}
+          {isAuthenticated ? (
+            <NavLink
+              to="/account"
+              onClick={() => setMoreOpen(false)}
+              className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+            >
+              <CircleUser size={18} />
+              {t("account.title")}
+            </NavLink>
+          ) : (
+            <NavLink
+              to="/login"
+              state={{ from: location.pathname }}
+              onClick={() => setMoreOpen(false)}
+              className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+            >
+              <LogIn size={18} />
+              {t("account.signInTitle")}
+            </NavLink>
+          )}
         </div>
 
         {/* Language — full width so the native names stay readable */}
