@@ -65,7 +65,7 @@ export default function AdminCustomers() {
       <AdminPageHeader
         eyebrow="Staff · Customer care"
         title="Customers"
-        description={`${customers.length} registered account${customers.length === 1 ? "" : "s"} available to contact.`}
+        description={`${customers.length} registered account${customers.length === 1 ? "" : "s"} · tap email or phone to contact.`}
         actions={
           <AdminButton icon={RefreshCw} onClick={load} disabled={refreshing}>
             {refreshing ? "Refreshing..." : "Refresh"}
