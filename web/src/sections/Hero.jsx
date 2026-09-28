@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { CalendarDays, MapPin } from "lucide-react";
 import gsap from "gsap";
 
 import Button from "../components/Button";
@@ -53,19 +52,19 @@ export default function Hero() {
           {/* Eyebrow */}
           <div data-hero-fade className="mb-6 flex items-center gap-3"></div>
           {/* Heading */}
-          <h1
+          <h3
             data-hero-fade
             className={`font-serif font-medium leading-[0.95] tracking-[-0.03em] text-[#f4f0e8] ${headlineSize}`}
           >
             {t("hero.titleLead")} <span className="italic shimmer-text">{t("hero.titleTail")}</span>
-          </h1>
+          </h3>
 
-          <p
+          {/* <p
             data-hero-fade
             className="mt-8 max-w-lg text-base leading-7 text-white/60 sm:text-lg"
           >
             {t("hero.body")}
-          </p>
+          </p> */}
 
           {/* Buttons */}
           <div
@@ -76,26 +75,6 @@ export default function Hero() {
             <Button to="/haircuts" variant="secondary" className="border-white/20 bg-black/30 backdrop-blur-sm hover:bg-black/50">
               {t("hero.secondaryCta")}
             </Button>
-          </div>
-
-          {/* Trust */}
-          <div
-            data-hero-fade
-            className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-white/10 pt-6"
-          >
-            <div className="h-4 w-px bg-white/10" />
-
-            <div className="flex items-center gap-2 text-xs text-white/50">
-              <CalendarDays size={14} />
-              {t("hero.openDaily")}
-            </div>
-
-            <div className="h-4 w-px bg-white/10" />
-
-            <div className="flex items-center gap-2 text-xs text-white/50">
-              <MapPin size={14} />
-              {t("hero.city")}
-            </div>
           </div>
         </div>
       </div>

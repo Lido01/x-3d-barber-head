@@ -191,3 +191,96 @@ class BookingApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["available_times"], times)
+
+
+class BookingStatusTransitionTests(APITestCase):
+    """
+    The staff-only transitions behind the admin booking screen.
+
+    Payment verification already confirms a booking, so these exist for
+    the walk-in and cash cases where staff drive the status by hand.
+    """
+
+    def setUp(self):
+        self.booking_date = date.today() + timedelta(days=1)
+        self.service = Service.objects.create(name="Cut", price="350.00", duration=30)
+        self.barber = Barber.objects.create(name="Test Barber")
+        self.admin = get_user_model().objects.create_user(
+            username="status-admin",
+            password="test-password",
+            is_staff=True,
+        )
+        self.customer = get_user_model().objects.create_user(
+            username="status-customer",
+            password="test-password",
+        )
+        self.client.force_authenticate(self.admin)
+
+    def make_booking(self, status=Booking.Status.PENDING):
+        return Booking.objects.create(
+            customer_name="Sam Doe",
+            customer_phone="123",
+            service=self.service,
+            barber=self.barber,
+            booking_date=self.booking_date,
+            start_time=time(10, 0),
+            end_time=time(10, 30),
+            status=status,
+        )
+
+    def test_confirm_moves_pending_to_confirmed(self):
+        booking = self.make_booking()
+
+        response = self.client.post(f"/api/bookings/{booking.id}/confirm/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "confirmed")
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.CONFIRMED)
+
+    def test_confirm_refuses_a_cancelled_booking(self):
+        booking = self.make_booking(status=Booking.Status.CANCELLED)
+
+        response = self.client.post(f"/api/bookings/{booking.id}/confirm/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", response.data)
+
+    def test_complete_moves_confirmed_to_completed(self):
+        booking = self.make_booking(status=Booking.Status.CONFIRMED)
+
+        response = self.client.post(f"/api/bookings/{booking.id}/complete/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "completed")
+
+    def test_complete_refuses_a_booking_that_was_never_confirmed(self):
+        booking = self.make_booking(status=Booking.Status.PENDING)
+
+        response = self.client.post(f"/api/bookings/{booking.id}/complete/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", response.data)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.PENDING)
+
+    def test_complete_is_idempotent(self):
+        booking = self.make_booking(status=Booking.Status.COMPLETED)
+
+        response = self.client.post(f"/api/bookings/{booking.id}/complete/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "completed")
+
+    def test_transitions_are_admin_only(self):
+        booking = self.make_booking()
+
+        self.client.force_authenticate(self.customer)
+
+        for action in ("confirm", "complete", "cancel"):
+            response = self.client.post(f"/api/bookings/{booking.id}/{action}/")
+            self.assertEqual(
+                response.status_code,
+                status.HTTP_403_FORBIDDEN,
+                msg=f"{action} should be admin only",
+            )

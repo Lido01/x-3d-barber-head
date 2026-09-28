@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -6,20 +6,32 @@ import {
   Images,
   MessageSquareQuote,
   Scissors,
+  UserRound,
   Users,
 } from "lucide-react";
 
 import Alert from "../../components/ui/Alert";
-import Spinner from "../../components/ui/Spinner";
+import {
+  AdminButton,
+  AdminLoading,
+  AdminPageHeader,
+  AdminPanel,
+} from "../../components/admin/AdminUi";
 import { listBookings } from "../../services/bookingApi";
 import { listPayments } from "../../services/paymentApi";
 import { listAllServices } from "../../services/servicesApi";
 import { listGalleryPosts } from "../../services/galleryApi";
 import { listAllTestimonials } from "../../services/testimonialsApi";
+import { listRegisteredCustomers } from "../../services/authApi";
 
 /**
  * Dashboard overview — aggregate counts pulled live from the API with
  * quick links into each management screen.
+ *
+ * On a phone this is the screen a barber checks between customers, so
+ * the stat cards are two per row with a count that fits at any width,
+ * and the work still to do is called out as a number on the card rather
+ * than a separate list someone has to cross-reference.
  */
 
 async function loadSection(loader) {
@@ -34,38 +46,48 @@ async function loadSection(loader) {
 export default function AdminOverview() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    setRefreshing(true);
+
+    const [bookings, payments, services, gallery, testimonials, customers] =
+      await Promise.all([
+        loadSection(listBookings),
+        loadSection(listPayments),
+        loadSection(listAllServices),
+        loadSection(() => listGalleryPosts({ requiresAuth: true })),
+        loadSection(listAllTestimonials),
+        loadSection(listRegisteredCustomers),
+      ]);
+
+    setRefreshing(false);
+
+    // Only the booking list failing means the dashboard itself is
+    // unusable; the rest degrade to empty counts.
+    if (bookings === null) {
+      setError({
+        message: "Some sections could not be loaded.",
+        fieldErrors: {},
+      });
+      setData({
+        bookings: [],
+        payments: [],
+        services: [],
+        gallery: [],
+        testimonials: [],
+        customers: [],
+      });
+      return;
+    }
+
+    setData({ bookings, payments, services, gallery, testimonials, customers });
+    setError(null);
+  }, []);
 
   useEffect(() => {
-    let active = true;
-
-    Promise.all([
-      loadSection(listBookings),
-      loadSection(listPayments),
-      loadSection(listAllServices),
-      loadSection(() => listGalleryPosts({ requiresAuth: true })),
-      loadSection(listAllTestimonials),
-    ]).then(([bookings, payments, services, gallery, testimonials]) => {
-      if (!active) {
-        return;
-      }
-
-      if (bookings === null) {
-        setError({
-          message: "Some sections could not be loaded.",
-          fieldErrors: {},
-        });
-        setData({ bookings: [], payments: [], services: [], gallery: [], testimonials: [] });
-        return;
-      }
-
-      setData({ bookings, payments, services, gallery, testimonials });
-      setError(null);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    load();
+  }, [load]);
 
   const stats = data
     ? [
@@ -75,6 +97,13 @@ export default function AdminOverview() {
           icon: Users,
           count: data.bookings.length,
           sub: `${data.bookings.filter((b) => b.status === "pending").length} pending`,
+        },
+        {
+          label: "Customers",
+          to: "/admin/customers",
+          icon: UserRound,
+          count: data.customers.length,
+          sub: "registered accounts",
         },
         {
           label: "Payments",
@@ -109,17 +138,16 @@ export default function AdminOverview() {
 
   return (
     <div>
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-          Staff console
-        </p>
-        <h1 className="mt-4 font-serif text-4xl leading-none sm:text-5xl">
-          Overview
-        </h1>
-        <p className="mt-3 text-xs text-white/35">
-          A live snapshot of the shop, straight from the API.
-        </p>
-      </div>
+      <AdminPageHeader
+        eyebrow="Staff console"
+        title="Overview"
+        description="A live snapshot of the shop, straight from the API."
+        actions={
+          <AdminButton onClick={load} disabled={refreshing}>
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </AdminButton>
+        }
+      />
 
       {error && (
         <Alert tone="error" title="Something went wrong" className="mt-6">
@@ -127,15 +155,11 @@ export default function AdminOverview() {
         </Alert>
       )}
 
-      {!data && !error && (
-        <div className="mt-8 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
-          <Spinner label="Loading the dashboard..." />
-        </div>
-      )}
+      {!data && !error && <AdminLoading label="Loading the dashboard..." />}
 
       {data && (
         <>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
             {stats.map((stat) => {
               const Icon = stat.icon;
 
@@ -143,24 +167,31 @@ export default function AdminOverview() {
                 <Link
                   key={stat.label}
                   to={stat.to}
-                  className="group rounded-2xl border border-white/10 bg-[#111] p-6 transition hover:border-[#d6a85f]/40"
+                  className="group min-w-0 rounded-2xl border border-white/10 bg-[#111] p-4 transition hover:border-[#d6a85f]/40 sm:p-6"
                 >
-                  <div className="flex items-start justify-between">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[#181818]">
-                      <Icon size={18} className="text-[#d6a85f]" />
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#181818]">
+                      <Icon
+                        size={17}
+                        className="text-[#d6a85f]"
+                      />
                     </span>
                     <ArrowRight
-                      size={17}
-                      className="text-white/25 transition group-hover:translate-x-1 group-hover:text-[#d6a85f]"
+                      size={16}
+                      className="mt-1 text-white/25 transition group-hover:translate-x-0.5 group-hover:text-[#d6a85f]"
                     />
                   </div>
-                  <p className="mt-6 font-serif text-5xl text-white">
+
+                  {/* clamp keeps a four-figure count from pushing the
+                      card taller than its neighbour on a 360px screen */}
+                  <p className="mt-4 font-serif text-4xl leading-none text-white sm:mt-6 sm:text-5xl">
                     {stat.count}
                   </p>
-                  <p className="mt-2 text-sm font-medium text-white/75">
+
+                  <p className="mt-2 truncate text-sm font-medium text-white/75">
                     {stat.label}
                   </p>
-                  <p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-white/30">
+                  <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-white/30">
                     {stat.sub}
                   </p>
                 </Link>
@@ -168,14 +199,61 @@ export default function AdminOverview() {
             })}
           </div>
 
-          <div className="mt-8 rounded-2xl border border-white/10 bg-[#111] p-6">
+          <AdminPanel className="mt-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
+                  Needs attention
+                </p>
+                <p className="mt-2 text-sm text-white/55">
+                  Work through the live queue from your phone.
+                </p>
+              </div>
+              <span className="rounded-full border border-[#d6a85f]/25 bg-[#d6a85f]/10 px-3 py-1.5 text-xs font-semibold text-[#d6a85f]">
+                {data.bookings.filter((b) => b.status === "pending").length + data.payments.filter((p) => p.status === "pending").length + data.testimonials.filter((t) => t.status === "pending").length}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {[
+                {
+                  label: "Bookings to confirm",
+                  count: data.bookings.filter((b) => b.status === "pending").length,
+                  to: "/admin/bookings",
+                },
+                {
+                  label: "Payments to verify",
+                  count: data.payments.filter((p) => p.status === "pending").length,
+                  to: "/admin/payments",
+                },
+                {
+                  label: "Reviews to approve",
+                  count: data.testimonials.filter((t) => t.status === "pending").length,
+                  to: "/admin/testimonials",
+                },
+              ].map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left transition hover:border-[#d6a85f]/40"
+                >
+                  <span className="text-xs text-white/65">{item.label}</span>
+                  <span className="font-serif text-2xl leading-none text-white">{item.count}</span>
+                </Link>
+              ))}
+            </div>
+          </AdminPanel>
+
+          <AdminPanel className="mt-3">
             <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
               Quick actions
             </p>
-            <div className="mt-4 flex flex-wrap gap-3">
+
+            <div className="mt-4 flex flex-wrap gap-2">
               {[
                 { label: "Verify payments", to: "/admin/payments" },
                 { label: "Confirm bookings", to: "/admin/bookings" },
+                { label: "View customers", to: "/admin/customers" },
                 { label: "Add a service", to: "/admin/services" },
                 { label: "Add gallery post", to: "/admin/gallery" },
                 { label: "Review testimonials", to: "/admin/testimonials" },
@@ -183,13 +261,13 @@ export default function AdminOverview() {
                 <Link
                   key={action.to + action.label}
                   to={action.to}
-                  className="rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
+                  className="inline-flex min-h-10 items-center rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
                 >
                   {action.label}
                 </Link>
               ))}
             </div>
-          </div>
+          </AdminPanel>
         </>
       )}
     </div>

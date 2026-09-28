@@ -9,11 +9,7 @@ import {
 
 import { getCurrentAccount, login as loginRequest } from "../services/authApi";
 import { listBookings } from "../services/bookingApi";
-import {
-  clearTokens,
-  getAccessToken,
-  setTokens,
-} from "../utils/adminToken";
+import { adminTokens } from "../utils/tokenStore";
 
 /**
  * Admin/staff session for the payment verification screen.
@@ -48,7 +44,7 @@ export function AdminAuthProvider({ children }) {
 
   // "checking" until a stored token has been validated.
   const [status, setStatus] = useState(() =>
-    getAccessToken() ? "checking" : "anonymous"
+    adminTokens.getAccessToken() ? "checking" : "anonymous"
   );
 
   // Revalidate a token left in sessionStorage after a refresh.
@@ -68,7 +64,7 @@ export function AdminAuthProvider({ children }) {
       })
       .catch(() => {
         if (active) {
-          clearTokens();
+          adminTokens.clearTokens();
           setAccount(null);
           setStatus("anonymous");
         }
@@ -82,7 +78,7 @@ export function AdminAuthProvider({ children }) {
   const signIn = useCallback(async ({ username, password }) => {
     const data = await loginRequest({ username, password });
 
-    setTokens({
+    adminTokens.setTokens({
       access: data.access,
       refresh: data.refresh,
     });
@@ -90,7 +86,7 @@ export function AdminAuthProvider({ children }) {
     const staff = await hasStaffAccess();
 
     if (!staff) {
-      clearTokens();
+      adminTokens.clearTokens();
 
       throw {
         status: 403,
@@ -109,7 +105,7 @@ export function AdminAuthProvider({ children }) {
   }, []);
 
   const signOut = useCallback(() => {
-    clearTokens();
+    adminTokens.clearTokens();
     setAccount(null);
     setStatus("anonymous");
   }, []);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Clock3, Scissors, Sparkles, X } from "lucide-react";
+import { Clock3, Scissors, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import Alert from "../components/ui/Alert";

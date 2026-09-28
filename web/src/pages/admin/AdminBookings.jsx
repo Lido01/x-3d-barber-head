@@ -1,11 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  RefreshCw,
+  Search,
+  X,
+} from "lucide-react";
 
 import StatusBadge from "../../components/StatusBadge";
 import Alert from "../../components/ui/Alert";
-import Spinner from "../../components/ui/Spinner";
+import {
+  AdminButton,
+  AdminEmpty,
+  AdminFilterTabs,
+  AdminLoading,
+  AdminPageHeader,
+  AdminPanel,
+} from "../../components/admin/AdminUi";
 import {
   cancelBooking,
+  completeBooking,
+  confirmBooking,
+  deleteBooking,
   listBookings,
 } from "../../services/bookingApi";
 import { formatDate, formatTimeRange } from "../../utils/format";
@@ -13,32 +29,59 @@ import { formatDate, formatTimeRange } from "../../utils/format";
 /**
  * Bookings management — GET /api/bookings/ (admin).
  *
- * View every booking with its status and cancel any pending/confirmed
- * appointment directly from the dashboard.
+ * Built for a phone held in one hand between customers: the whole
+ * schedule is filterable by status and searchable by name or phone, and
+ * the four status transitions staff actually need are on each card
+ * rather than behind a menu.
+ *
+ * Transitions and the statuses that enable them, which the server
+ * enforces too:
+ *
+ *   pending   -> Confirm · Cancel
+ *   confirmed -> Complete · Cancel
+ *   completed -> (read only)
+ *   cancelled -> (read only)
+ *
+ * Every action replaces the card with the API's response, so the list
+ * always shows the server's state rather than an optimistic guess.
  */
 
-const FILTERS = ["all", "pending", "confirmed", "completed", "cancelled"];
+const FILTERS = [
+  "all",
+  "pending",
+  "confirmed",
+  "completed",
+  "cancelled",
+];
+
+const SEARCH =
+  "w-full rounded-xl border border-white/10 bg-[#181818] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50";
 
 export default function AdminBookings() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
+    setRefreshing(true);
 
     return listBookings()
       .then((data) => {
         setBookings(Array.isArray(data) ? data : data?.results || []);
         setLoading(false);
+        setRefreshing(false);
       })
       .catch((apiError) => {
         setError(apiError);
         setLoading(false);
+        setRefreshing(false);
       });
   }, []);
 
@@ -46,13 +89,47 @@ export default function AdminBookings() {
     load();
   }, [load]);
 
-  const shown = useMemo(() => {
-    if (filter === "all") {
-      return bookings;
+  const counts = useMemo(() => {
+    const tally = { all: bookings.length };
+
+    for (const option of FILTERS) {
+      if (option === "all") {
+        continue;
+      }
+
+      tally[option] = bookings.filter(
+        (row) => row.status === option
+      ).length;
     }
 
-    return bookings.filter((booking) => booking.status === filter);
-  }, [bookings, filter]);
+    return tally;
+  }, [bookings]);
+
+  const shown = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+
+    return bookings.filter((booking) => {
+      if (filter !== "all" && booking.status !== filter) {
+        return false;
+      }
+
+      if (!needle) {
+        return true;
+      }
+
+      return [
+        booking.customer_name,
+        booking.customer_phone,
+        booking.service_name,
+        booking.barber_name,
+        String(booking.id),
+      ]
+        .filter(Boolean)
+        .some((field) =>
+          String(field).toLowerCase().includes(needle)
+        );
+    });
+  }, [bookings, filter, query]);
 
   const replaceRow = (updated) => {
     setBookings((rows) =>
@@ -60,12 +137,31 @@ export default function AdminBookings() {
     );
   };
 
-  const handleCancel = async (booking) => {
+  /**
+   * Run one status transition, or a delete.
+   *
+   * `confirmFn` is a native confirm so a destructive action is never a
+   * single stray tap on a phone, where the target is often under a
+   * thumb.
+   */
+  const runAction = async (booking, action, { confirmFn } = {}) => {
+    if (confirmFn && !confirmFn()) {
+      return;
+    }
+
     setBusyId(booking.id);
     setActionError(null);
 
     try {
-      replaceRow(await cancelBooking(booking.id));
+      if (action === "delete") {
+        await deleteBooking(booking.id);
+        setBookings((rows) =>
+          rows.filter((row) => row.id !== booking.id)
+        );
+        return;
+      }
+
+      replaceRow(await action(booking.id));
     } catch (apiError) {
       setActionError(apiError);
     } finally {
@@ -73,55 +169,78 @@ export default function AdminBookings() {
     }
   };
 
-  const countFor = (status) =>
-    status === "all"
-      ? bookings.length
-      : bookings.filter((row) => row.status === status).length;
+  const actionsFor = (status) => {
+    if (status === "pending") {
+      return {
+        confirm: (id) => confirmBooking(id),
+        cancel: (id) => cancelBooking(id),
+      };
+    }
+
+    if (status === "confirmed") {
+      return {
+        complete: (id) => completeBooking(id),
+        cancel: (id) => cancelBooking(id),
+      };
+    }
+
+    return {};
+  };
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-            Staff · Management
-          </p>
-          <h1 className="mt-4 font-serif text-4xl leading-none sm:text-5xl">
-            Bookings
-          </h1>
-          <p className="mt-3 text-xs text-white/35">
-            Every appointment across the shop.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={load}
-          className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
-        >
-          <RefreshCw size={13} />
-          Refresh
-        </button>
-      </div>
-
-      <div className="mt-7 flex gap-2 overflow-x-auto pb-2">
-        {FILTERS.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setFilter(option)}
-            className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs capitalize transition ${
-              filter === option
-                ? "border-[#d6a85f] bg-[#d6a85f] text-black"
-                : "border-white/10 text-white/50 hover:border-white/40"
-            }`}
+      <AdminPageHeader
+        eyebrow="Staff · Management"
+        title="Bookings"
+        description="Every appointment across the shop."
+        actions={
+          <AdminButton
+            onClick={load}
+            icon={RefreshCw}
+            disabled={refreshing}
           >
-            {option}
-            <span className={filter === option ? "text-black/60" : "text-white/30"}>
-              {" "}
-              {countFor(option)}
-            </span>
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </AdminButton>
+        }
+      />
+
+      <AdminFilterTabs
+        options={FILTERS.map((key) => ({
+          key,
+          label: key,
+          count: counts[key] ?? 0,
+        }))}
+        value={filter}
+        onChange={setFilter}
+      />
+
+      {/* Search sits above the list on a phone and beside the title on
+          a desktop, where there is room for it. */}
+      <div className="relative mt-4">
+        <Search
+          size={15}
+          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30"
+        />
+
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by name, phone, service or #"
+          aria-label="Search bookings"
+          className={`${SEARCH} pl-11 pr-11`}
+        />
+
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-white/40 transition hover:text-white"
+          >
+            <X size={15} />
           </button>
-        ))}
+        )}
       </div>
 
       {actionError && (
@@ -129,17 +248,13 @@ export default function AdminBookings() {
           tone="error"
           title="Action failed"
           details={actionError.fieldErrors}
-          className="mt-6"
+          className="mt-5"
         >
           {actionError.message}
         </Alert>
       )}
 
-      {loading && (
-        <div className="mt-8 flex justify-center rounded-2xl border border-white/10 bg-[#111] py-16">
-          <Spinner label="Loading bookings..." />
-        </div>
-      )}
+      {loading && <AdminLoading label="Loading bookings..." />}
 
       {!loading && error && (
         <Alert
@@ -154,88 +269,151 @@ export default function AdminBookings() {
       )}
 
       {!loading && !error && shown.length === 0 && (
-        <Alert tone="info" title="Nothing here" onRetry={load} className="mt-8">
-          {filter === "all"
-            ? "No bookings yet."
-            : `No ${filter} bookings right now.`}
-        </Alert>
+        <AdminEmpty
+          title="Nothing here"
+          body={
+            query
+              ? `No bookings match "${query}".`
+              : filter === "all"
+                ? "No bookings yet."
+                : `No ${filter} bookings right now.`
+          }
+          onRetry={load}
+        />
       )}
 
       {!loading && !error && shown.length > 0 && (
-        <div className="mt-8 grid gap-3">
+        <div className="mt-5 grid gap-3">
           {shown.map((booking) => {
             const busy = busyId === booking.id;
-            const cancellable = ["pending", "confirmed"].includes(booking.status);
+            const available = actionsFor(booking.status);
 
             return (
-              <article
-                key={booking.id}
-                className="rounded-2xl border border-white/10 bg-[#111] p-5"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-4">
+              <AdminPanel key={booking.id}>
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <p className="font-serif text-xl text-white">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <p className="font-serif text-lg text-white sm:text-xl">
                         Booking #{booking.id}
                       </p>
-                      <StatusBadge status={booking.status} kind="booking" />
+                      <StatusBadge
+                        status={booking.status}
+                        kind="booking"
+                      />
                     </div>
-                    <p className="mt-2 text-xs text-white/45">
+
+                    <p className="mt-2 break-words text-xs text-white/45">
                       {booking.customer_name}
-                      {booking.customer_phone ? ` · ${booking.customer_phone}` : ""}
+                      {booking.customer_phone
+                        ? ` · ${booking.customer_phone}`
+                        : ""}
                     </p>
                   </div>
 
-                  <div className="text-right text-xs text-white/45">
-                    <p className="font-medium text-white/75">
+                  <div className="text-left sm:text-right">
+                    <p className="text-sm font-medium text-white/75">
                       {formatDate(booking.booking_date)}
                     </p>
-                    <p className="mt-1">
-                      {formatTimeRange(booking.start_time, booking.end_time)}
+                    <p className="mt-1 text-xs text-white/45">
+                      {formatTimeRange(
+                        booking.start_time,
+                        booking.end_time
+                      )}
                     </p>
                   </div>
                 </div>
 
+                {/* One column on the narrowest phones, three from sm up */}
                 <dl className="mt-4 grid gap-3 border-t border-white/10 pt-4 text-xs sm:grid-cols-3">
-                  <div>
+                  <div className="min-w-0">
                     <dt className="text-[10px] uppercase tracking-[0.2em] text-white/30">
                       Service
                     </dt>
-                    <dd className="mt-1 text-white/75">
+                    <dd className="mt-1 break-words text-white/75">
                       {booking.service_name || "—"}
                     </dd>
                   </div>
-                  <div>
+
+                  <div className="min-w-0">
                     <dt className="text-[10px] uppercase tracking-[0.2em] text-white/30">
                       Barber
                     </dt>
-                    <dd className="mt-1 text-white/75">
+                    <dd className="mt-1 break-words text-white/75">
                       {booking.barber_name || "Auto-assigned"}
                     </dd>
                   </div>
-                  <div>
+
+                  <div className="min-w-0">
                     <dt className="text-[10px] uppercase tracking-[0.2em] text-white/30">
                       Notes
                     </dt>
-                    <dd className="mt-1 text-white/75">
+                    <dd className="mt-1 break-words text-white/75">
                       {booking.notes || "—"}
                     </dd>
                   </div>
                 </dl>
 
-                {cancellable && (
-                  <div className="mt-4 border-t border-white/10 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => handleCancel(booking)}
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-4">
+                  {available.confirm && (
+                    <AdminButton
+                      tone="primary"
+                      icon={Check}
                       disabled={busy}
-                      className="inline-flex items-center gap-2 rounded-full border border-[#e05a4f]/40 px-4 py-2.5 text-xs font-semibold text-[#e0776b] transition hover:bg-[#e05a4f]/10 disabled:opacity-60"
+                      onClick={() =>
+                        runAction(booking, available.confirm)
+                      }
                     >
-                      {busy ? "Cancelling..." : "Cancel booking"}
-                    </button>
-                  </div>
-                )}
-              </article>
+                      {busy ? "Working..." : "Confirm"}
+                    </AdminButton>
+                  )}
+
+                  {available.complete && (
+                    <AdminButton
+                      tone="primary"
+                      icon={CheckCheck}
+                      disabled={busy}
+                      onClick={() =>
+                        runAction(booking, available.complete)
+                      }
+                    >
+                      {busy ? "Working..." : "Mark completed"}
+                    </AdminButton>
+                  )}
+
+                  {available.cancel && (
+                    <AdminButton
+                      tone="danger"
+                      icon={X}
+                      disabled={busy}
+                      onClick={() =>
+                        runAction(booking, available.cancel, {
+                          confirmFn: () =>
+                            window.confirm(
+                              `Cancel booking #${booking.id} for ${booking.customer_name}?`
+                            ),
+                        })
+                      }
+                    >
+                      Cancel
+                    </AdminButton>
+                  )}
+
+                  <AdminButton
+                    tone="danger"
+                    disabled={busy}
+                    onClick={() =>
+                      runAction(booking, "delete", {
+                        confirmFn: () =>
+                          window.confirm(
+                            `Permanently delete booking #${booking.id}? This cannot be undone.`
+                          ),
+                      })
+                    }
+                  >
+                    Delete
+                  </AdminButton>
+                </div>
+              </AdminPanel>
             );
           })}
         </div>

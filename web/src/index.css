@@ -196,68 +196,39 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   mix-blend-mode: overlay;
 }
 
+/* -----------------------------------------------------------------
+ * Small-device fit
+ * -----------------------------------------------------------------
+ *
+ * Two things the utility classes cannot express.
+ */
 
+/*
+ * iOS Safari zooms the whole page when a focused input is under 16px.
+ * Everything the user types into on a phone - booking, payment, the
+ * review form, both account screens and every admin field - is already
+ * sized at 16px for exactly this reason, but a stray `text-sm` on a
+ * control would still trigger it, and the resulting zoom does not
+ * reset when the field blurs. This is the backstop.
+ */
+input,
+textarea,
+select {
+  font-size: max(16px, 1em);
+}
 
-
-
-
-
-
-/* 
-
-
-
-@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap");
-
-@import "tailwindcss";
-
+/*
+ * 100dvh is the viewport height excluding a mobile browser's collapsing
+ * URL bar; 100vh includes it, which is how a full-height panel ends up
+ * with its submit button below the fold on first paint. The admin
+ * layout and the account screens size against it.
+ */
 :root {
-  font-family: "Manrope", sans-serif;
-  color: #f4f0e8;
-  background: #080808;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  --viewport-height: 100vh;
 }
 
-html {
-  scroll-behavior: smooth;
-  background: #080808;
+@supports (height: 100dvh) {
+  :root {
+    --viewport-height: 100dvh;
+  }
 }
-
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  background: #080808;
-}
-
-button,
-a {
-  -webkit-tap-highlight-color: transparent;
-}
-
-button {
-  cursor: pointer;
-}
-
-::selection {
-  background: #d6a85f;
-  color: #080808;
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #080808;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #292929;
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #d6a85f;
-} */

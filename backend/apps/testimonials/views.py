@@ -1,5 +1,6 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import (
     FormParser,
     JSONParser,
@@ -8,6 +9,7 @@ from rest_framework.parsers import (
 from rest_framework.permissions import (
     AllowAny,
     IsAdminUser,
+    IsAuthenticated,
 )
 from rest_framework.response import Response
 
@@ -22,6 +24,7 @@ from .services import (
     approve_testimonial,
     create_testimonial,
     reject_testimonial,
+    resolve_reviewer_name,
 )
 
 
@@ -45,13 +48,23 @@ class TestimonialViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Public users see only approved testimonials.
+        Who sees what:
 
-        Admin users can see all testimonials,
-        including pending and rejected ones.
+        anonymous
+            approved reviews only - the public wall
+
+        signed-in customer
+            approved reviews, so the wall renders the same as it does
+            for a visitor who has not signed in
+
+        staff
+            every review in every state, which is what the moderation
+            screen needs
         """
 
-        queryset = Testimonial.objects.all()
+        queryset = Testimonial.objects.select_related(
+            "user"
+        )
 
         if self.request.user.is_authenticated and self.request.user.is_staff:
             return queryset
@@ -62,13 +75,18 @@ class TestimonialViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         """
-        Public:
-            - GET approved testimonials
-            - POST testimonial
+        Public (AllowAny):
+            - GET approved reviews
+            - GET /mine/ requires a token, see below
+
+        Signed-in customer:
+            - POST a review
+            - GET their own reviews
 
         Admin:
             - approve
             - reject
+            - delete
         """
 
         if self.action in [
@@ -78,6 +96,14 @@ class TestimonialViewSet(viewsets.ModelViewSet):
         ]:
             return [
                 IsAdminUser()
+            ]
+
+        if self.action in [
+            "create",
+            "mine",
+        ]:
+            return [
+                IsAuthenticated()
             ]
 
         return [
@@ -92,9 +118,19 @@ class TestimonialViewSet(viewsets.ModelViewSet):
         request=TestimonialSerializer,
         responses={
             201: TestimonialSerializer,
+            401: OpenApiResponse(
+                description=(
+                    "Sign in or create an account first. "
+                    "Reviews are attributed to a real customer."
+                ),
+            ),
         },
         description=(
             "Submit a testimonial. "
+            "Requires an `Authorization: Bearer <access>` "
+            "header: a review is tied to the account that wrote it, "
+            "and the published name comes from that account rather "
+            "than the request body. "
             "New testimonials are created with "
             "pending status and require admin approval."
         ),
@@ -105,6 +141,10 @@ class TestimonialViewSet(viewsets.ModelViewSet):
         *args,
         **kwargs,
     ):
+        """
+        Create a review owned by the signed-in customer.
+        """
+
         serializer = self.get_serializer(
             data=request.data
         )
@@ -113,7 +153,20 @@ class TestimonialViewSet(viewsets.ModelViewSet):
             raise_exception=True
         )
 
+        if not resolve_reviewer_name(
+            request.user
+        ):
+            raise ValidationError(
+                {
+                    "customer_name": [
+                        "Add your name to your account "
+                        "before leaving a review."
+                    ]
+                }
+            )
+
         testimonial = create_testimonial(
+            user=request.user,
             **serializer.validated_data
         )
 
@@ -124,6 +177,52 @@ class TestimonialViewSet(viewsets.ModelViewSet):
         return Response(
             output.data,
             status=status.HTTP_201_CREATED,
+        )
+
+    # ---------------------------------------------------------
+    # MY REVIEWS
+    # ---------------------------------------------------------
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: TestimonialSerializer,
+            401: OpenApiResponse(
+                description="Authentication required.",
+            ),
+        },
+        description=(
+            "List the signed-in customer's own reviews, "
+            "in every state, so they can see whether a review is "
+            "still pending or has been approved. "
+            "Only ever returns rows owned by the caller."
+        ),
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="mine",
+    )
+    def mine(
+        self,
+        request,
+    ):
+        # Deliberately not get_queryset(): the wall filter would hide
+        # the caller's own pending and rejected reviews, which are
+        # exactly the rows they are asking about.
+        queryset = (
+            Testimonial.objects
+            .filter(user=request.user)
+            .select_related("user")
+        )
+
+        serializer = self.get_serializer(
+            queryset,
+            many=True,
+        )
+
+        return Response(
+            serializer.data
         )
 
     # ---------------------------------------------------------

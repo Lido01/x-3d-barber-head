@@ -28,15 +28,9 @@ export default function Gallery({ onSelect }) {
     >
       <div className="flex flex-wrap items-end justify-between gap-6">
         <Reveal>
-          <p className="text-[10px] uppercase tracking-[.35em] text-[#d6a85f]">
-            {t("gallery.recentWork")}
-          </p>
           <h2 className="mt-4 font-serif text-4xl sm:text-6xl">
             {t("gallery.titleLead")} <span className="italic text-[#d6a85f]">{t("gallery.titleAccent")}</span>
           </h2>
-          <p className="mt-5 max-w-xs text-sm leading-6 text-white/55">
-            {t("gallery.body")}
-          </p>
         </Reveal>
 
         <Reveal delay={120}>

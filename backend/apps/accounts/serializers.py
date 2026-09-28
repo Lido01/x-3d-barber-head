@@ -125,6 +125,26 @@ class AccountSerializer(serializers.ModelSerializer):
         return instance
 
 
+class AdminAccountSerializer(AccountSerializer):
+    """A safe, read-only customer record for the staff console."""
+
+    full_name = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(
+        source="profile.created_at",
+        read_only=True,
+    )
+
+    class Meta(AccountSerializer.Meta):
+        fields = AccountSerializer.Meta.fields + [
+            "full_name",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_full_name(self, user):
+        return user.get_full_name().strip()
+
+
 class RegistrationSerializer(serializers.ModelSerializer):
     """
     Serializer used to register a new customer account.

@@ -36,14 +36,10 @@ export default function Gallery() {
             The
             <span className="italic text-[#d6a85f]"> gallery.</span>
           </h1>
-          <p className="mt-8 max-w-xl text-sm leading-7 text-white/45 sm:text-base">
-            Fresh work from the chair — every cut styled, finished and
-            photographed by the NOIR team.
-          </p>
         </div>
 
         {loading && (
-          <div className="mt-14 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
+          <div className="mt-14 flex items-center justify-center  border border-white/10 bg-[#111] py-24">
             <Spinner label="Loading the gallery..." />
           </div>
         )}

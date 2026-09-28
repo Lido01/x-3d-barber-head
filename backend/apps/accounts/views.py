@@ -3,6 +3,7 @@ from drf_spectacular.utils import (
     extend_schema_view,
     OpenApiResponse,
 )
+from django.contrib.auth import get_user_model
 
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
@@ -13,11 +14,51 @@ from rest_framework_simplejwt.views import (
 
 from .serializers import (
     AccountSerializer,
+    AdminAccountSerializer,
     LoginResponseSerializer,
     LoginSerializer,
     PasswordChangeSerializer,
     RegistrationSerializer,
 )
+
+
+User = get_user_model()
+
+
+@extend_schema(
+    responses={200: AdminAccountSerializer(many=True)},
+    description=(
+        "List registered customer accounts for staff. "
+        "Staff accounts are excluded and an optional `q` parameter searches "
+        "the name, username, email and phone number."
+    ),
+)
+class AdminAccountListView(generics.ListAPIView):
+    """Staff-only, read-only customer directory for the mobile console."""
+
+    serializer_class = AdminAccountSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_queryset(self):
+        queryset = (
+            User.objects.filter(is_staff=False)
+            .select_related("profile")
+            .order_by("-date_joined")
+        )
+        query = self.request.query_params.get("q", "").strip()
+
+        if query:
+            from django.db.models import Q
+
+            queryset = queryset.filter(
+                Q(username__icontains=query)
+                | Q(email__icontains=query)
+                | Q(first_name__icontains=query)
+                | Q(last_name__icontains=query)
+                | Q(profile__phone__icontains=query)
+            )
+
+        return queryset
 
 
 @extend_schema(
