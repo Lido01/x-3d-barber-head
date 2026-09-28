@@ -13,7 +13,7 @@ import { ADMIN_NAV, activeAdminSection } from "./adminNav";
  *
  *   >= lg   fixed 256px sidebar, always visible
  *   < lg    a compact sticky header showing the current section, plus a
- *           fixed bottom tab bar with all six sections one thumb-reach
+ *           fixed bottom tab bar with every section one thumb-reach
  *           away, plus a drawer for the account and sign-out actions
  *
  * The bottom tab bar is the reason a phone admin can actually work a
