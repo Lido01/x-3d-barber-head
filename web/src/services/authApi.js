@@ -81,3 +81,14 @@ export function updateCurrentAccount(patch, { signal } = {}) {
     })
     .then((response) => response.data);
 }
+
+/** Staff-only customer directory. A query is handled server-side. */
+export function listRegisteredCustomers({ query = "", signal } = {}) {
+  return api
+    .get("/accounts/customers/", {
+      requiresAuth: true,
+      params: query.trim() ? { q: query.trim() } : undefined,
+      signal,
+    })
+    .then((response) => response.data);
+}
