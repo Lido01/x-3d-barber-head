@@ -6,6 +6,7 @@ import {
   Images,
   MessageSquareQuote,
   Scissors,
+  UserRound,
   Users,
 } from "lucide-react";
 
@@ -21,6 +22,7 @@ import { listPayments } from "../../services/paymentApi";
 import { listAllServices } from "../../services/servicesApi";
 import { listGalleryPosts } from "../../services/galleryApi";
 import { listAllTestimonials } from "../../services/testimonialsApi";
+import { listRegisteredCustomers } from "../../services/authApi";
 
 /**
  * Dashboard overview — aggregate counts pulled live from the API with
@@ -49,13 +51,14 @@ export default function AdminOverview() {
   const load = useCallback(async () => {
     setRefreshing(true);
 
-    const [bookings, payments, services, gallery, testimonials] =
+    const [bookings, payments, services, gallery, testimonials, customers] =
       await Promise.all([
         loadSection(listBookings),
         loadSection(listPayments),
         loadSection(listAllServices),
         loadSection(() => listGalleryPosts({ requiresAuth: true })),
         loadSection(listAllTestimonials),
+        loadSection(listRegisteredCustomers),
       ]);
 
     setRefreshing(false);
@@ -73,11 +76,12 @@ export default function AdminOverview() {
         services: [],
         gallery: [],
         testimonials: [],
+        customers: [],
       });
       return;
     }
 
-    setData({ bookings, payments, services, gallery, testimonials });
+    setData({ bookings, payments, services, gallery, testimonials, customers });
     setError(null);
   }, []);
 
@@ -93,6 +97,13 @@ export default function AdminOverview() {
           icon: Users,
           count: data.bookings.length,
           sub: `${data.bookings.filter((b) => b.status === "pending").length} pending`,
+        },
+        {
+          label: "Customers",
+          to: "/admin/customers",
+          icon: UserRound,
+          count: data.customers.length,
+          sub: "registered accounts",
         },
         {
           label: "Payments",
@@ -189,6 +200,51 @@ export default function AdminOverview() {
           </div>
 
           <AdminPanel className="mt-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
+                  Needs attention
+                </p>
+                <p className="mt-2 text-sm text-white/55">
+                  Work through the live queue from your phone.
+                </p>
+              </div>
+              <span className="rounded-full border border-[#d6a85f]/25 bg-[#d6a85f]/10 px-3 py-1.5 text-xs font-semibold text-[#d6a85f]">
+                {data.bookings.filter((b) => b.status === "pending").length + data.payments.filter((p) => p.status === "pending").length + data.testimonials.filter((t) => t.status === "pending").length}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {[
+                {
+                  label: "Bookings to confirm",
+                  count: data.bookings.filter((b) => b.status === "pending").length,
+                  to: "/admin/bookings",
+                },
+                {
+                  label: "Payments to verify",
+                  count: data.payments.filter((p) => p.status === "pending").length,
+                  to: "/admin/payments",
+                },
+                {
+                  label: "Reviews to approve",
+                  count: data.testimonials.filter((t) => t.status === "pending").length,
+                  to: "/admin/testimonials",
+                },
+              ].map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left transition hover:border-[#d6a85f]/40"
+                >
+                  <span className="text-xs text-white/65">{item.label}</span>
+                  <span className="font-serif text-2xl leading-none text-white">{item.count}</span>
+                </Link>
+              ))}
+            </div>
+          </AdminPanel>
+
+          <AdminPanel className="mt-3">
             <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
               Quick actions
             </p>
@@ -197,6 +253,7 @@ export default function AdminOverview() {
               {[
                 { label: "Verify payments", to: "/admin/payments" },
                 { label: "Confirm bookings", to: "/admin/bookings" },
+                { label: "View customers", to: "/admin/customers" },
                 { label: "Add a service", to: "/admin/services" },
                 { label: "Add gallery post", to: "/admin/gallery" },
                 { label: "Review testimonials", to: "/admin/testimonials" },
