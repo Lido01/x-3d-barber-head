@@ -270,7 +270,7 @@ export default function AdminLayout({ children }) {
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `flex min-h-14 min-w-16 flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors ${
+                    `flex min-h-14 min-w-[3.7rem] flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors ${
                       isActive
                         ? "text-[#d6a85f]"
                         : "text-white/45 active:text-white/80"
