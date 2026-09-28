@@ -167,7 +167,7 @@ export default function AdminOverview() {
                 <Link
                   key={stat.label}
                   to={stat.to}
-                  className="group rounded-2xl border border-white/10 bg-[#111] p-4 transition hover:border-[#d6a85f]/40 sm:p-6"
+                  className="group min-w-0 rounded-2xl border border-white/10 bg-[#111] p-4 transition hover:border-[#d6a85f]/40 sm:p-6"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#181818]">
@@ -188,7 +188,7 @@ export default function AdminOverview() {
                     {stat.count}
                   </p>
 
-                  <p className="mt-2 text-sm font-medium text-white/75">
+                  <p className="mt-2 truncate text-sm font-medium text-white/75">
                     {stat.label}
                   </p>
                   <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-white/30">
