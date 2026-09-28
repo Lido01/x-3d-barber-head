@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   MessageSquareQuote,
   Scissors,
+  UserRound,
   Users,
 } from "lucide-react";
 
@@ -18,6 +19,7 @@ import {
 export const ADMIN_NAV = [
   { label: "Overview", to: "/admin", icon: LayoutDashboard, end: true },
   { label: "Bookings", to: "/admin/bookings", icon: Users },
+  { label: "Customers", to: "/admin/customers", icon: UserRound },
   { label: "Payments", to: "/admin/payments", icon: CreditCard },
   { label: "Services", to: "/admin/services", icon: Scissors },
   { label: "Gallery", to: "/admin/gallery", icon: Images },
