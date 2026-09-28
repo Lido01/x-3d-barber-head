@@ -84,6 +84,7 @@ export default function AdminCustomers() {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search name, email or phone"
           aria-label="Search registered customers"
+          enterKeyHint="search"
           className="w-full rounded-xl border border-white/10 bg-[#181818] py-3 pl-11 pr-11 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50"
         />
         {query && (
