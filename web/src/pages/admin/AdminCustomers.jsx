@@ -125,7 +125,7 @@ export default function AdminCustomers() {
                     <p className="truncate font-serif text-xl leading-none text-white">{name}</p>
                     <p className="mt-2 truncate text-xs text-white/45">@{customer.username}</p>
                   </div>
-                  <p className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-white/30">
+                  <p className="max-w-28 shrink-0 text-right text-[10px] uppercase leading-4 tracking-[0.12em] text-white/30">
                     Joined {formatDate(customer.created_at)}
                   </p>
                 </div>
