@@ -380,3 +380,28 @@ class AccountsAPITestCase(APITestCase):
             response.data["phone"],
             "",
         )
+
+    def test_staff_can_list_registered_customers(self):
+        staff = User.objects.create_user(
+            username="staff",
+            email="staff@example.com",
+            password="StrongPassword123!",
+            is_staff=True,
+        )
+        customer = User.objects.create_user(
+            username="customer",
+            email="customer@example.com",
+            password="StrongPassword123!",
+            first_name="Customer",
+            last_name="One",
+        )
+        customer.profile.phone = "0900000000"
+        customer.profile.save(update_fields=["phone"])
+
+        self.client.force_authenticate(user=staff)
+        response = self.client.get(reverse("admin-customer-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["username"], "customer")
+        self.assertEqual(response.data[0]["phone"], "0900000000")
