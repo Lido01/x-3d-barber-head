@@ -32,6 +32,7 @@ import AdminPayments from "./pages/admin/AdminPayments";
 import AdminServices from "./pages/admin/AdminServices";
 import AdminGallery from "./pages/admin/AdminGallery";
 import AdminTestimonials from "./pages/admin/AdminTestimonials";
+import AdminCustomers from "./pages/admin/AdminCustomers";
 
 /**
  * Staff-only screen chunk. Each admin route is wrapped in RequireAdmin
@@ -119,6 +120,10 @@ function Shell() {
           <Route
             path="/admin/bookings"
             element={<AdminScreen><AdminBookings /></AdminScreen>}
+          />
+          <Route
+            path="/admin/customers"
+            element={<AdminScreen><AdminCustomers /></AdminScreen>}
           />
           <Route
             path="/admin/payments"
