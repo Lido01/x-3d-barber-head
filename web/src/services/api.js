@@ -1,12 +1,7 @@
 import axios from "axios";
 
 import { normaliseApiError } from "../utils/apiError";
-import {
-  clearTokens,
-  getAccessToken,
-  getRefreshToken,
-  setTokens,
-} from "../utils/adminToken";
+import { tokensForScope } from "../utils/tokenStore";
 
 
 const configuredApiRoot = (import.meta.env.VITE_API_BASE_URL || "").trim();
@@ -28,12 +23,19 @@ const api = axios.create({
 });
 
 // -----------------------------------------------------------------
-// REQUEST: attach admin credentials only where they are required
+// REQUEST: attach credentials only where they are required
 // -----------------------------------------------------------------
+//
+// A request opts in with `requiresAuth: true`. The audience it
+// authenticates as is `config.authScope`, which selects which stored
+// token is sent: "customer" for the account area, the staff session
+// for everything else.
 
 api.interceptors.request.use((config) => {
   if (config.requiresAuth) {
-    const token = getAccessToken();
+    const token = tokensForScope(
+      config.authScope
+    ).getAccessToken();
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -44,41 +46,51 @@ api.interceptors.request.use((config) => {
 });
 
 // -----------------------------------------------------------------
-// RESPONSE: refresh an expired admin token once, then normalise
+// RESPONSE: refresh an expired token once, then normalise
 // -----------------------------------------------------------------
+/**
+ * Refresh whichever audience `authScope` is authenticated as.
+ *
+ * A single in-flight promise is shared, but only between requests for
+ * the same audience: a customer session must never be refreshed with
+ * the staff refresh token, so the two scopes keep separate slots.
+ */
+const refreshInFlightByScope = new Map();
 
-let refreshInFlight = null;
-
-async function refreshAccessToken() {
-  const refresh = getRefreshToken();
+async function refreshAccessToken(authScope) {
+  const tokens = tokensForScope(authScope);
+  const refresh = tokens.getRefreshToken();
 
   if (!refresh) {
     return null;
   }
 
-  // Collapse parallel 401s into a single refresh request.
-  refreshInFlight =
-    refreshInFlight ||
-    axios
-      .post(`${ROOT}/api/accounts/token/refresh/`, { refresh })
-      .then((response) => {
-        const access = response.data?.access;
+  if (refreshInFlightByScope.has(authScope)) {
+    return refreshInFlightByScope.get(authScope);
+  }
 
-        if (access) {
-          setTokens({ access });
-        }
+  const pending = axios
+    .post(`${ROOT}/api/accounts/token/refresh/`, { refresh })
+    .then((response) => {
+      const access = response.data?.access;
 
-        return access || null;
-      })
-      .catch(() => {
-        clearTokens();
-        return null;
-      })
-      .finally(() => {
-        refreshInFlight = null;
-      });
+      if (access) {
+        tokens.setTokens({ access });
+      }
 
-  return refreshInFlight;
+      return access || null;
+    })
+    .catch(() => {
+      tokens.clearTokens();
+      return null;
+    })
+    .finally(() => {
+      refreshInFlightByScope.delete(authScope);
+    });
+
+  refreshInFlightByScope.set(authScope, pending);
+
+  return pending;
 }
 
 api.interceptors.response.use(
@@ -86,22 +98,23 @@ api.interceptors.response.use(
 
   async (error) => {
     const config = error.config || {};
+    const tokens = tokensForScope(config.authScope);
 
     const canRetry =
       error.response?.status === 401 &&
       config.requiresAuth &&
       !config.__retried &&
-      getRefreshToken();
+      tokens.getRefreshToken();
 
     if (canRetry) {
-      const access = await refreshAccessToken();
+      const access = await refreshAccessToken(config.authScope);
 
       if (access) {
         config.__retried = true;
         return api(config);
       }
 
-      clearTokens();
+      tokens.clearTokens();
     }
 
     return Promise.reject(normaliseApiError(error));

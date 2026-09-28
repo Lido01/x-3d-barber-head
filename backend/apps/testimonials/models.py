@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -7,6 +8,14 @@ class Testimonial(models.Model):
         PENDING = "pending", "Pending"
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="testimonials",
+        null=True,
+        blank=True,
+    )
 
     customer_name = models.CharField(
         max_length=120
@@ -45,6 +54,15 @@ class Testimonial(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(
+                fields=[
+                    "user",
+                    "status",
+                ]
+            ),
+        ]
 
     def __str__(self):
         return f"{self.customer_name} - {self.rating}/5"

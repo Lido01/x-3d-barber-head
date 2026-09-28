@@ -14,13 +14,13 @@ http://127.0.0.1:8000/api/
 
 # Table of Contents
 
-1. [Authentication](#1-authentication)
+1. [Authentication](#1-authentication) — staff and customer audiences
 2. [Accounts](#2-accounts)
 3. [Services](#3-services)
 4. [Haircut Styles](#4-haircut-styles)
 5. [Bookings](#5-bookings)
 6. [Payments](#6-payments)
-7. [Testimonials](#7-testimonials)
+7. [Testimonials](#7-testimonials) — **reading is public, writing needs an account**
 8. [Notifications](#8-notifications)
 9. [Complete Customer Booking Flow](#9-complete-customer-booking-flow)
 10. [Admin Flow](#10-admin-flow)
@@ -29,11 +29,27 @@ http://127.0.0.1:8000/api/
 13. [HTTP Status Codes](#13-http-status-codes)
 14. [Testing Checklist](#14-testing-checklist)
 
+Related documents:
+
+* [`docs/customer-accounts.md`](docs/customer-accounts.md) — why reviews are
+  gated, and how the staff and customer sessions are kept apart
+* [`docs/small-device-layout.md`](docs/small-device-layout.md) — the phone
+  layout rules for the storefront and the staff console
+
 ---
 
 # 1. Authentication
 
-Authentication is primarily for the admin/staff side.
+Authentication serves two separate audiences, and they are deliberately
+kept apart:
+
+| Audience | Why | Endpoints |
+| --- | --- | --- |
+| **Customer** | to leave a review, which is attributed to a real account | `/register/`, `/login/`, `/me/` |
+| **Staff** | verifying payments and managing the shop | `/login/`, `/me/`, and every `IsAdminUser` route |
+
+The same `/login/` and `/me/` endpoints serve both. What differs is which
+token the caller holds and what the endpoint requires afterwards.
 
 Customers do **not** need an account to:
 
@@ -43,7 +59,10 @@ Customers do **not** need an account to:
 * Create a booking
 * Submit payment
 * Upload a payment receipt
-* Submit a testimonial
+
+Customers **do** need an account to:
+
+* Submit a testimonial (a review is attributed to a real customer)
 
 Admin/staff authentication is used for protected operations such as:
 
@@ -51,6 +70,69 @@ Admin/staff authentication is used for protected operations such as:
 * Rejecting payments
 * Managing backend data
 * Managing services/styles where permissions require authentication
+
+See `docs/customer-accounts.md` for the design, including how the two
+sessions are kept from overwriting each other.
+
+---
+
+## 1.0 Register
+
+### Endpoint
+
+```http
+POST /api/accounts/register/
+```
+
+### Authentication
+
+```text
+Public
+```
+
+### Request
+
+```json
+{
+  "username": "adonay",
+  "email": "adonay@example.com",
+  "first_name": "Adonay",
+  "last_name": "Tesfaye",
+  "phone": "0912345678",
+  "password": "StrongPassword123!",
+  "password_confirm": "StrongPassword123!"
+}
+```
+
+`first_name`, `last_name` and `phone` are optional. `username`, `email`,
+`password` and `password_confirm` are required.
+
+### Response
+
+**201** — the created account. No tokens are returned.
+
+```json
+{
+  "id": 7,
+  "username": "adonay",
+  "email": "adonay@example.com",
+  "first_name": "Adonay",
+  "last_name": "Tesfaye",
+  "phone": "0912345678"
+}
+```
+
+Because no tokens come back, a client should follow this with
+`POST /api/accounts/login/`.
+
+### Validation
+
+| Field | Rule |
+| --- | --- |
+| `username` | unique, case-insensitive |
+| `email` | required, unique, case-insensitive, normalized to lowercase |
+| `password` | min 8 chars, must satisfy `AUTH_PASSWORD_VALIDATORS` |
+| `password_confirm` | must equal `password` |
 
 ---
 
@@ -101,6 +183,14 @@ Public
   "detail": "No active account found with the given credentials"
 }
 ```
+
+### Note
+
+This endpoint does not distinguish staff from customer accounts. A
+non-staff account that signs in here is refused by the protected routes
+below with **403**, not by this endpoint. Clients that need to know
+whether an account has staff access must probe an `IsAdminUser` route —
+the frontend staff console does this in `hasStaffAccess()`.
 
 ---
 
@@ -839,7 +929,89 @@ based on the selected service duration.
 
 ---
 
-# 4.7 Cancel Booking
+# 4.7 Confirm Booking
+
+### Endpoint
+
+```http
+POST /api/bookings/{booking_id}/confirm/
+```
+
+### Authentication
+
+```text
+Authenticated admin/staff
+```
+
+### Request Body
+
+```text
+No body required
+```
+
+Verifying a payment already confirms its booking, so this is for the
+walk-in or cash customer who has no receipt to verify.
+
+### Response
+
+```json
+{
+  "id": 10,
+  "status": "confirmed"
+}
+```
+
+### Failed request
+
+| Status | Reason |
+| --- | --- |
+| 400 | the booking is `cancelled` — a cancelled booking cannot be confirmed |
+| 400 | the booking is already `completed` |
+| 403 | not staff |
+
+---
+
+# 4.8 Complete Booking
+
+### Endpoint
+
+```http
+POST /api/bookings/{booking_id}/complete/
+```
+
+### Authentication
+
+```text
+Authenticated admin/staff
+```
+
+### Request Body
+
+```text
+No body required
+```
+
+Marks a confirmed appointment as served. Idempotent.
+
+### Response
+
+```json
+{
+  "id": 10,
+  "status": "completed"
+}
+```
+
+### Failed request
+
+| Status | Reason |
+| --- | --- |
+| 400 | the booking is not `confirmed` — an unpaid, unconfirmed booking has to be cancelled rather than counted as served |
+| 403 | not staff |
+
+---
+
+# 4.9 Cancel Booking
 
 ### Endpoint
 
@@ -874,7 +1046,7 @@ and its time becomes available again.
 
 ---
 
-# 4.8 Delete Booking
+# 4.10 Delete Booking
 
 ### Endpoint
 
@@ -1131,21 +1303,32 @@ receipt
 
 Testimonials allow customers to submit feedback.
 
+**Reading the wall is public. Writing a review needs an account.**
+
+A review is attributed to a real customer: the reviewer is identified by a
+token, and the name published on the wall is derived from that account
+rather than taken from the request body.
+
+See `docs/customer-accounts.md`.
+
 ---
 
-# 6.1 Create Testimonial
+## 6.1 Create Testimonial
 
 ### Endpoint
 
 ```http
-POST /api/testimonials/
+POST /api/testimonials/testimonials/
 ```
 
 ### Authentication
 
 ```text
-Public
+Bearer access token   (IsAuthenticated)
 ```
+
+A customer account is required. An anonymous request is rejected with
+**401** and no row is created.
 
 ### Content-Type
 
@@ -1153,22 +1336,33 @@ Public
 multipart/form-data
 ```
 
-### Example
+### Form Data
 
 ```text
-customer_name=Tesfaye
-message=I really liked the haircut.
+message=What a great cut.
 rating=5
 photo=[optional image]
 ```
 
+**Do not send `customer_name` or `user`.** Both are read-only on the
+serializer. The published name is resolved from the account:
+
+1. the account's `first_name last_name`
+2. otherwise the `username`
+
+An account that resolves to neither is refused with **400**.
+
 ### Response
+
+**201**
 
 ```json
 {
   "id": 2,
-  "customer_name": "Tesfaye",
-  "message": "I really liked the haircut.",
+  "user": 7,
+  "customer_name": "Adonay Tesfaye",
+  "customer_phone": "",
+  "message": "What a great cut.",
   "rating": 5,
   "photo": "http://127.0.0.1:8000/media/testimonials/photo.jpg",
   "status": "pending",
@@ -1177,14 +1371,30 @@ photo=[optional image]
 }
 ```
 
+`status` is always `pending` on create. It is not client-settable.
+
+### Photo rules
+
+```text
+Formats:  JPG, PNG, WebP
+Max size: 5 MB
+```
+
+### Failed create
+
+| Status | Meaning |
+| --- | --- |
+| 401 | no valid token |
+| 400 | blank `message`, `rating` outside 1–5, bad photo type/size, or an account with no displayable name |
+
 ---
 
-# 6.2 List Testimonials
+## 6.2 List Testimonials
 
 ### Endpoint
 
 ```http
-GET /api/testimonials/
+GET /api/testimonials/testimonials/
 ```
 
 ### Authentication
@@ -1193,16 +1403,94 @@ GET /api/testimonials/
 Public
 ```
 
-The frontend can use this endpoint for the testimonial section.
+### Who sees what
+
+| Caller | Returns |
+| --- | --- |
+| anonymous | approved reviews only |
+| signed-in customer | approved reviews only — the same wall a visitor sees |
+| staff | every review, in every status |
+
+### Response
+
+```json
+[
+  {
+    "id": 2,
+    "user": 7,
+    "customer_name": "Adonay Tesfaye",
+    "customer_phone": "",
+    "message": "What a great cut.",
+    "rating": 5,
+    "photo": null,
+    "status": "approved",
+    "created_at": "2026-08-30T12:00:00Z",
+    "updated_at": "2026-08-30T12:00:00Z"
+  }
+]
+```
+
+Reviews created before accounts existed have `"user": null`. Their
+`customer_name` came from a free-text field and is not verified.
 
 ---
 
-# 6.3 Get Testimonial
+## 6.3 My Testimonials
 
 ### Endpoint
 
 ```http
-GET /api/testimonials/{testimonial_id}/
+GET /api/testimonials/testimonials/mine/
+```
+
+### Authentication
+
+```text
+Bearer access token   (IsAuthenticated)
+```
+
+### Description
+
+The caller's own reviews, in **every** status — so a customer can tell
+"still pending" from "rejected" instead of waiting silently.
+
+This deliberately does not apply the public approved-only filter, and it
+only ever returns rows owned by the caller. Staff calling it get their own
+reviews, not everyone's; the moderation screen uses §6.2, which is where
+staff see all statuses.
+
+### Response
+
+```json
+[
+  {
+    "id": 2,
+    "user": 7,
+    "customer_name": "Adonay Tesfaye",
+    "message": "What a great cut.",
+    "rating": 5,
+    "photo": null,
+    "status": "pending",
+    "created_at": "2026-08-30T12:00:00Z",
+    "updated_at": "2026-08-30T12:00:00Z"
+  }
+]
+```
+
+### Failed request
+
+| Status | Meaning |
+| --- | --- |
+| 401 | no valid token |
+
+---
+
+## 6.4 Get Testimonial
+
+### Endpoint
+
+```http
+GET /api/testimonials/testimonials/{testimonial_id}/
 ```
 
 ### Authentication
@@ -1211,20 +1499,70 @@ GET /api/testimonials/{testimonial_id}/
 Public
 ```
 
+Follows the same visibility rule as §6.2.
+
 ---
 
-# 6.4 Delete Testimonial
+## 6.5 Approve Testimonial
 
 ### Endpoint
 
 ```http
-DELETE /api/testimonials/{testimonial_id}/
+POST /api/testimonials/testimonials/{testimonial_id}/approve/
 ```
 
 ### Authentication
 
 ```text
-Admin/staff
+Authenticated admin/staff   (IsAdminUser)
+```
+
+Publishes the review on the wall. Idempotent — approving an already
+approved review is a no-op.
+
+### Response
+
+```http
+200 OK
+```
+
+The updated testimonial.
+
+---
+
+## 6.6 Reject Testimonial
+
+### Endpoint
+
+```http
+POST /api/testimonials/testimonials/{testimonial_id}/reject/
+```
+
+### Authentication
+
+```text
+Authenticated admin/staff   (IsAdminUser)
+```
+
+Removes the review from the wall without deleting it. Idempotent.
+
+**No rejection reason is recorded** — the model has no field for one, and
+a client must not display a cause it does not have.
+
+---
+
+## 6.7 Delete Testimonial
+
+### Endpoint
+
+```http
+DELETE /api/testimonials/testimonials/{testimonial_id}/
+```
+
+### Authentication
+
+```text
+Admin/staff   (IsAdminUser)
 ```
 
 ### Response
@@ -1232,6 +1570,12 @@ Admin/staff
 ```http
 204 No Content
 ```
+
+Permanent. Unlike §6.6 this cannot be undone.
+
+If the review's account is later deleted, the review is kept with
+`user: null` and keeps the name it was published under
+(`on_delete=SET_NULL`).
 
 ---
 
@@ -1478,9 +1822,35 @@ Services
 Haircut Styles
 Bookings
 Payments
+Gallery
 Testimonials
 Notifications
 ```
+
+### Booking status transitions
+
+`status` is read-only on `BookingSerializer`, so a booking's status only
+moves through these three endpoints:
+
+```text
+POST /api/bookings/{id}/cancel/      pending | confirmed  ->  cancelled
+POST /api/bookings/{id}/confirm/     pending              ->  confirmed
+POST /api/bookings/{id}/complete/    confirmed            ->  completed
+```
+
+Verifying a payment calls `confirm_booking()` internally, so a booking
+with a verified receipt becomes confirmed without a second call.
+
+`complete` refuses anything that is not `confirmed`: a booking that was
+never paid for and never confirmed has to be cancelled, not quietly
+counted as served.
+
+### Reviews
+
+A review is attributed to the staff-free customer account that wrote it.
+`POST /api/testimonials/` is `IsAuthenticated`; the moderation actions
+and the permanent delete stay `IsAdminUser`. Reading the approved wall is
+public and unchanged. See §6 and `docs/customer-accounts.md`.
 
 ---
 
@@ -1832,6 +2202,11 @@ Before connecting the React frontend, test every endpoint using Swagger.
 [ ] Same customer can book another time
 [ ] Booking update works
 [ ] Booking cancellation works
+[ ] Booking confirmation works
+[ ] Cancelled booking cannot be confirmed
+[ ] Booking completion works
+[ ] Only a confirmed booking can be completed
+[ ] Normal customer cannot confirm/complete/cancel
 ```
 
 ---
@@ -1856,14 +2231,47 @@ Before connecting the React frontend, test every endpoint using Swagger.
 
 ---
 
+## Accounts
+
+```text
+[ ] Register works
+[ ] Duplicate username rejected
+[ ] Duplicate email rejected
+[ ] Mismatched passwords rejected
+[ ] Weak password rejected
+[ ] Register returns no tokens
+[ ] Login works
+[ ] Register then login works
+[ ] Invalid login rejected
+[ ] Refresh token works
+[ ] /me/ requires authentication
+[ ] Authenticated /me/ works
+[ ] Staff session and customer session can be live at the same time
+```
+
+---
+
 ## Testimonials
 
 ```text
-[ ] Customer can submit testimonial
+[ ] Anonymous testimonial submit is rejected with 401
+[ ] Signed-in customer can submit testimonial
+[ ] customer_name in the request body is ignored
+[ ] Username is used when the account has no real name
+[ ] Blank message rejected
+[ ] rating outside 1-5 rejected
 [ ] Photo upload works
-[ ] GET testimonials works
+[ ] Public GET returns approved only
+[ ] Signed-in customer still sees approved only on the public list
+[ ] GET /mine/ requires authentication
+[ ] GET /mine/ returns every status
+[ ] GET /mine/ returns only the caller's own reviews
+[ ] Customer cannot approve or reject
+[ ] Customer cannot delete
+[ ] Staff can approve and it appears on the public wall
+[ ] Staff can reject
+[ ] Staff can delete
 [ ] GET testimonial by ID works
-[ ] Delete works for authorized user
 ```
 
 ---

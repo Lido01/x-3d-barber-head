@@ -13,7 +13,12 @@ Translated:
 - About
 - quick book steps
 - the home gallery band
-- testimonials, including the review form
+- testimonials, including the review form and the sign-in prompt in
+  place of it
+- the customer account screens — sign in, register, and the list of your
+  own reviews
+- the featured guest wall
+- the "find us" map and directions
 - footer
 - the seeded guest reviews themselves
 
@@ -22,6 +27,14 @@ the staff console at `/admin`. Those are the screens where a mistranslated
 label can cost someone money or send them to the wrong slot. English is
 better than a half-finished Amharic payment screen. If you extend the
 translation, extend it here too — don't drift.
+
+### Why the account screens are translated
+
+They sit on the storefront, and a visitor reaches them by tapping "sign
+in to review" in their own language. Translating the *explanation* of why
+a sign-in is being asked for is the whole point: in English it reads as a
+reasonable request, in the wrong language it reads as an unexplained wall.
+
 
 ## How it works
 
@@ -62,6 +75,10 @@ keys translations off the **English source string** created by
 
 If you change the seed copy, update the keys in `translatedTestimonials.js` in
 the same commit or the reviews silently fall back to English.
+
+Reviews are now tied to a customer account, but that does not add a locale:
+the account has no language field, and the guest's own words are still what
+get translated. See [`customer-accounts.md`](customer-accounts.md).
 
 ## Afaan Oromoo is marked beta
 

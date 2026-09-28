@@ -38,16 +38,28 @@ export function formatDuration(minutes) {
   return rest ? `${hours} hr ${rest} min` : `${hours} hr`;
 }
 
-/** "2026-08-28" -> "August 28, 2026" (parsed as a plain date, never UTC-shifted) */
-export function formatDate(isoDate) {
-  if (!isoDate) {
+/**
+ * "2026-08-28" -> "August 28, 2026"
+ *
+ * Parsed as a plain date from the year/month/day parts and never UTC-shifted:
+ * `new Date("2026-08-28")` parses as UTC midnight, which renders as the 27th
+ * for anyone west of Greenwich.
+ *
+ * An ISO timestamp is truncated at the `T` first. Without that, Number() hits
+ * "30T12:00:00Z", returns NaN, and the raw string is what the user sees.
+ */
+export function formatDate(value) {
+  if (!value) {
     return "—";
   }
 
-  const [year, month, day] = String(isoDate).split("-").map(Number);
+  const [year, month, day] = String(value)
+    .split("T")[0]
+    .split("-")
+    .map(Number);
 
   if (!year || !month || !day) {
-    return String(isoDate);
+    return String(value);
   }
 
   return new Date(year, month - 1, day).toLocaleDateString("en-US", {

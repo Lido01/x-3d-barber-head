@@ -3,6 +3,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
+    AdminAccountListView,
     CurrentAccountView,
     LoginView,
     PasswordChangeView,
@@ -10,6 +11,11 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "customers/",
+        AdminAccountListView.as_view(),
+        name="admin-customer-list",
+    ),
     path(
         "register/",
         RegistrationView.as_view(),

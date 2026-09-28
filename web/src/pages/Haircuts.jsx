@@ -76,7 +76,7 @@ export default function Haircuts() {
         </div>
 
         {loading && (
-          <div className="mt-14 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
+          <div className="mt-14 flex items-center justify-center  border border-white/10 bg-[#111] py-24">
             <Spinner label="Loading haircuts..." />
           </div>
         )}

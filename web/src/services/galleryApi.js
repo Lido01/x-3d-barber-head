@@ -1,29 +1,5 @@
 import api from "./api";
 
-/**
- * Gallery — /api/gallery/gallery/
- *
- * Public (AllowAny):
- *   GET /api/gallery/gallery/          active posts only
- *   GET /api/gallery/gallery/{id}/     active post
- *
- * Admin only (IsAdminUser):
- *   POST   /api/gallery/gallery/                  create
- *   PUT    /api/gallery/gallery/{id}/             replace
- *   PATCH  /api/gallery/gallery/{id}/             partial update
- *   DELETE /api/gallery/gallery/{id}/             delete
- *
- * GalleryPostSerializer item shape:
- *
- *   {
- *     id, title, description,
- *     image: "/media/gallery/...",
- *     style_name: "" | "Low Fade",
- *     is_active: true,
- *     created_at, updated_at
- *   }
- */
-
 export function listGalleryPosts({ signal, requiresAuth } = {}) {
   return api
     .get("/gallery/gallery/", { signal, requiresAuth })

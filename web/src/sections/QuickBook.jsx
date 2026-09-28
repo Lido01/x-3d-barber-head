@@ -35,9 +35,6 @@ export default function QuickBook() {
           <br />
           <span className="italic text-[#eece9b]">{t("quickBook.titleAccent")}</span>
         </h2>
-        <p className="mt-5 max-w-md text-sm leading-7 text-white/60">
-          {t("quickBook.body")}
-        </p>
       </Reveal>
 
       {/* steps */}
@@ -51,7 +48,13 @@ export default function QuickBook() {
               delay={index * 110}
               className="group relative overflow-hidden  border border-white/10 bg-black/45 p-7 backdrop-blur-md transition hover:border-[#d6a85f]/40"
             >
-              <Icon size={22} className="text-[#d6a85f]" strokeWidth={1.6} />
+              <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
+                <Icon
+                  size={18}
+                  className="text-[#d6a85f]"
+                />
+              </span>
+
               <p className="mt-6 font-serif text-2xl leading-tight">{step.title}</p>
               <p className="mt-3 text-sm leading-6 text-white/55">{step.body}</p>
             </Reveal>
