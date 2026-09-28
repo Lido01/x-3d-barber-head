@@ -405,3 +405,15 @@ class AccountsAPITestCase(APITestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["username"], "customer")
         self.assertEqual(response.data[0]["phone"], "0900000000")
+
+    def test_customer_cannot_list_registered_customers(self):
+        customer = User.objects.create_user(
+            username="customer",
+            email="customer@example.com",
+            password="StrongPassword123!",
+        )
+
+        self.client.force_authenticate(user=customer)
+        response = self.client.get(reverse("admin-customer-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
