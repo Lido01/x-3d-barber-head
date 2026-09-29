@@ -23,6 +23,7 @@ import BookingSuccess from "./pages/BookingSuccess";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Account from "./pages/Account";
+import Help from "./pages/Help";
 import NotFound from "./pages/NotFound";
 
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -33,14 +34,23 @@ import AdminServices from "./pages/admin/AdminServices";
 import AdminGallery from "./pages/admin/AdminGallery";
 import AdminTestimonials from "./pages/admin/AdminTestimonials";
 import AdminCustomers from "./pages/admin/AdminCustomers";
+import AdminTeam from "./pages/admin/AdminTeam";
+import AdminAuditLog from "./pages/admin/AdminAuditLog";
+import AdminUsers from "./pages/admin/AdminUsers";
 
 /**
  * Staff-only screen chunk. Each admin route is wrapped in RequireAdmin
  * and rendered inside the shared sidebar layout.
+ *
+ * `capability` and `peopleOnly` mirror the two gates in adminNav, so a
+ * typed URL and a nav link agree on whether a screen is reachable.
+ * They are declared per route rather than looked up from the nav
+ * because this is the only place that knows which screen is which -
+ * duplicating that mapping is what lets the two drift apart.
  */
-function AdminScreen({ children }) {
+function AdminScreen({ children, capability, peopleOnly = false }) {
   return (
-    <RequireAdmin>
+    <RequireAdmin capability={capability} peopleOnly={peopleOnly}>
       <AdminLayout>{children}</AdminLayout>
     </RequireAdmin>
   );
@@ -93,6 +103,7 @@ function Shell() {
           <Route path="/haircuts" element={<Haircuts />} />
           <Route path="/barbers" element={<Barbers />} />
           <Route path="/gallery" element={<Gallery />} />
+          <Route path="/help" element={<Help />} />
 
           {/* Public booking flow - deliberately unauthenticated. */}
           <Route path="/booking" element={<Booking />} />
@@ -114,32 +125,49 @@ function Shell() {
             }
           />
 
-          {/* Staff only. */}
+          {/* Staff only. The overview has no capability of its own -
+              the endpoint scopes itself to what the caller may see. */}
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminScreen><AdminOverview /></AdminScreen>} />
+          <Route path="/admin/dashboard/:role" element={<AdminScreen><AdminOverview /></AdminScreen>} />
           <Route
             path="/admin/bookings"
-            element={<AdminScreen><AdminBookings /></AdminScreen>}
+            element={<AdminScreen capability="bookings.view"><AdminBookings /></AdminScreen>}
           />
           <Route
             path="/admin/customers"
-            element={<AdminScreen><AdminCustomers /></AdminScreen>}
+            element={<AdminScreen capability="customers.view"><AdminCustomers /></AdminScreen>}
+          />
+
+          {/* The screens that hand out power. Gated on role, not
+              capability - see RequireAdmin. */}
+          <Route
+            path="/admin/team"
+            element={<AdminScreen peopleOnly><AdminTeam /></AdminScreen>}
+          />
+          <Route
+            path="/admin/activity"
+            element={<AdminScreen peopleOnly><AdminAuditLog /></AdminScreen>}
+          />
+          <Route
+            path="/admin/users"
+            element={<AdminScreen peopleOnly><AdminUsers /></AdminScreen>}
           />
           <Route
             path="/admin/payments"
-            element={<AdminScreen><AdminPayments /></AdminScreen>}
+            element={<AdminScreen capability="payments.view"><AdminPayments /></AdminScreen>}
           />
           <Route
             path="/admin/services"
-            element={<AdminScreen><AdminServices /></AdminScreen>}
+            element={<AdminScreen capability="services.manage"><AdminServices /></AdminScreen>}
           />
           <Route
             path="/admin/gallery"
-            element={<AdminScreen><AdminGallery /></AdminScreen>}
+            element={<AdminScreen capability="gallery.manage"><AdminGallery /></AdminScreen>}
           />
           <Route
             path="/admin/testimonials"
-            element={<AdminScreen><AdminTestimonials /></AdminScreen>}
+            element={<AdminScreen capability="reviews.moderate"><AdminTestimonials /></AdminScreen>}
           />
 
           <Route path="*" element={<NotFound />} />

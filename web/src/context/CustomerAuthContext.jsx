@@ -54,6 +54,12 @@ export function CustomerAuthProvider({ children }) {
     getCurrentAccount({ authScope: CUSTOMER_SCOPE })
       .then((data) => {
         if (active) {
+          if (data.staff_role) {
+            customerTokens.clearTokens();
+            setAccount(null);
+            setStatus("anonymous");
+            return;
+          }
           setAccount(data);
           setStatus("authenticated");
         }
@@ -89,6 +95,17 @@ export function CustomerAuthProvider({ children }) {
         username: username.trim(),
         password,
       });
+
+      // if (data.user?.staff_role) {
+      //   throw {
+      //     status: 403,
+      //     message: "This is a staff account. Please use the Staff & Owner sign-in.",
+      //     fieldErrors: {},
+      //     isNetwork: false,
+      //     isServer: false,
+      //     staffLogin: true,
+      //   };
+      // }
 
       return adopt(data);
     },

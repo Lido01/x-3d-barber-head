@@ -8,7 +8,6 @@ import {
 } from "react";
 
 import { getCurrentAccount, login as loginRequest } from "../services/authApi";
-import { listBookings } from "../services/bookingApi";
 import { adminTokens } from "../utils/tokenStore";
 
 /**
@@ -24,20 +23,6 @@ import { adminTokens } from "../utils/tokenStore";
  */
 
 const AdminAuthContext = createContext(null);
-
-async function hasStaffAccess() {
-  try {
-    await listBookings();
-    return true;
-  } catch (error) {
-    if (error?.status === 401 || error?.status === 403) {
-      return false;
-    }
-
-    // Network or server trouble: don't claim the account is invalid.
-    throw error;
-  }
-}
 
 export function AdminAuthProvider({ children }) {
   const [account, setAccount] = useState(null);
@@ -58,6 +43,12 @@ export function AdminAuthProvider({ children }) {
     getCurrentAccount()
       .then((data) => {
         if (active) {
+          if (!data.staff_role) {
+            adminTokens.clearTokens();
+            setAccount(null);
+            setStatus("anonymous");
+            return;
+          }
           setAccount(data);
           setStatus("authenticated");
         }
@@ -83,22 +74,20 @@ export function AdminAuthProvider({ children }) {
       refresh: data.refresh,
     });
 
-    const staff = await hasStaffAccess();
-
-    if (!staff) {
+    if (!data.user?.staff_role) {
       adminTokens.clearTokens();
 
       throw {
         status: 403,
         message:
-          "This account does not have staff access. Ask an administrator to grant it.",
+          "This is a customer account. Use Customer sign-in, or ask the owner to grant staff access.",
         fieldErrors: {},
         isNetwork: false,
         isServer: false,
       };
     }
 
-    setAccount(data.user || null);
+    setAccount(data.user);
     setStatus("authenticated");
 
     return data;

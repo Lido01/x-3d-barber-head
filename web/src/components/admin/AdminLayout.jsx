@@ -3,7 +3,8 @@ import { ExternalLink, LogOut, Menu, Scissors, X } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import { useAdminAuth } from "../../context/AdminAuthContext";
-import { ADMIN_NAV, activeAdminSection } from "./adminNav";
+import { visibleAdminNav, activeAdminSection } from "./adminNav";
+import { staffRoleLabel } from "../../utils/staffRole";
 
 /**
  * Staff console shell.
@@ -83,15 +84,17 @@ export default function AdminLayout({ children }) {
           NOIR
         </p>
         <p className="mt-1 text-[8px] tracking-[0.3em] text-[#d6a85f]">
-          STAFF CONSOLE
+          {staffRoleLabel(account?.staff_role).toUpperCase()} CONSOLE
         </p>
       </div>
     </div>
   );
 
+  const visibleNav = visibleAdminNav(account);
+
   const sidebarLinks = (
     <div className="space-y-1 px-3">
-      {ADMIN_NAV.map((item) => {
+      {visibleNav.map((item) => {
         const Icon = item.icon;
 
         return (
@@ -180,7 +183,7 @@ export default function AdminLayout({ children }) {
 
           <div className="min-w-0">
             <p className="truncate text-[9px] uppercase tracking-[0.25em] text-[#d6a85f]">
-              Staff
+              {staffRoleLabel(account?.staff_role)}
             </p>
             <p className="mt-0.5 truncate text-sm font-medium text-white">
               {currentItem?.label || "Overview"}
@@ -261,7 +264,7 @@ export default function AdminLayout({ children }) {
         }}
       >
         <ul className="no-scrollbar flex overflow-x-auto">
-          {ADMIN_NAV.map((item) => {
+          {visibleNav.map((item) => {
             const Icon = item.icon;
 
             return (

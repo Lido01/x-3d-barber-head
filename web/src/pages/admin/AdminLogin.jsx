@@ -6,6 +6,7 @@ import Alert from "../../components/ui/Alert";
 import FieldError from "../../components/ui/FieldError";
 import Spinner from "../../components/ui/Spinner";
 import { useAdminAuth } from "../../context/AdminAuthContext";
+import { staffDashboardPath } from "../../utils/staffRole";
 
 /**
  * Staff sign-in against POST /api/accounts/login/ (JWT).
@@ -35,7 +36,7 @@ export default function AdminLogin() {
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const destination = location.state?.from || "/admin/payments";
+  const destination = location.state?.from;
 
   if (isAuthenticated) {
     return <Navigate to={destination} replace />;
@@ -52,8 +53,8 @@ export default function AdminLogin() {
     setSubmitting(true);
 
     try {
-      await signIn({ username: username.trim(), password });
-      navigate(destination, { replace: true });
+      const data = await signIn({ username: username.trim(), password });
+      navigate(destination || staffDashboardPath(data.user?.staff_role), { replace: true });
     } catch (apiError) {
       setError(apiError);
     } finally {
@@ -77,7 +78,7 @@ export default function AdminLogin() {
 
       <div className="mx-auto w-full max-w-md flex-1 px-4 py-8 sm:px-6 sm:py-12">
         <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
-          Staff only
+          Staff & owner only
         </p>
 
         <h1 className="mt-3 font-serif text-3xl leading-tight text-white sm:text-4xl">
@@ -85,7 +86,7 @@ export default function AdminLogin() {
         </h1>
 
         <p className="mt-3 text-sm leading-6 text-white/45">
-          Verify payments, work the booking list and moderate reviews.
+          Owners, administrators, reception and shop staff use this secure workspace. Your permissions decide what you can see and do.
         </p>
 
         <form
@@ -163,9 +164,12 @@ export default function AdminLogin() {
         </form>
 
         <p className="mt-6 text-center text-[11px] leading-6 text-white/25">
-          Customers never sign in here. They create an account from the
-          review form on the site to leave a review.
+          Customers use the regular Customer sign-in to manage their profile and reviews.
         </p>
+
+        <Link to="/login" className="mx-auto mt-3 flex w-fit text-xs font-semibold text-[#d6a85f] transition hover:text-[#e5bd7a]">
+          Customer sign-in
+        </Link>
 
         <Link
           to="/"
