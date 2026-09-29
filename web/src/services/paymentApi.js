@@ -4,13 +4,15 @@ import api from "./api";
  * Payments — /api/payments/payments/
  *
  * Public (AllowAny):
- *   POST /api/payments/payments/          submit payment + receipt
- *   GET  /api/payments/payments/          list
- *   GET  /api/payments/payments/{id}/     retrieve
+ *   POST /api/payments/payments/              submit payment + receipt
+ *   GET  /api/payments/payments/{id}/         retrieve one
+ *   GET  /api/payments/payments/by-booking/{bookingId}/
+ *                                            the one payment for a booking
  *
- * Admin only (IsAuthenticated + IsAdminUser):
- *   POST /api/payments/payments/{id}/verify/
- *   POST /api/payments/payments/{id}/reject/   body: { reason }
+ * Staff only (bearer token + capability):
+ *   GET    /api/payments/payments/            list every payment
+ *   POST   /api/payments/payments/{id}/verify/
+ *   POST   /api/payments/payments/{id}/reject/   body: { reason }
  *
  * Payment response shape (PaymentSerializer):
  *
@@ -85,31 +87,38 @@ export function getPayment(id, { signal } = {}) {
     .then((response) => response.data);
 }
 
-export function listPayments({ signal } = {}) {
-  return api
-    .get("/payments/payments/", { signal })
-    .then((response) => response.data);
-}
-
 /**
  * Find the payment attached to a booking.
  *
  * Used when a customer refreshes the result page in a new tab and the
- * cached payment id is gone. The list endpoint is public on this
- * backend, so no credentials are involved.
+ * cached payment id is gone. Retrieval by id is public on this backend,
+ * so no credentials are involved and the customer flow stays
+ * unauthenticated.
+ *
+ * Scoped to the one booking by using the detail route. The list route
+ * is staff-only, so a customer calling it gets 401 - which is correct,
+ * since that list is every customer's payment in the shop.
  */
 export function findPaymentForBooking(bookingId, { signal } = {}) {
-  return listPayments({ signal }).then((payments) => {
-    const rows = Array.isArray(payments) ? payments : payments?.results || [];
-
-    return (
-      rows.find((payment) => String(payment.booking) === String(bookingId)) ||
-      null
-    );
-  });
+  return api
+    .get(`/payments/payments/by-booking/${bookingId}/`, { signal })
+    .then((response) => response.data);
 }
 
-// --- admin only ---------------------------------------------------
+// --- staff only ---------------------------------------------------
+//
+// Every call below opts in with `requiresAuth: true`, which is what
+// makes the request interceptor attach the staff bearer token. Without
+// it the header is absent and the API answers 401 "Authentication
+// credentials were not provided" - which is not a permissions problem
+// but a missing header, and the two are easy to confuse when the
+// account is in fact allowed to do the thing.
+
+export function listPayments({ signal } = {}) {
+  return api
+    .get("/payments/payments/", { requiresAuth: true, signal })
+    .then((response) => response.data);
+}
 
 export function verifyPayment(id) {
   return api
