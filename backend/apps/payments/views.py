@@ -1,4 +1,4 @@
-from rest_framework import status, viewsets
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import (
     FormParser,
@@ -7,7 +7,6 @@ from rest_framework.parsers import (
 )
 from rest_framework.permissions import (
     AllowAny,
-    IsAdminUser,
     IsAuthenticated,
 )
 from rest_framework.response import Response
@@ -24,6 +23,8 @@ from .services import (
     reject_payment,
     verify_payment,
 )
+from apps.accounts.permissions import capability_permission
+from apps.accounts.audit import log_action
 
 
 class PaymentViewSet(viewsets.ModelViewSet):
@@ -69,25 +70,81 @@ class PaymentViewSet(viewsets.ModelViewSet):
         """
         Public customers:
             POST payment
-            GET payment
+            GET one payment by id
+            GET the payment for a booking
 
-        Admin/staff:
-            POST verify
-            POST reject
+        Staff:
+            GET the list of every payment      (payments.view)
+            POST verify                       (payments.verify)
+            POST reject                       (payments.verify)
+
+        The list is deliberately not public: it is every customer's
+        payment in the shop, transaction reference and receipt image
+        included. A customer checking their own payment reads it back
+        through `by_booking`, which is scoped to the one booking rather
+        than enumerating rows.
         """
 
-        if self.action in [
-            "verify",
-            "reject",
-        ]:
-            return [
-                IsAuthenticated(),
-                IsAdminUser(),
-            ]
+        if self.action == "list":
+            return [IsAuthenticated(), capability_permission("payments.view")()]
+
+        if self.action in ["verify", "reject"]:
+            return [IsAuthenticated(), capability_permission("payments.verify")()]
 
         return [
             AllowAny(),
         ]
+
+    # =========================================================
+    # PAYMENT FOR A BOOKING
+    # =========================================================
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: PaymentSerializer,
+            404: OpenApiResponse(
+                description="No payment has been submitted for this booking.",
+            ),
+        },
+        description=(
+            "The payment attached to one booking. "
+            "Public, because the customer flow is unauthenticated: "
+            "someone who has just paid needs to see whether their "
+            "receipt was verified, and they only ever learn about one "
+            "booking at a time from their own confirmation."
+        ),
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="by-booking/(?P<booking_id>[^/.]+)",
+    )
+    def by_booking(
+        self,
+        request,
+        booking_id=None,
+    ):
+        """
+        Return the single payment for a booking, or 404 if none.
+
+        `booking` is a OneToOneField, so this can only ever match one
+        row - there is no list to leak here, and no way to walk the
+        shop's payments by changing the id.
+        """
+
+        payment = generics.get_object_or_404(
+            Payment.objects.select_related(
+                "booking",
+                "booking__service",
+                "verified_by",
+            ),
+            booking_id=booking_id,
+        )
+
+        return Response(
+            self.get_serializer(payment).data
+        )
 
     # =========================================================
     # CREATE PAYMENT
@@ -181,6 +238,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
             payment=payment,
             verified_by=request.user,
         )
+        log_action(request, "payment.verified", payment, {"amount": str(payment.amount)})
 
         return Response(
             self.get_serializer(
@@ -253,6 +311,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
             payment=payment,
             reason=reason,
         )
+        log_action(request, "payment.rejected", payment, {"reason": reason, "amount": str(payment.amount)})
 
         return Response(
             self.get_serializer(
