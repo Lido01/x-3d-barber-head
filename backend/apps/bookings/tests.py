@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.accounts.models import StaffAccess
 from apps.services.models import Service
 from .models import Barber, Booking
 from .services import get_available_times
@@ -23,6 +24,13 @@ class BookingApiTests(APITestCase):
             username="bookings-admin",
             password="test-password",
             is_staff=True,
+        )
+        # Staff access is granted through StaffAccess; `is_staff` alone
+        # is not a way into the console. An administrator holds every
+        # capability implicitly, which is what these tests need.
+        StaffAccess.objects.create(
+            user=self.admin,
+            role=StaffAccess.Role.ADMIN,
         )
         self.client.force_authenticate(self.admin)
 
@@ -209,6 +217,10 @@ class BookingStatusTransitionTests(APITestCase):
             username="status-admin",
             password="test-password",
             is_staff=True,
+        )
+        StaffAccess.objects.create(
+            user=self.admin,
+            role=StaffAccess.Role.ADMIN,
         )
         self.customer = get_user_model().objects.create_user(
             username="status-customer",

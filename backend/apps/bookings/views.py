@@ -27,6 +27,8 @@ from .services import (
     confirm_booking,
     get_available_times,
 )
+from apps.accounts.permissions import capability_permission
+from apps.accounts.audit import log_action
 
 
 class BookingViewSet(viewsets.ModelViewSet):
@@ -88,10 +90,8 @@ class BookingViewSet(viewsets.ModelViewSet):
                 AllowAny(),
             ]
 
-        return [
-            IsAuthenticated(),
-            IsAdminUser(),
-        ]
+        capability = "bookings.view" if self.action in ["list", "retrieve"] else "bookings.manage"
+        return [IsAuthenticated(), capability_permission(capability)()]
 
     # ---------------------------------------------------------
     # CREATE BOOKING
@@ -188,6 +188,7 @@ class BookingViewSet(viewsets.ModelViewSet):
         )
 
         booking = serializer.save()
+        log_action(request, "booking.updated", booking)
 
         output = self.get_serializer(
             booking
@@ -221,6 +222,7 @@ class BookingViewSet(viewsets.ModelViewSet):
     ):
         booking = self.get_object()
 
+        log_action(request, "booking.deleted", booking)
         booking.delete()
 
         return Response(
@@ -262,6 +264,7 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking = cancel_booking(
             booking
         )
+        log_action(request, "booking.cancelled", booking)
 
         return Response(
             self.get_serializer(
@@ -305,6 +308,7 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking = confirm_booking(
             booking
         )
+        log_action(request, "booking.confirmed", booking)
 
         return Response(
             self.get_serializer(
@@ -348,6 +352,7 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking = complete_booking(
             booking
         )
+        log_action(request, "booking.completed", booking)
 
         return Response(
             self.get_serializer(
@@ -495,7 +500,7 @@ class BarberViewSet(viewsets.ModelViewSet):
         ]:
             return [AllowAny()]
 
-        return [IsAdminUser()]
+        return [capability_permission("services.manage")()]
 
     def get_queryset(self):
         queryset = Barber.objects.all()
@@ -506,3 +511,21 @@ class BarberViewSet(viewsets.ModelViewSet):
         return queryset.filter(
             is_active=True
         )
+
+    def perform_create(self, serializer):
+        barber = serializer.save()
+        log_action(self.request, "barber.created", barber, {"name": barber.name})
+
+    def perform_update(self, serializer):
+        barber = serializer.save()
+        log_action(self.request, "barber.updated", barber, {"fields": sorted(serializer.validated_data.keys()), "active": barber.is_active})
+
+    def perform_destroy(self, instance):
+        # A booking protects its barber, so this raises before the row
+        # goes; capturing the name first means the log still records
+        # which barber an owner tried to remove.
+        name = instance.name
+
+        log_action(self.request, "barber.deleted", details={"name": name})
+
+        instance.delete()

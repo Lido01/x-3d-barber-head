@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.accounts.models import StaffAccess
 from .models import Testimonial
 from .services import resolve_reviewer_name
 
@@ -35,6 +36,10 @@ class TestimonialApiTests(APITestCase):
             username="testimonials-admin",
             password="test-password",
             is_staff=True,
+        )
+        StaffAccess.objects.create(
+            user=self.staff,
+            role=StaffAccess.Role.ADMIN,
         )
 
     def payload(self, **overrides):
