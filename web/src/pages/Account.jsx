@@ -61,14 +61,14 @@ export default function Account() {
         <button
           type="button"
           onClick={signOut}
-          className="flex w-full items-center justify-center gap-2.5 rounded-full border border-white/15 px-6 py-4 text-sm font-semibold text-white/70 transition hover:border-[#e05a4f]/40 hover:text-[#e0776b]"
+          className="flex w-full items-center justify-center gap-2.5  border border-white/15 px-6 py-4 text-sm font-semibold text-white/70 transition hover:border-[#e05a4f]/40 hover:text-[#e0776b]"
         >
           <LogOut size={15} />
           {t("account.signOut")}
         </button>
       }
     >
-      <section className="rounded-2xl border border-white/10 bg-[#111] p-5">
+      <section className=" border border-white/10 bg-[#111] p-5">
         <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
           {t("account.signedInAs")}
         </p>
@@ -94,14 +94,14 @@ export default function Account() {
             type="button"
             onClick={load}
             aria-label={t("common.retry")}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white"
+            className="flex h-10 w-10 items-center justify-center  border border-white/15 text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white"
           >
             <RefreshCw size={14} />
           </button>
         </div>
 
         {loading && (
-          <div className="mt-4 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-14">
+          <div className="mt-4 flex items-center justify-center  border border-white/10 bg-[#111] py-14">
             <Spinner label={t("account.loadingReviews")} />
           </div>
         )}
@@ -133,21 +133,9 @@ export default function Account() {
             {reviews.map((review) => (
               <li
                 key={review.id}
-                className="rounded-2xl border border-white/10 bg-[#111] p-4"
+                className=" border border-white/10 bg-[#111] p-4"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-0.5 text-[#d6a85f]">
-                    {Array.from({ length: review.rating }).map(
-                      (_, index) => (
-                        <Star
-                          key={index}
-                          size={13}
-                          fill="currentColor"
-                        />
-                      )
-                    )}
-                  </div>
-
                   <StatusBadge
                     status={review.status}
                     kind="testimonial"
@@ -163,7 +151,7 @@ export default function Account() {
                     src={mediaUrl(review.photo)}
                     alt={t("account.reviewPhotoAlt")}
                     loading="lazy"
-                    className="mt-3 h-28 w-full rounded-xl object-cover"
+                    className="mt-3 h-28 w-full  object-cover"
                   />
                 )}
 

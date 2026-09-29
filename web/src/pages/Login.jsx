@@ -64,7 +64,8 @@ export default function Login() {
       title={t("account.signInTitle")}
       lead={t("account.signInLead")}
       footer={
-        <p className="text-center text-sm text-white/45">
+        <div className="space-y-3 text-center text-sm text-white/45">
+          <p>
           {t("account.noAccount")}{" "}
           <Link
             to="/register"
@@ -73,13 +74,14 @@ export default function Login() {
           >
             {t("account.createOne")}
           </Link>
-        </p>
+          </p>
+        </div>
       }
     >
       <form
         onSubmit={handleSubmit}
         noValidate
-        className="grid gap-5 rounded-[2rem] border border-white/10 bg-[#111] p-5 sm:p-7"
+        className="grid gap-5 border-white/10 bg-[#111] p-5 sm:p-7"
       >
         <div>
           <label className={LABEL} htmlFor="customer-username">

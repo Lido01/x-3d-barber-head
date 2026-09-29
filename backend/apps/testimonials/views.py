@@ -26,6 +26,8 @@ from .services import (
     reject_testimonial,
     resolve_reviewer_name,
 )
+from apps.accounts.permissions import capability_permission
+from apps.accounts.audit import log_action
 
 
 class TestimonialViewSet(viewsets.ModelViewSet):
@@ -94,9 +96,7 @@ class TestimonialViewSet(viewsets.ModelViewSet):
             "reject",
             "destroy",
         ]:
-            return [
-                IsAdminUser()
-            ]
+            return [capability_permission("reviews.moderate")()]
 
         if self.action in [
             "create",
@@ -257,6 +257,8 @@ class TestimonialViewSet(viewsets.ModelViewSet):
             testimonial
         )
 
+        log_action(request, "testimonial.approved", testimonial, {"customer": testimonial.customer_name, "rating": testimonial.rating})
+
         return Response(
             self.get_serializer(
                 testimonial
@@ -295,6 +297,8 @@ class TestimonialViewSet(viewsets.ModelViewSet):
             testimonial
         )
 
+        log_action(request, "testimonial.rejected", testimonial, {"customer": testimonial.customer_name, "rating": testimonial.rating})
+
         return Response(
             self.get_serializer(
                 testimonial
@@ -324,7 +328,11 @@ class TestimonialViewSet(viewsets.ModelViewSet):
     ):
         testimonial = self.get_object()
 
+        name = testimonial.customer_name
+
         testimonial.delete()
+
+        log_action(request, "testimonial.deleted", details={"customer": name})
 
         return Response(
             status=status.HTTP_204_NO_CONTENT

@@ -8,6 +8,7 @@ import {
   LogIn,
   Scissors,
   Sparkles,
+  CircleHelp,
   UserRound,
 } from "lucide-react";
 
@@ -65,7 +66,7 @@ export default function BottomBar() {
   }
 
   const base =
-    "flex flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 text-[10px] font-medium transition-colors";
+    "flex flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10px] font-medium transition-colors";
 
   const tabClass = (active) =>
     `${base} ${active ? "text-white" : "text-white/45 active:text-white/80"}`;
@@ -127,7 +128,7 @@ export default function BottomBar() {
 
       {/* More sheet */}
       <div
-        className={`absolute inset-x-3 bottom-[calc(100%+0.75rem)] overflow-hidden rounded-3xl border border-white/10 bg-[#0c0c0c]/95 backdrop-blur-2xl transition-all duration-300 ${
+        className={`absolute inset-x-3 bottom-[calc(100%+0.75rem)] overflow-hidden border border-white/10 bg-[#0c0c0c]/95 backdrop-blur-2xl transition-all duration-300 ${
           moreOpen
             ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none translate-y-3 opacity-0"
@@ -137,7 +138,7 @@ export default function BottomBar() {
           <NavLink
             to="/gallery"
             onClick={() => setMoreOpen(false)}
-            className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
           >
             <LayoutGrid size={18}  />
             {t("nav.gallery")}
@@ -146,7 +147,7 @@ export default function BottomBar() {
           <NavLink
             to="/haircuts"
             onClick={() => setMoreOpen(false)}
-            className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
           >
             <Sparkles size={18} />
             {t("nav.haircuts")}
@@ -155,20 +156,29 @@ export default function BottomBar() {
           <NavLink
             to="/#about"
             onClick={() => setMoreOpen(false)}
-            className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
           >
             <CalendarDays size={18} />
             {t("nav.about")}
           </NavLink>
 
-          <Link
+          <NavLink
+            to="/help"
+            onClick={() => setMoreOpen(false)}
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
+          >
+            <CircleHelp size={18} />
+            Help & FAQ
+          </NavLink>
+
+          {/* <Link
             to="/admin"
             onClick={() => setMoreOpen(false)}
             className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
           >
             <UserRound size={18} />
             {t("nav.staff")}
-          </Link>
+          </Link> */}
 
           {/* Account entry point. A signed-in customer goes straight to
               their reviews; a visitor is sent to sign in. */}
@@ -176,7 +186,7 @@ export default function BottomBar() {
             <NavLink
               to="/account"
               onClick={() => setMoreOpen(false)}
-              className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+              className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
             >
               <CircleUser size={18} />
               {t("account.title")}
@@ -186,7 +196,7 @@ export default function BottomBar() {
               to="/login"
               state={{ from: location.pathname }}
               onClick={() => setMoreOpen(false)}
-              className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+              className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
             >
               <LogIn size={18} />
               {t("account.signInTitle")}

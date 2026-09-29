@@ -24,7 +24,7 @@ import {
 const LABEL = "text-[10px] uppercase tracking-[0.25em] text-white/35";
 
 const INPUT =
-  "w-full rounded-xl border border-white/10 bg-[#181818] px-4 py-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50";
+  "w-full  border border-white/10 bg-[#181818] px-4 py-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50";
 
 function validate({ serviceId, bookingDate, startTime, name, phone }) {
   const errors = {};
@@ -235,18 +235,16 @@ export default function Booking() {
 
             <div className="mt-10 space-y-5 border-t border-white/10 pt-7">
               <div className="flex gap-4">
-                <Scissors size={17} className="mt-1 text-[#d6a85f]" />
+                <Scissors size={17} className="mt-1" />
                 <div>
-                  <p className="text-sm font-medium">Tailored to you</p>
                   <p className="mt-1 text-xs text-white/35">
                     Every service includes a clear price and time.
                   </p>
                 </div>
               </div>
               <div className="flex gap-4">
-                <Clock3 size={17} className="mt-1 text-[#d6a85f]" />
+                <Clock3 size={17} className="mt-1" />
                 <div>
-                  <p className="text-sm font-medium">Live shop schedule</p>
                   <p className="mt-1 text-xs text-white/35">
                     Choose only from slots the backend confirms.
                   </p>
@@ -258,7 +256,7 @@ export default function Booking() {
           <form
             onSubmit={handleSubmit}
             noValidate
-            className="rounded-[2rem] border border-white/10 bg-[#111] p-6 sm:p-8"
+            className="border border-white/10 bg-[#111] p-6 sm:p-8"
           >
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
               <div>
@@ -271,7 +269,7 @@ export default function Booking() {
                 {[1, 2, 3].map((number) => (
                   <span
                     key={number}
-                    className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold transition ${
+                    className={`flex h-8 w-8 items-center justify-center  border text-xs font-semibold transition ${
                       step >= number
                         ? "border-[#d6a85f] bg-[#d6a85f] text-black"
                         : "border-white/15 text-white/35"
@@ -399,7 +397,7 @@ export default function Booking() {
                       </div>
                     </div>
 
-                    <details className="group mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                    <details className="group mt-3  border border-white/10 bg-white/[0.02] px-4 py-3">
                       <summary className="cursor-pointer list-none text-xs text-white/45 marker:hidden">
                         Add a note for your barber <span className="text-white/20">(optional)</span>
                       </summary>
@@ -415,7 +413,7 @@ export default function Booking() {
                     </details>
 
                     {barbers.available && (
-                      <details className="group mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                      <details className="group mt-3  border border-white/10 bg-white/[0.02] px-4 py-3">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs text-white/45 marker:hidden">
                           <span>Prefer a specific barber?</span>
                           <span className="text-[#d6a85f]">Optional</span>
@@ -459,11 +457,11 @@ export default function Booking() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="group flex w-full items-center justify-center gap-3 rounded-full bg-[#d6a85f] px-6 py-4 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group flex w-full items-center justify-center gap-3  bg-[#d6a85f] px-6 py-4 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting ? (
                     <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
+                      <span className="h-4 w-4 animate-spin  border-2 border-black/25 border-t-black" />
                       Reserving your slot...
                     </>
                   ) : (
@@ -482,7 +480,7 @@ export default function Booking() {
         </div>
 
         {selectedService && (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#d6a85f]/20 bg-[#d6a85f]/[0.05] px-5 py-4 text-xs text-white/50">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3  border border-[#d6a85f]/20 bg-[#d6a85f]/[0.05] px-5 py-4 text-xs text-white/50">
             <span>{selectedService.name} · {formatPrice(selectedService.price)} · {formatDuration(selectedService.duration)}</span>
             <span>
               {bookingDate ? formatDate(bookingDate) : "Choose a date"}

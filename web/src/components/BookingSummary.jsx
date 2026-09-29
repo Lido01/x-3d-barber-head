@@ -39,7 +39,7 @@ export default function BookingSummary({ booking, children, className = "" }) {
 
   return (
     <div
-      className={`rounded-2xl border border-white/10 bg-white/[0.02] p-5 sm:p-6 ${className}`}
+      className={`border-white/10 bg-white/[0.02] p-5 sm:p-6 ${className}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -64,7 +64,7 @@ export default function BookingSummary({ booking, children, className = "" }) {
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
         {rows.map(({ icon: Icon, label, value }) => (
           <div key={label} className="flex gap-3">
-            <Icon size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" />
+            <Icon size={15} className="mt-0.5 shrink-0" />
 
             <div className="min-w-0">
               <dt className="text-[10px] uppercase tracking-[0.2em] text-white/30">

@@ -94,7 +94,7 @@ export default function Register() {
       <form
         onSubmit={handleSubmit}
         noValidate
-        className="grid gap-5 rounded-[2rem] border border-white/10 bg-[#111] p-5 sm:p-7"
+        className="grid gap-5 border border-white/10 bg-[#111] p-5 sm:p-7"
       >
         <div className="grid gap-5 sm:grid-cols-2">
           <div>

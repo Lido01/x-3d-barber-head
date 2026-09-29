@@ -68,7 +68,7 @@ export default function LanguageSwitcher({ variant = "dropdown", className = "" 
                 type="button"
                 onClick={() => choose(language.code)}
                 aria-current={selected}
-                className={`flex w-full items-center justify-between gap-3 rounded-2xl p-4 text-left text-sm font-medium transition ${
+                className={`flex w-full items-center justify-between gap-3 p-4 text-left text-sm font-medium transition ${
                   selected
                     ? "bg-[#d6a85f] text-black"
                     : "bg-white/[0.03] text-white/70 hover:bg-white/[0.07] hover:text-white"
