@@ -209,11 +209,6 @@ export default function Testimonials() {
                 aria-pressed={value === rating}
                 className="p-0.5 transition-transform hover:scale-110"
               >
-                <Star
-                  size={26}
-                  className={filled ? "text-[#d6a85f]" : "text-white/20"}
-                  fill={filled ? "currentColor" : "none"}
-                />
               </button>
             );
           })}

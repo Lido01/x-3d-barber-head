@@ -23,7 +23,7 @@ export default function AuthShell({
           <Link
             to="/"
             aria-label="Back to the site"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 transition hover:border-[#d6a85f]/40"
+            className="flex h-10 w-10 shrink-0 items-center justify-center border border-white/10 transition hover:border-[#d6a85f]/40"
           >
             <Scissors size={16} className="text-[#d6a85f]" />
           </Link>
@@ -35,19 +35,9 @@ export default function AuthShell({
       </header>
 
       <div className="mx-auto w-full max-w-md px-4 pb-24 pt-8 sm:px-6 sm:pt-12">
-        {eyebrow && (
-          <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
-            {eyebrow}
-          </p>
-        )}
-
         <h1 className="mt-3 font-serif text-3xl leading-tight text-white sm:text-4xl">
           {title}
         </h1>
-
-        {lead && (
-          <p className="mt-3 text-sm leading-6 text-white/45">{lead}</p>
-        )}
 
         <div className="mt-7">{children}</div>
 
