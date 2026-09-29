@@ -1,4 +1,4 @@
-import { AtSign, MapPin, Phone, Clock3 } from "lucide-react";
+import { MapPin, Phone, Clock3, Send, Music2, Mail, CircleHelp } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useLanguage } from "../i18n/LanguageContext";
@@ -29,18 +29,21 @@ export default function Footer() {
           </p>
 
           <div className="mt-6 flex gap-3">
-            <button
-              aria-label={t("footer.social")}
+            <a
+              href="https://www.tiktok.com/"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Follow NOIR on TikTok"
               className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-white/50 transition hover:border-[#d6a85f] hover:text-[#d6a85f]"
             >
-              <AtSign size={16} />
-            </button>
-            <button
-              aria-label={t("footer.phone")}
+              <Music2 size={16} />
+            </a>
+            <a href="https://t.me/" target="_blank" rel="noreferrer" aria-label="Message NOIR on Telegram"
               className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-white/50 transition hover:border-[#d6a85f] hover:text-[#d6a85f]"
             >
-              <Phone size={16} />
-            </button>
+              <Send size={16} />
+            </a>
+            <a href="https://www.facebook.com/" target="_blank" rel="noreferrer" aria-label="Follow NOIR on Facebook" className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-sm font-bold text-white/50 transition hover:border-[#d6a85f] hover:text-[#d6a85f]">f</a>
           </div>
         </div>
 
@@ -57,6 +60,15 @@ export default function Footer() {
               <Clock3 size={15} className="mt-0.5 shrink-0" />{" "}
               {t("findUs.openDaily")}
             </li>
+          </ul>
+        </div>
+
+        <div className="justify-self-end">
+          <p className="text-[10px] uppercase tracking-[.25em] text-white/30">Need a hand?</p>
+          <ul className="mt-4 space-y-3 text-sm text-white/50">
+            <li><Link to="/help" className="flex items-center gap-2 transition hover:text-[#d6a85f]"><CircleHelp size={15} /> Help & FAQ</Link></li>
+            <li><a href="tel:+251911000000" className="flex items-center gap-2 transition hover:text-[#d6a85f]"><Phone size={15} /> Call the studio</a></li>
+            <li><a href="mailto:hello@noirbarbers.com" className="flex items-center gap-2 transition hover:text-[#d6a85f]"><Mail size={15} /> Email support</a></li>
           </ul>
         </div>
       </div>

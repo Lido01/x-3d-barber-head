@@ -31,6 +31,7 @@ export default function Navbar() {
     { label: t("nav.haircuts"), to: "/haircuts" },
     { label: t("nav.barbers"), to: "/barbers" },
     { label: t("nav.gallery"), to: "/gallery" },
+    { label: "Help", to: "/help" },
     { label: t("nav.about"), to: "/#about" },
   ];
 
@@ -143,12 +144,12 @@ export default function Navbar() {
         <div className="hidden items-center gap-6 lg:flex">
           <LanguageSwitcher />
 
-          <Link
+          {/* <Link
             to="/admin"
             className="text-[13px] font-medium tracking-[0.08em] text-white/40 transition hover:text-white"
           >
             {t("nav.staff")}
-          </Link>
+          </Link> */}
 
           {/* A signed-in customer gets their name and a way back to
               their reviews; a visitor gets a plain sign-in link. */}
