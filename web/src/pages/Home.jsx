@@ -36,7 +36,7 @@ function LookModal({ post, close }) {
       onMouseDown={close}
     >
       <div
-        className="w-full max-w-lg overflow-hidden  border border-white/15 bg-[#111]"
+        className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/15 bg-[#111]"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <img
@@ -56,14 +56,14 @@ function LookModal({ post, close }) {
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <Link
               to={post.service ? `/booking?service=${post.service}` : "/booking"}
-              className="flex-1  bg-[#d6a85f] px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
+              className="flex-1 rounded-full bg-[#d6a85f] px-6 py-3 text-center text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
             >
               {t("look.cta")}
             </Link>
 
             <button
               onClick={close}
-              className="flex-1  border border-white/15 px-6 py-3 text-sm text-white/70 transition hover:bg-white/5"
+              className="flex-1 rounded-full border border-white/15 px-6 py-3 text-sm text-white/70 transition hover:bg-white/5"
             >
               {t("look.close")}
             </button>

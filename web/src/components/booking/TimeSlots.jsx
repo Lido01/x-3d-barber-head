@@ -21,7 +21,7 @@ export default function TimeSlots({
 }) {
   if (needsService || needsDate) {
     return (
-      <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-center text-xs text-white/35">
+      <p className=" rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-center text-xs text-white/35">
         {needsService
           ? "Choose a service to see available times."
           : "Choose a date to see available times."}
@@ -31,7 +31,7 @@ export default function TimeSlots({
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-8 text-center">
+      <div className=" rounded-xl border border-white/10 bg-white/[0.02] px-4 py-8 text-center">
         <Spinner label="Checking available times..." />
       </div>
     );

@@ -76,7 +76,7 @@ export default function Haircuts() {
         </div>
 
         {loading && (
-          <div className="mt-14 flex items-center justify-center  border border-white/10 bg-[#111] py-24">
+          <div className="mt-14 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
             <Spinner label="Loading haircuts..." />
           </div>
         )}
@@ -122,7 +122,7 @@ export default function Haircuts() {
                 <button
                   key={`${cut.service?.id || "root"}-${cut.id || cut.name}`}
                   onClick={() => setSelected(cut)}
-                  className="group relative min-h-[420px] overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
+                  className="group relative min-h-[420px] rounded-2xl overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
                 >
                   {cut.image ? (
                     <img
@@ -138,7 +138,7 @@ export default function Haircuts() {
                     <span className="font-serif text-4xl text-white/50">
                       {cut.service?.id || "N"}
                     </span>
-                    <span className="border border-white/20 bg-black/30 px-3 py-1 text-[9px] uppercase tracking-widest text-white/80 backdrop-blur">
+                    <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-[9px] uppercase tracking-widest text-white/80 backdrop-blur">
                       {cut.service?.name || "NOIR service"}
                     </span>
                   </div>
@@ -188,7 +188,7 @@ function CutModal({ cut, close }) {
       onMouseDown={close}
     >
       <article
-        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
+        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto rounded-2xl border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button

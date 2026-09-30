@@ -49,9 +49,9 @@ export default function FindUs() {
   return (
     <section
       id="find-us"
-      className="relative overflow-hidden border-t border-white/10  px-5 py-20 sm:px-8 sm:py-24 lg:px-10"
+      className="relative overflow-hidden border-t border-white/10 px-5 py-20 sm:px-8 sm:py-24 lg:px-10"
     >
-      <div className="pointer-events-none absolute right-[-10%] top-1/4 h-[380px] w-[380px]  bg-[#d6a85f]/[0.06] blur-[140px]" />
+      <div className="pointer-events-none absolute right-[-10%] top-1/4 h-[380px] w-[380px] rounded-full bg-[#d6a85f]/[0.06] blur-[140px]" />
 
       <div className="relative mx-auto max-w-[1440px]">
         <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
@@ -100,7 +100,7 @@ export default function FindUs() {
                   href={directionsUrl()}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="inline-flex items-center gap-2  bg-[#f3d29d] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
+                  className="inline-flex items-center gap-2 rounded-full bg-[#f3d29d] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
                 >
                   <Navigation size={15} />
                   {t("findUs.getDirections")}
@@ -153,7 +153,7 @@ export default function FindUs() {
           {/* ---------- map ---------- */}
           <Reveal delay={120}>
             <div className="relative">
-              <div className="overflow-hidden border border-white/10">
+              <div className="rounded-2xl overflow-hidden border border-white/10">
                 <iframe
                   title={t("findUs.mapTitle")}
                   src={openStreetMapEmbedUrl()}
