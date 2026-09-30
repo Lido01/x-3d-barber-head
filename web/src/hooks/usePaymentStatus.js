@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
+
+import { useQuery } from "./useQuery";
 
 import { findPaymentForBooking, getPayment } from "../services/paymentApi";
 
@@ -12,90 +14,60 @@ import { findPaymentForBooking, getPayment } from "../services/paymentApi";
  *
  * Looks the payment up by id when one is known, and otherwise finds it
  * by booking id (useful after a refresh in a fresh tab).
+ *
+ * This is the one hook that must not be cached: a staff member verifying
+ * a receipt has to see the status change. `staleMs: 0` means every read
+ * is a real request, so the cache only serves to dedupe the mount fetch
+ * and to share it with any other component watching the same booking.
  */
 export function usePaymentStatus({ bookingId, paymentId, pollMs = 0 }) {
-  const [payment, setPayment] = useState(null);
-  const [loading, setLoading] = useState(Boolean(bookingId || paymentId));
-  const [error, setError] = useState(null);
+  const ready = Boolean(bookingId || paymentId);
 
-  const controllerRef = useRef(null);
-
-  const load = useCallback(
-    ({ quiet = false } = {}) => {
-      if (!bookingId && !paymentId) {
-        return Promise.resolve(null);
-      }
-
-      controllerRef.current?.abort();
-
-      const controller = new AbortController();
-      controllerRef.current = controller;
-
-      if (!quiet) {
-        setLoading(true);
-      }
-
-      const request = paymentId
-        ? getPayment(paymentId, { signal: controller.signal })
-        : findPaymentForBooking(bookingId, { signal: controller.signal });
-
-      return request
-        .then((data) => {
-          setPayment(data);
-          setError(null);
-          setLoading(false);
-
-          return data;
-        })
-        .catch((apiError) => {
-          if (apiError?.isCancelled) {
-            return null;
-          }
-
-          // A 404 simply means no payment has been submitted yet.
-          if (apiError?.status === 404) {
-            setPayment(null);
-            setError(null);
-          } else {
-            setError(apiError);
-          }
-
-          setLoading(false);
-
-          return null;
-        });
-    },
-    [bookingId, paymentId]
+  const { data, error, loading, refetch } = useQuery(
+    paymentId
+      ? `/payments/payments/${paymentId}/`
+      : `/payments/payments/by-booking/${bookingId}/`,
+    (signal) =>
+      paymentId
+        ? getPayment(paymentId, { signal })
+        : findPaymentForBooking(bookingId, { signal }),
+    {
+      enabled: ready,
+      staleMs: 0,
+    }
   );
 
-  useEffect(() => {
-    load();
+  // A 404 simply means no payment has been submitted yet, which is a
+  // normal state on this screen rather than a failure.
+  const isMissing = error?.status === 404;
 
-    return () => {
-      controllerRef.current?.abort();
-    };
-  }, [load]);
+  const refresh = useCallback(() => refetch(), [refetch]);
 
   // Optional background refresh, e.g. while waiting for an admin to
-  // verify the receipt.
+  // verify the receipt. Only worth running while the answer can still
+  // change: a verified or rejected payment is final, so stop asking.
   useEffect(() => {
-    if (!pollMs) {
+    if (!pollMs || !ready) {
+      return undefined;
+    }
+
+    if (data && data.status !== "pending") {
       return undefined;
     }
 
     const timer = setInterval(() => {
-      load({ quiet: true });
+      void refetch();
     }, pollMs);
 
     return () => {
       clearInterval(timer);
     };
-  }, [pollMs, load]);
+  }, [pollMs, ready, data, refetch]);
 
   return {
-    payment,
-    loading,
-    error,
-    refresh: () => load({ quiet: true }),
+    payment: data || null,
+    loading: ready && loading,
+    error: isMissing ? null : error,
+    refresh,
   };
 }
