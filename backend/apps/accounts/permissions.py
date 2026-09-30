@@ -11,9 +11,12 @@ CAPABILITY_CATALOG = [
     ("payments.view", "View payments"),
     ("payments.verify", "Verify payments"),
     ("customers.view", "View customers"),
+    ("customers.manage", "Edit & add customers"),
+    ("customers.delete", "Delete customer accounts"),
     ("services.manage", "Manage services & barbers"),
     ("gallery.manage", "Manage gallery"),
     ("reviews.moderate", "Moderate reviews"),
+    ("settings.manage", "Change shop settings"),
 ]
 
 CAPABILITIES = [value for value, _ in CAPABILITY_CATALOG]
