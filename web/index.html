@@ -14,6 +14,38 @@
       as the app mounts; it is set here so the tag is correct before hydration
       and for anything that reads the DOM before React runs.
     -->
+    <!--
+      The theme is applied here rather than in React, because React only
+      mounts after the bundle has downloaded and parsed. On a cold load
+      that is long enough for a light console to flash before it settles
+      into dark, which is exactly the jarring thing a theme toggle is
+      supposed to avoid. Three lines of inline script run before first
+      paint and the flash never happens.
+
+      Kept deliberately tiny and dependency-free: it cannot import the
+      theme module, so the storage key and the accepted values are
+      repeated here. utils/theme.js says so too, and the two must be
+      changed together.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("noir.console.theme");
+
+          // Anything unrecognised falls back to "auto" rather than
+          // being trusted, so a corrupted value cannot lock the console
+          // into an unreadable theme.
+          var theme =
+            stored === "light" || stored === "dark" ? stored : "auto";
+
+          document.documentElement.setAttribute("data-theme", theme);
+        } catch (error) {
+          // Private browsing can refuse storage. The CSS default is
+          // light, which is readable, so there is nothing to recover.
+          document.documentElement.setAttribute("data-theme", "auto");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
