@@ -9,6 +9,7 @@ import ScrollToTop from "./components/ScrollToTop";
 import AdminLayout from "./components/admin/AdminLayout";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
 import { CustomerAuthProvider } from "./context/CustomerAuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import { LanguageProvider } from "./i18n/LanguageContext";
 
 import Home from "./pages/Home";
@@ -37,6 +38,7 @@ import AdminCustomers from "./pages/admin/AdminCustomers";
 import AdminTeam from "./pages/admin/AdminTeam";
 import AdminAuditLog from "./pages/admin/AdminAuditLog";
 import AdminUsers from "./pages/admin/AdminUsers";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 /**
  * Staff-only screen chunk. Each admin route is wrapped in RequireAdmin
@@ -59,11 +61,16 @@ function AdminScreen({ children, capability, peopleOnly = false }) {
 export default function App() {
   return (
     <LanguageProvider>
-      <AdminAuthProvider>
-        <CustomerAuthProvider>
-          <Shell />
-        </CustomerAuthProvider>
-      </AdminAuthProvider>
+      {/* Outside the auth providers on purpose: the theme is a device
+          preference, and the sign-in screen is the one screen that has
+          to render correctly before anyone is signed in. */}
+      <ThemeProvider>
+        <AdminAuthProvider>
+          <CustomerAuthProvider>
+            <Shell />
+          </CustomerAuthProvider>
+        </AdminAuthProvider>
+      </ThemeProvider>
     </LanguageProvider>
   );
 }
@@ -168,6 +175,16 @@ function Shell() {
           <Route
             path="/admin/testimonials"
             element={<AdminScreen capability="reviews.moderate"><AdminTestimonials /></AdminScreen>}
+          />
+
+          {/* Shop settings. No capability gate on the screen itself:
+              reading the shop's own details is not privileged - a
+              receptionist reading out the address needs the same record
+              an owner edits. The endpoint decides who may write, and
+              the screen renders its controls accordingly. */}
+          <Route
+            path="/admin/settings"
+            element={<AdminScreen><AdminSettings /></AdminScreen>}
           />
 
           <Route path="*" element={<NotFound />} />

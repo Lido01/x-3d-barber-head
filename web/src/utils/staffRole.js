@@ -25,6 +25,11 @@ const UNLIMITED_ROLES = ["owner", "admin"];
  * them. Mirrors CAPABILITY_CATALOG in apps/accounts/permissions.py -
  * the API rejects anything not on its own list, so a capability
  * missing here would be one no admin could ever grant.
+ *
+ * The customer capabilities are three rather than one on purpose.
+ * Reading a customer's number to answer the phone, correcting it, and
+ * destroying the account are three different amounts of trust, and a
+ * shop should be able to hand out the first two without the third.
  */
 export const CAPABILITIES = [
   { value: "bookings.view", label: "View bookings" },
@@ -32,9 +37,12 @@ export const CAPABILITIES = [
   { value: "payments.view", label: "View payments" },
   { value: "payments.verify", label: "Verify payments" },
   { value: "customers.view", label: "View customers" },
+  { value: "customers.manage", label: "Edit & add customers" },
+  { value: "customers.delete", label: "Delete customer accounts" },
   { value: "services.manage", label: "Manage services & barbers" },
   { value: "gallery.manage", label: "Manage gallery" },
   { value: "reviews.moderate", label: "Moderate reviews" },
+  { value: "settings.manage", label: "Change shop settings" },
 ];
 
 /** Roles an administrator can assign from the console. */
