@@ -39,5 +39,14 @@ class GalleryPost(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+        # The public gallery filters on is_active and orders newest
+        # first; the moderation screen does the same over all rows.
+        indexes = [
+            models.Index(
+                fields=["is_active", "-created_at"],
+                name="gallery_active_created_idx",
+            ),
+        ]
+
     def __str__(self):
         return self.title

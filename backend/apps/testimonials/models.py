@@ -62,6 +62,16 @@ class Testimonial(models.Model):
                     "status",
                 ]
             ),
+            # The public wall and the moderation screen are both
+            # "newest first, narrowed by status", which the existing
+            # index cannot serve because it leads on user.
+            models.Index(
+                fields=[
+                    "status",
+                    "-created_at",
+                ],
+                name="testimonial_status_created_idx",
+            ),
         ]
 
     def __str__(self):
