@@ -1,11 +1,12 @@
 import {
+  CalendarCheck,
   CreditCard,
   Images,
   LayoutDashboard,
   MessageSquareQuote,
   Scissors,
   UserRound,
-  Users,
+  UserCog,
   ShieldCheck,
   ClipboardList,
 } from "lucide-react";
@@ -19,6 +20,10 @@ import { canManagePeople, hasCapability } from "../../utils/staffRole";
  * and the mobile tab bar - so a new admin screen cannot appear in one
  * and be missing from another. `end` marks the routes that must match
  * exactly, otherwise `/admin` would stay highlighted on every child.
+ *
+ * Every icon is distinct. Bookings and Users used to share one, which
+ * is invisible on a desktop sidebar and actively misleading in a tab
+ * bar where the person is recognising shapes rather than reading labels.
  *
  * Two kinds of gate, and the difference matters:
  *
@@ -34,18 +39,44 @@ import { canManagePeople, hasCapability } from "../../utils/staffRole";
  */
 export const ADMIN_NAV = [
   { label: "Overview", to: "/admin", icon: LayoutDashboard, end: true },
-  { label: "Bookings", to: "/admin/bookings", icon: Users, capability: "bookings.view" },
-  { label: "Customers", to: "/admin/customers", icon: UserRound, capability: "customers.view" },
-  { label: "Users", to: "/admin/users", icon: Users, peopleOnly: true },
+  {
+    label: "Bookings",
+    to: "/admin/bookings",
+    icon: CalendarCheck,
+    capability: "bookings.view",
+  },
+  {
+    label: "Customers",
+    to: "/admin/customers",
+    icon: UserRound,
+    capability: "customers.view",
+  },
+  { label: "Users", to: "/admin/users", icon: UserCog, peopleOnly: true },
   { label: "Team", to: "/admin/team", icon: ShieldCheck, peopleOnly: true },
   { label: "Activity", to: "/admin/activity", icon: ClipboardList, peopleOnly: true },
-  { label: "Payments", to: "/admin/payments", icon: CreditCard, capability: "payments.view" },
-  { label: "Services", to: "/admin/services", icon: Scissors, capability: "services.manage" },
-  { label: "Gallery", to: "/admin/gallery", icon: Images, capability: "gallery.manage" },
+  {
+    label: "Payments",
+    to: "/admin/payments",
+    icon: CreditCard,
+    capability: "payments.view",
+  },
+  {
+    label: "Services",
+    to: "/admin/services",
+    icon: Scissors,
+    capability: "services.manage",
+  },
+  {
+    label: "Gallery",
+    to: "/admin/gallery",
+    icon: Images,
+    capability: "gallery.manage",
+  },
   {
     label: "Reviews",
     to: "/admin/testimonials",
-    icon: MessageSquareQuote, capability: "reviews.moderate",
+    icon: MessageSquareQuote,
+    capability: "reviews.moderate",
   },
 ];
 
