@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import { getCurrentAccount, login as loginRequest } from "../services/authApi";
+import { clearCache } from "../services/queryCache";
 import { adminTokens } from "../utils/tokenStore";
 
 /**
@@ -87,6 +88,12 @@ export function AdminAuthProvider({ children }) {
       };
     }
 
+    // Anything cached during a previous session was fetched with the
+    // previous account's permissions. Starting clean here is what stops
+    // a second barber signing in on a shared machine from seeing a
+    // screen the first one was allowed to open.
+    clearCache();
+
     setAccount(data.user);
     setStatus("authenticated");
 
@@ -95,6 +102,7 @@ export function AdminAuthProvider({ children }) {
 
   const signOut = useCallback(() => {
     adminTokens.clearTokens();
+    clearCache();
     setAccount(null);
     setStatus("anonymous");
   }, []);

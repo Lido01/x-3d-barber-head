@@ -12,6 +12,7 @@ import {
   login as loginRequest,
   register as registerRequest,
 } from "../services/authApi";
+import { clearCache } from "../services/queryCache";
 import { customerTokens } from "../utils/tokenStore";
 
 /**
@@ -141,6 +142,9 @@ export function CustomerAuthProvider({ children }) {
 
   const signOut = useCallback(() => {
     customerTokens.clearTokens();
+    // Drops the cached "my reviews" list, which belongs to the account
+    // that just left rather than to whoever signs in next.
+    clearCache();
     setAccount(null);
     setStatus("anonymous");
   }, []);
