@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from "react";
 import { LogOut, RefreshCw, Star } from "lucide-react";
 
 import AuthShell from "../components/account/AuthShell";
@@ -10,6 +9,7 @@ import {
   useCustomerAuth,
 } from "../context/CustomerAuthContext";
 import { useLanguage } from "../i18n/LanguageContext";
+import { EMPTY_LIST, useQuery } from "../hooks/useQuery";
 import { mediaUrl } from "../services/api";
 import { listMyTestimonials } from "../services/testimonialsApi";
 import { formatDate } from "../utils/format";
@@ -27,28 +27,19 @@ export default function Account() {
   const { t } = useLanguage();
   const { account, signOut } = useCustomerAuth();
 
-  const [reviews, setReviews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Scoped to the customer audience, so a cached list here is never
+  // handed to the storefront or to staff.
+  const { data, loading, error, refetch } = useQuery(
+    "/testimonials/testimonials/mine/",
+    listMyTestimonials,
+    {
+      scope: "customer",
+      staleMs: 30 * 1000,
+      select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+    }
+  );
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    return listMyTestimonials()
-      .then((data) => {
-        setReviews(Array.isArray(data) ? data : data?.results || []);
-        setLoading(false);
-      })
-      .catch((apiError) => {
-        setError(apiError);
-        setLoading(false);
-      });
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const reviews = data || EMPTY_LIST;
 
   const name = customerDisplayName(account);
 
@@ -61,14 +52,14 @@ export default function Account() {
         <button
           type="button"
           onClick={signOut}
-          className="flex w-full items-center justify-center gap-2.5  border border-white/15 px-6 py-4 text-sm font-semibold text-white/70 transition hover:border-[#e05a4f]/40 hover:text-[#e0776b]"
+          className="flex w-full items-center justify-center gap-2.5 rounded-full border border-white/15 px-6 py-4 text-sm font-semibold text-white/70 transition hover:border-[#e05a4f]/40 hover:text-[#e0776b]"
         >
           <LogOut size={15} />
           {t("account.signOut")}
         </button>
       }
     >
-      <section className=" border border-white/10 bg-[#111] p-5">
+      <section className="rounded-2xl border border-white/10 bg-[#111] p-5">
         <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
           {t("account.signedInAs")}
         </p>
@@ -92,16 +83,16 @@ export default function Account() {
 
           <button
             type="button"
-            onClick={load}
+            onClick={refetch}
             aria-label={t("common.retry")}
-            className="flex h-10 w-10 items-center justify-center  border border-white/15 text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white"
           >
             <RefreshCw size={14} />
           </button>
         </div>
 
         {loading && (
-          <div className="mt-4 flex items-center justify-center  border border-white/10 bg-[#111] py-14">
+          <div className="mt-4 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-14">
             <Spinner label={t("account.loadingReviews")} />
           </div>
         )}
@@ -111,7 +102,7 @@ export default function Account() {
             tone="error"
             title={t("account.reviewsErrorTitle")}
             details={error.fieldErrors}
-            onRetry={load}
+            onRetry={refetch}
             className="mt-4"
           >
             {error.message}
@@ -133,7 +124,7 @@ export default function Account() {
             {reviews.map((review) => (
               <li
                 key={review.id}
-                className=" border border-white/10 bg-[#111] p-4"
+                className="rounded-2xl border border-white/10 bg-[#111] p-4"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <StatusBadge
@@ -151,7 +142,7 @@ export default function Account() {
                     src={mediaUrl(review.photo)}
                     alt={t("account.reviewPhotoAlt")}
                     loading="lazy"
-                    className="mt-3 h-28 w-full  object-cover"
+                    className="mt-3 h-28 w-full rounded-xl object-cover"
                   />
                 )}
 
