@@ -60,6 +60,12 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+
+    # After CommonMiddleware (it supplies the ETag machinery) and before
+    # anything that would consume the body, so a repeat read can be
+    # answered 304 without the view ever running.
+    'core.middleware.ConditionalGetMiddleware',
+
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
