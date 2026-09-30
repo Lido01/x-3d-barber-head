@@ -10,6 +10,7 @@ import Spinner from "../components/ui/Spinner";
 import { usePaymentStatus } from "../hooks/usePaymentStatus";
 import { useServices } from "../hooks/useServices";
 import { PAYMENT_METHODS, createPayment } from "../services/paymentApi";
+import { invalidateQuery } from "../hooks/useQuery";
 import {
   recallBooking,
   rememberBooking,
@@ -173,6 +174,11 @@ export default function Payment() {
 
       rememberPaymentId(bookingId, payment.id);
 
+      // The result page reads this same payment, and staff see it in
+      // their queue. Both are already cached from earlier reads, so the
+      // new row has to replace them rather than wait out a TTL.
+      invalidateQuery("payments");
+
       navigate(`/booking/success/${bookingId}`, {
         replace: true,
         state: { booking, payment },
@@ -215,7 +221,7 @@ export default function Payment() {
         </div>
 
         {existing.loading && (
-          <div className="mt-10 flex justify-center  border border-white/10 bg-[#111] py-12">
+          <div className="mt-10 flex justify-center rounded-2xl border border-white/10 bg-[#111] py-12">
             <Spinner label="Checking this booking..." />
           </div>
         )}
@@ -360,11 +366,11 @@ export default function Payment() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="group flex w-full items-center justify-center gap-3  bg-[#d6a85f] px-6 py-4 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group flex w-full items-center justify-center gap-3 rounded-full bg-[#d6a85f] px-6 py-4 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {submitting ? (
                       <>
-                        <span className="h-4 w-4 animate-spin  border-2 border-black/25 border-t-black" />
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
                         {receiptFile && progress !== null && progress < 100
                           ? `Uploading receipt... ${progress}%`
                           : "Submitting payment..."}
