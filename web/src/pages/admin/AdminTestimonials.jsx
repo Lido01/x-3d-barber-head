@@ -16,6 +16,7 @@ import {
 } from "../../components/admin/AdminUi";
 import { EMPTY_LIST, invalidateQuery, useQuery } from "../../hooks/useQuery";
 import { mediaUrl } from "../../services/api";
+import { toArray } from "../../utils/toArray";
 import {
   approveTestimonial,
   deleteTestimonial,
@@ -66,7 +67,7 @@ export default function AdminTestimonials() {
   } = useQuery("/testimonials/testimonials/", listAllTestimonials, {
     scope: "staff",
     staleMs: 30 * 1000,
-    select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+    select: toArray,
   });
 
   const items = data || EMPTY_LIST;

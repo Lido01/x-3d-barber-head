@@ -1,6 +1,7 @@
 import { CalendarDays, Clock3, Scissors, User } from "lucide-react";
 
 import StatusBadge from "./StatusBadge";
+import { bookingCodeOf } from "../utils/bookingCode";
 import { formatDate, formatTimeRange } from "../utils/format";
 
 /**
@@ -8,6 +9,10 @@ import { formatDate, formatTimeRange } from "../utils/format";
  *
  * Renders only what Django returned on the booking - including the
  * barber it assigned when the customer had no preference.
+ *
+ * The heading is the booking code rather than the row id, because that is
+ * the number the customer has to quote. `bookingCodeOf` falls back to the
+ * id only for a booking made before codes existed.
  */
 export default function BookingSummary({ booking, children, className = "" }) {
   if (!booking) {
@@ -47,8 +52,8 @@ export default function BookingSummary({ booking, children, className = "" }) {
             Booking
           </p>
 
-          <p className="mt-1 font-serif text-2xl text-white">
-            #{booking.id}
+          <p className="mt-1 font-serif text-2xl tracking-[0.08em] text-white">
+            {bookingCodeOf(booking)}
           </p>
         </div>
 

@@ -32,7 +32,7 @@ const LABEL = "text-[10px] uppercase tracking-[0.25em] text-white/35";
 const INPUT =
   "w-full  border border-white/10 bg-[#181818] px-4 py-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50";
 
-function validate({ amount, method }) {
+function validate({ amount, method, reference, receiptFile }) {
   const errors = {};
   const value = Number(amount);
 
@@ -44,6 +44,24 @@ function validate({ amount, method }) {
 
   if (!method) {
     errors.method = "Please choose how you paid.";
+  }
+
+  /*
+   * The gate that decides whether this payment can be verified at all.
+   *
+   * Staff match a payment against the bank by its reference, or read the
+   * amount off the screenshot. With neither, the only thing they have is
+   * the customer's word - so a payment with neither is refused by
+   * PaymentSerializer.validate, and saying so here means the customer is
+   * told before they have typed a screenshot into a file picker rather
+   * than after a failed upload.
+   *
+   * One of the two is enough; both together are better, which is what the
+   * copy below asks for.
+   */
+  if (!receiptFile && !String(reference).trim()) {
+    errors.evidence =
+      "Add a screenshot of the transfer or the transaction reference (TIN) from it - the shop needs one of the two to check your payment against the bank.";
   }
 
   return errors;
@@ -129,7 +147,14 @@ export default function Payment() {
       return null;
     }
 
-    const known = ["amount", "method", "transaction_reference", "receipt"];
+    const known = [
+      "amount",
+      "method",
+      "transaction_reference",
+      "receipt",
+      "booking",
+      "evidence",
+    ];
 
     const rest = Object.entries(apiError.fieldErrors).filter(
       ([key]) => !known.includes(key)
@@ -145,7 +170,7 @@ export default function Payment() {
       return;
     }
 
-    const errors = validate({ amount, method });
+    const errors = validate({ amount, method, reference, receiptFile });
 
     setLocalErrors(errors);
     setApiError(null);
@@ -215,8 +240,12 @@ export default function Payment() {
           </h1>
 
           <p className="mt-6 max-w-lg text-sm leading-7 text-white/45">
-            Your chair is reserved as pending. Send the payment, then upload
-            the receipt so the shop can verify it.
+            Your chair is held under booking code{" "}
+            <strong className="font-semibold tracking-[0.1em] text-white/80">
+              {booking?.booking_code || `#${bookingId}`}
+            </strong>
+            . Send the payment, then add either a screenshot of the transfer
+            or its transaction reference so the shop can verify it.
           </p>
         </div>
 
@@ -304,16 +333,26 @@ export default function Payment() {
                 {/* reference */}
                 <div>
                   <label className={LABEL} htmlFor="payment-reference">
-                    03 · Transaction reference
+                    03 · Transaction reference (TIN)
                   </label>
 
                   <input
                     id="payment-reference"
                     value={reference}
-                    onChange={(event) => setReference(event.target.value)}
+                    onChange={(event) => {
+                      setReference(event.target.value);
+                      setLocalErrors((errors) => ({
+                        ...errors,
+                        evidence: undefined,
+                        transaction_reference: undefined,
+                      }));
+                    }}
                     placeholder="e.g. TIN0987"
                     maxLength={255}
                     disabled={submitting}
+                    aria-invalid={Boolean(
+                      fieldError("transaction_reference")
+                    )}
                     className={`${INPUT} mt-4`}
                   />
 
@@ -327,18 +366,62 @@ export default function Payment() {
 
                 {/* receipt */}
                 <div>
-                  <label className={LABEL}>04 · Receipt</label>
+                  <label className={LABEL}>04 · Receipt screenshot</label>
 
                   <div className="mt-4">
                     <ReceiptUpload
                       value={receiptFile}
-                      onChange={setReceiptFile}
+                      onChange={(file) => {
+                        setReceiptFile(file);
+                        setLocalErrors((errors) => ({
+                          ...errors,
+                          evidence: undefined,
+                          receipt: undefined,
+                        }));
+                      }}
                       error={fieldError("receipt")}
                       progress={progress}
                       disabled={submitting}
                     />
                   </div>
                 </div>
+
+                {/* Why one of the two above is required, said once, in
+                    the place where the customer decides what to send. */}
+                {!receiptFile && !reference.trim() && (
+                  <div className="rounded-xl border border-[#d6a85f]/25 bg-[#d6a85f]/[0.06] p-4">
+                    <div className="flex gap-3">
+                      <ShieldCheck
+                        size={16}
+                        className="mt-0.5 shrink-0 text-[#d6a85f]"
+                      />
+
+                      <div>
+                        <p className="text-xs font-semibold text-white">
+                          Send one of these two, so your payment can be
+                          checked
+                        </p>
+
+                        <ul className="mt-2 space-y-1 text-[11px] leading-5 text-white/50">
+                          <li>
+                            · A screenshot of the transfer confirmation
+                          </li>
+                          <li>
+                            · The transaction reference (TIN) from it
+                          </li>
+                        </ul>
+
+                        <p className="mt-2 text-[11px] leading-5 text-white/35">
+                          The shop matches your payment against the bank
+                          before confirming, and with neither of these there
+                          is nothing to match. Sending both is fastest.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <FieldError message={fieldError("evidence")} />
 
                 {apiError && (
                   <Alert

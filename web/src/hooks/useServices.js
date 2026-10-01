@@ -1,6 +1,7 @@
 import { useQuery } from "./useQuery";
 
 import { listServices } from "../services/servicesApi";
+import { toArray } from "../utils/toArray";
 
 /**
  * Active services from GET /api/services/.
@@ -15,7 +16,7 @@ import { listServices } from "../services/servicesApi";
  */
 export function useServices() {
   const { data, error, loading, refetch } = useQuery("/services/", listServices, {
-    select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+    select: toArray,
   });
 
   return { services: data || [], loading, error, reload: refetch };

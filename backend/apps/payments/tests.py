@@ -332,3 +332,215 @@ class PaymentAccessTestCase(APITestCase):
 
         self.assertIsNotNone(entry)
         self.assertEqual(entry.details["reason"], "Receipt illegible")
+
+    def test_the_payment_carries_the_booking_code(self):
+        """
+        The number staff read when deciding whether to verify a payment
+        is the same number the customer was given.
+        """
+
+        response = self.client.get(
+            reverse("payment-by-booking", args=[self.booking.pk])
+        )
+
+        self.assertEqual(
+            response.data["booking_code"], self.booking.booking_code
+        )
+
+
+class PaymentEvidenceTests(APITestCase):
+    """
+    A payment the shop has nothing to check is not a payment.
+
+    Verification means matching what the customer sent against the bank.
+    With neither a screenshot nor a transaction reference there is nothing
+    to match, and the only thing left is the customer's word - which is
+    indistinguishable from a typo. So one of the two is required.
+    """
+
+    def setUp(self):
+        from datetime import date, time, timedelta
+
+        self.service = Service.objects.create(
+            name="Signature Cut",
+            price=Decimal("350.00"),
+            duration=45,
+        )
+
+        self.barber = Barber.objects.create(name="Alex")
+
+        self.booking_date = date.today() + timedelta(days=1)
+
+        self.booking = Booking.objects.create(
+            customer_name="Sam Doe",
+            customer_phone="0911234567",
+            service=self.service,
+            barber=self.barber,
+            booking_date=self.booking_date,
+            start_time=time(10, 0),
+            end_time=time(10, 45),
+        )
+
+    def submit(self, **overrides):
+        payload = {
+            "booking": self.booking.pk,
+            "amount": "350.00",
+            "method": "telebirr",
+        }
+        payload.update(overrides)
+
+        return self.client.post(
+            reverse("payment-list"), payload, format="json"
+        )
+
+    def submit_with_receipt(self, receipt):
+        return self.client.post(
+            reverse("payment-list"),
+            {
+                "booking": self.booking.pk,
+                "amount": "350.00",
+                "method": "telebirr",
+                "receipt": receipt,
+            },
+            format="multipart",
+        )
+
+    def test_a_payment_with_no_evidence_is_refused(self):
+        response = self.submit()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transaction_reference", response.data)
+        self.assertIn(
+            "cannot verify", response.data["transaction_reference"][0]
+        )
+
+    def test_a_transaction_reference_is_enough(self):
+        response = self.submit(transaction_reference="TIN0987")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], "pending")
+
+    def test_a_whitespace_only_reference_is_not_evidence(self):
+        response = self.submit(transaction_reference="   ")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transaction_reference", response.data)
+
+    def test_a_receipt_alone_is_enough(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from io import BytesIO
+
+        from PIL import Image
+
+        # A real PNG, not just the magic bytes: ImageField runs the
+        # upload through Pillow, so a file that only starts like an image
+        # would fail for a reason that has nothing to do with this test.
+        buffer = BytesIO()
+        Image.new("RGB", (8, 8), "white").save(buffer, format="PNG")
+        buffer.seek(0)
+
+        response = self.submit_with_receipt(
+            SimpleUploadedFile(
+                "receipt.png", buffer.read(), content_type="image/png"
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_a_second_payment_is_refused_in_words(self):
+        self.submit(transaction_reference="TIN0987")
+
+        response = self.submit(transaction_reference="TIN0988")
+
+        # Not a 500 from the unique constraint, and not DRF's default
+        # "already exists": a customer whose first submit looked like it
+        # had not landed needs to be told that it did.
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("already been sent", response.data["booking"][0])
+
+
+class DuplicatePaymentGuardTests(APITestCase):
+    """
+    What happens when the same booking is paid for twice.
+
+    `booking` is a OneToOneField, so the database will refuse the second
+    row - but it refuses it by raising, which the customer sees as a
+    server fault on a screen where they are trying to hand over money.
+    """
+
+    def setUp(self):
+        from datetime import date, time, timedelta
+        from decimal import Decimal as D
+
+        self.service = Service.objects.create(
+            name="Signature Cut", price=D("350.00"), duration=45,
+        )
+        self.barber = Barber.objects.create(name="Alex")
+        self.booking = Booking.objects.create(
+            customer_name="Sam Doe",
+            customer_phone="0911234567",
+            service=self.service,
+            barber=self.barber,
+            booking_date=date.today() + timedelta(days=1),
+            start_time=time(10, 0),
+            end_time=time(10, 45),
+        )
+        self.payment = self._pay()
+
+    def _pay(self):
+        from apps.payments.models import Payment
+
+        return Payment.objects.create(
+            booking=self.booking,
+            amount=Decimal("350.00"),
+            method="telebirr",
+            transaction_reference="TIN0987",
+        )
+
+    def test_a_pending_payment_says_so(self):
+        from apps.payments.services import create_payment
+
+        with self.assertRaises(Exception) as caught:
+            create_payment(
+                booking=self.booking,
+                amount=Decimal("350.00"),
+                method="telebirr",
+                transaction_reference="TIN0989",
+            )
+
+        self.assertIn("still waiting to be checked", str(caught.exception))
+
+    def test_a_verified_payment_says_it_is_already_settled(self):
+        from apps.payments.services import create_payment
+
+        self.payment.status = "verified"
+        self.payment.save(update_fields=["status"])
+
+        with self.assertRaises(Exception) as caught:
+            create_payment(
+                booking=self.booking,
+                amount=Decimal("350.00"),
+                method="telebirr",
+                transaction_reference="TIN0989",
+            )
+
+        self.assertIn("already been paid", str(caught.exception))
+
+    def test_a_rejected_payment_carries_the_reason_forward(self):
+        from apps.payments.services import create_payment
+
+        self.payment.status = "rejected"
+        self.payment.rejection_reason = "Receipt illegible"
+        self.payment.save(update_fields=["status", "rejection_reason"])
+
+        with self.assertRaises(Exception) as caught:
+            create_payment(
+                booking=self.booking,
+                amount=Decimal("350.00"),
+                method="telebirr",
+                transaction_reference="TIN0989",
+            )
+
+        # The customer is told what was wrong last time, rather than
+        # being invited to send the same screenshot again.
+        self.assertIn("Receipt illegible", str(caught.exception))

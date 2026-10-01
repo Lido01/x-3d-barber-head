@@ -5,6 +5,7 @@ import {
   CalendarCheck,
   Check,
   CheckCheck,
+  CircleDollarSign,
   CreditCard,
   MessageSquareQuote,
   RefreshCw,
@@ -147,6 +148,17 @@ export default function AdminOverview() {
       count: data.queues.payments_to_verify,
       to: "/admin/payments",
       icon: CreditCard,
+    },
+    // Not the same question as "payments to verify". That one is
+    // receipts sitting in the inbox waiting to be checked; this one is
+    // live appointments with no money behind them at all - a walk-in
+    // confirmed by hand, or a payment rejected while the slot was held.
+    // Both need chasing, and neither is visible from the other.
+    data?.queues?.payments_outstanding != null && {
+      label: "Awaiting payment",
+      count: data.queues.payments_outstanding,
+      to: "/admin/bookings",
+      icon: CircleDollarSign,
     },
     data?.queues?.reviews_to_approve != null && {
       label: "Reviews to approve",
@@ -380,6 +392,22 @@ export default function AdminOverview() {
                             </span>
                           </span>
 
+                          {/* The code, because it is what the customer
+                              will quote and what staff match against
+                              when someone rings. */}
+                          <span className="shrink-0 font-mono text-[11px] tracking-[0.08em] text-console-muted">
+                            {booking.booking_code}
+                          </span>
+
+                          {booking.payment_due && (
+                            <span
+                              title="No payment received for this booking"
+                              className="shrink-0 text-console-accent"
+                            >
+                              <CircleDollarSign size={14} />
+                            </span>
+                          )}
+
                           <AdminStatus status={booking.status} />
 
                           {actionable && (
@@ -447,10 +475,21 @@ export default function AdminOverview() {
                                     .filter(Boolean)
                                     .join(" · ")}
                                 </p>
+                                <p className="mt-0.5 font-mono text-[10px] tracking-[0.08em] text-console-muted">
+                                  {booking.booking_code}
+                                </p>
                               </div>
                             </div>
 
-                            <AdminStatus status={booking.status} />
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <AdminStatus status={booking.status} />
+
+                              {booking.payment_due && (
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-console-accent">
+                                  Unpaid
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           {actionable && (
@@ -514,9 +553,22 @@ export default function AdminOverview() {
                       {booking.customer_name}
                     </span>
 
+                    <span className="shrink-0 font-mono text-[11px] tracking-[0.08em] text-console-muted">
+                      {booking.booking_code}
+                    </span>
+
                     <span className="min-w-0 shrink-0 truncate text-xs text-console-muted">
                       {booking.service_name}
                     </span>
+
+                    {booking.payment_due && (
+                      <span
+                        title="No payment received for this booking"
+                        className="shrink-0 text-console-accent"
+                      >
+                        <CircleDollarSign size={13} />
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

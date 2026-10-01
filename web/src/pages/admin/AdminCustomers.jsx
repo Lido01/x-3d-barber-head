@@ -35,6 +35,7 @@ import {
   updateCustomer,
 } from "../../services/authApi";
 import { hasCapability } from "../../utils/staffRole";
+import { toArray } from "../../utils/toArray";
 import { formatDate } from "../../utils/format";
 
 /**
@@ -109,7 +110,7 @@ export default function AdminCustomers() {
       params: { q: search },
       scope: "staff",
       staleMs: 60 * 1000,
-      select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+      select: toArray,
     }
   );
 

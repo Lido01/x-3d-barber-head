@@ -19,6 +19,14 @@ def create_payment(
 
     Customers do not need an account.
     Every new payment starts as PENDING.
+
+    A booking takes exactly one payment, and that is checked here rather
+    than left to the unique constraint. A second submit on the same
+    booking - a double tap, a refresh mid-upload, the customer trying
+    twice because the first attempt looked like it had not landed - would
+    otherwise reach the database and surface as a 500, which tells the
+    customer their money is in a state nobody can explain. Saying "this
+    booking is already covered" is both true and useful.
     """
 
     if booking is None:
@@ -30,11 +38,56 @@ def create_payment(
             }
         )
 
+    existing = (
+        Payment.objects
+        .select_for_update()
+        .filter(booking=booking)
+        .first()
+    )
+
+    if existing is not None:
+        if existing.status == Payment.Status.VERIFIED:
+            raise ValidationError(
+                {
+                    "booking": [
+                        "This booking has already been paid and the "
+                        "payment verified. There is nothing more to send."
+                    ]
+                }
+            )
+
+        if existing.status == Payment.Status.REJECTED:
+            raise ValidationError(
+                {
+                    "booking": [
+                        "The payment already sent for this booking was "
+                        "rejected"
+                        + (
+                            f": {existing.rejection_reason}"
+                            if existing.rejection_reason
+                            else ""
+                        )
+                        + ". Please call the shop so it can be sorted out."
+                    ]
+                }
+            )
+
+        raise ValidationError(
+            {
+                "booking": [
+                    "A payment has already been sent for this booking "
+                    "and is still waiting to be checked. Please wait for "
+                    "the shop to verify it rather than sending another."
+                ]
+            }
+        )
+
     if booking.status == booking.Status.CANCELLED:
         raise ValidationError(
             {
                 "booking": [
-                    "Cannot pay for a cancelled booking."
+                    "This booking was cancelled, so there is nothing to "
+                    "pay for. Please make a new booking."
                 ]
             }
         )
@@ -43,7 +96,8 @@ def create_payment(
         raise ValidationError(
             {
                 "booking": [
-                    "This booking has already been completed."
+                    "This booking has already been completed. Please "
+                    "call the shop if you believe money is still owed."
                 ]
             }
         )

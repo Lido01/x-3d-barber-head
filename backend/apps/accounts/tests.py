@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from .models import AccountProfile, AuditLog, ShopSettings, StaffAccess
+from apps.bookings.models import Booking
 from apps.testimonials.models import Testimonial
 
 
@@ -1703,7 +1704,33 @@ class DashboardTestCase(APITestCase):
         self.assertNotIn("users", response.data["counts"])
         self.assertNotIn("payments", response.data["counts"])
         self.assertEqual(response.data["revenue"], {})
-        self.assertEqual(response.data["queues"], {"bookings_to_confirm": 1})
+
+        # Both booking queues are in scope for this account: both are
+        # counts over bookings, not over payments.
+        self.assertEqual(
+            response.data["queues"],
+            {
+                "bookings_to_confirm": 1,
+                "payments_outstanding": 3,
+            },
+        )
+
+    def test_each_schedule_row_carries_the_code_and_the_payment_state(self):
+        self.client.force_authenticate(user=self.receptionist)
+        response = self.client.get(self.url)
+
+        row = response.data["schedule"]["today"][0]
+
+        # The number the customer was given is the number staff read.
+        self.assertEqual(
+            row["booking_code"], Booking.objects.get(
+                customer_name="Walk In",
+            ).booking_code,
+        )
+
+        # No money against either of these appointments yet.
+        self.assertIsNone(row["payment_status"])
+        self.assertTrue(row["payment_due"])
 
     def test_an_administrator_sees_everything(self):
         administrator = User.objects.create_user(

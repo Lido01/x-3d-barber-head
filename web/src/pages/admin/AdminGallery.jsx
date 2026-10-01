@@ -25,6 +25,7 @@ import {
   AdminTextarea,
 } from "../../components/admin/AdminUi";
 import { mediaUrl } from "../../services/api";
+import { toArray } from "../../utils/toArray";
 import {
   createGalleryPost,
   deleteGalleryPost,
@@ -76,7 +77,7 @@ export default function AdminGallery() {
     (signal) => listGalleryPosts({ signal, requiresAuth: true }),
     {
       scope: "staff",
-      select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+      select: toArray,
     }
   );
 

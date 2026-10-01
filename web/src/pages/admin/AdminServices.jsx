@@ -17,6 +17,7 @@ import {
   AdminTextarea,
 } from "../../components/admin/AdminUi";
 import { mediaUrl } from "../../services/api";
+import { toArray } from "../../utils/toArray";
 import {
   createHaircutStyle,
   createService,
@@ -80,7 +81,7 @@ export default function AdminServices() {
     refetch: load,
   } = useQuery("/services/", listAllServices, {
     scope: "staff",
-    select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+    select: toArray,
   });
 
   const rows = services || [];

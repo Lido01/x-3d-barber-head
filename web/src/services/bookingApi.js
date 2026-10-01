@@ -5,7 +5,11 @@ import api from "./api";
  *
  * Public (AllowAny):
  *   POST /api/bookings/
+ *   POST /api/bookings/lookup/
  *   GET  /api/bookings/availability/
+ *
+ * Signed in (customer):
+ *   GET  /api/bookings/mine/
  *
  * Admin only (IsAuthenticated + IsAdminUser):
  *   GET    /api/bookings/
@@ -25,7 +29,8 @@ import api from "./api";
  * Booking response shape (confirmed live against BookingSerializer):
  *
  *   {
- *     id, customer_name, customer_phone,
+ *     id, booking_code: "BK-0025",
+ *     customer_name, customer_phone,
  *     service: 4, service_name: "Lidetu's Style",
  *     barber: 1,  barber_name: "Lidetu Tesfaye",
  *     booking_date: "2026-08-29",
@@ -41,7 +46,23 @@ import api from "./api";
  * Django is the sole authority here - the returned list is rendered
  * as-is and never recomputed or filtered in React.
  *
- * @returns {Promise<{service: string, date: string, available_times: string[], barber?: string}>}
+ * A date with nothing bookable is a 200, not an error. `availability`
+ * beside the list says which situation it is - no barber on duty, the
+ * service withdrawn, the date gone, the service longer than the opening
+ * hours, simply full - along with the next free times when there are any.
+ *
+ * @returns {Promise<{
+ *   service: string,
+ *   date: string,
+ *   available_times: string[],
+ *   barber?: string,
+ *   availability: {
+ *     status: string,
+ *     message: string,
+ *     window: string,
+ *     next_available: null | { date: string, times: string[] },
+ *   },
+ * }>}
  */
 export function getAvailability(
   { serviceId, bookingDate, barberId },
@@ -98,6 +119,67 @@ export function createBooking({
 
 export function listBarbers({ signal } = {}) {
   return api.get("/barbers/", { signal }).then((response) => response.data);
+}
+
+/**
+ * Fetch a customer's booking history.
+ *
+ * The booking code plus the phone number the booking was made with. Two
+ * because the code alone is short and guessable - it is derived from a
+ * row id - and each row carries a name, a phone number, an appointment
+ * time and a payment receipt.
+ *
+ * The code proves who is asking; the phone number is then the key to
+ * everything else they have booked. That is why this returns a list and
+ * not one booking: someone who wants to look over their history should
+ * not have to dig out a separate code for every appointment they ever
+ * made.
+ *
+ * POST rather than GET, so the phone number stays out of the URL: query
+ * strings end up in access logs, browser history and Referer headers.
+ * It also keeps the endpoint out of any cache, which a GET carrying a
+ * credential should be.
+ *
+ * The backend answers an unknown code and a wrong phone identically, so
+ * this cannot be used to find out which codes exist.
+ *
+ * @returns {Promise<{
+ *   bookings: Array<{
+ *     booking: object,
+ *     payment: object | null,
+ *     payment_due: boolean,
+ *     payment_rejected: boolean,
+ *   }>,
+ *   matched_code: string,
+ *   totals: {
+ *     all: number,
+ *     upcoming: number,
+ *     awaiting_payment: number,
+ *     awaiting_response: number,
+ *   },
+ * }>}
+ */
+export function lookupBooking({ code, phone }) {
+  return api
+    .post("/bookings/lookup/", { code, phone })
+    .then((response) => response.data);
+}
+
+/**
+ * The signed-in customer's own bookings, newest first.
+ *
+ * Only bookings made while signed in are attached to an account - a guest
+ * booking has no account to attach to, and that one is found with
+ * lookupBooking instead.
+ */
+export function listMyBookings({ signal } = {}) {
+  return api
+    .get("/bookings/mine/", {
+      requiresAuth: true,
+      authScope: "customer",
+      signal,
+    })
+    .then((response) => response.data);
 }
 
 // --- admin only ---------------------------------------------------

@@ -15,6 +15,7 @@ import {
   AdminStatus,
 } from "../../components/admin/AdminUi";
 import { invalidateQuery, useQuery } from "../../hooks/useQuery";
+import { toArray } from "../../utils/toArray";
 import {
   createStaffAccess,
   listRegisteredCustomers,
@@ -76,7 +77,7 @@ export default function AdminTeam() {
     error,
   } = useQuery("/accounts/staff/", listStaffAccess, {
     scope: "staff",
-    select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+    select: toArray,
   });
 
   // Same endpoint and same key as the customers screen, so opening this
@@ -88,7 +89,7 @@ export default function AdminTeam() {
     {
       scope: "staff",
       staleMs: 60 * 1000,
-      select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+      select: toArray,
     }
   );
 

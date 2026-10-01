@@ -10,6 +10,14 @@
  *   { "amount": "Must be greater than zero." }
  *   [ "Something went wrong." ]
  *   "<!DOCTYPE html> ..."            (unhandled 500)
+ *
+ * And one of its keys is not an error at all. `availability` is a
+ * structured description of *why* a slot is unavailable - which situation
+ * it is, and what to try instead - travelling beside the field message.
+ * It is pulled out into `reason` rather than being lumped in with the
+ * field errors, because a component needs to branch on it: an offer of
+ * the next free times is a different thing to render than "the barber is
+ * busy then, try 11:30".
  */
 
 /** Field names that carry a general message rather than a field error. */
@@ -20,6 +28,13 @@ const GENERAL_KEYS = [
   "errors",
   "message",
 ];
+
+/**
+ * Keys that describe a situation rather than complaining about a value.
+ *
+ * Split out so they cannot end up rendered as "availability: {...}".
+ */
+const REASON_KEYS = ["availability"];
 
 const STATUS_MESSAGES = {
   400: "Please check the highlighted fields and try again.",
@@ -59,6 +74,7 @@ function toMessage(value) {
  * @property {number|null} status       HTTP status, null when the request never landed.
  * @property {string}      message      Sentence safe to show to a customer.
  * @property {object}      fieldErrors  { fieldName: "message" } for inline display.
+ * @property {object|null} reason       Structured explanation, when the API sent one.
  * @property {boolean}     isNetwork    Server unreachable / CORS / offline.
  * @property {boolean}     isServer     5xx.
  * @property {*}           data         Raw response body, for logging.
@@ -77,6 +93,7 @@ export function normaliseApiError(error) {
         ? "Request cancelled."
         : "Cannot reach the server. Check that the backend is running and that this origin is allowed by CORS.",
       fieldErrors: {},
+      reason: null,
       isNetwork: !cancelled,
       isServer: false,
       isCancelled: cancelled,
@@ -87,10 +104,13 @@ export function normaliseApiError(error) {
   const { status, data } = error.response;
   const fieldErrors = {};
   const generalParts = [];
+  let reason = null;
 
   if (data && typeof data === "object" && !Array.isArray(data)) {
     for (const [key, value] of Object.entries(data)) {
-      if (GENERAL_KEYS.includes(key)) {
+      if (REASON_KEYS.includes(key)) {
+        reason = value && typeof value === "object" ? value : null;
+      } else if (GENERAL_KEYS.includes(key)) {
         generalParts.push(toMessage(value));
       } else {
         const message = toMessage(value);
@@ -111,9 +131,12 @@ export function normaliseApiError(error) {
   let message = generalParts.filter(Boolean).join(" ").trim();
 
   if (!message) {
+    // A structured reason carries a sentence written for the customer and
+    // is a better answer than a generic status message.
     const firstField = Object.entries(fieldErrors)[0];
 
     message =
+      reason?.message ||
       (status === 400 && firstField ? firstField[1] : "") ||
       STATUS_MESSAGES[status] ||
       `Request failed with status ${status}.`;
@@ -123,6 +146,7 @@ export function normaliseApiError(error) {
     status,
     message,
     fieldErrors,
+    reason,
     isNetwork: false,
     isServer: status >= 500,
     isCancelled: false,

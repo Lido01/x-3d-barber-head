@@ -1,6 +1,7 @@
 import { useQuery } from "./useQuery";
 
 import { listGalleryPosts } from "../services/galleryApi";
+import { toArray } from "../utils/toArray";
 
 /**
  * Active gallery posts from GET /api/gallery/gallery/.
@@ -13,7 +14,7 @@ export function useGallery() {
     "/gallery/gallery/",
     listGalleryPosts,
     {
-      select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+      select: toArray,
     }
   );
 
