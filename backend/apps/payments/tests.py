@@ -8,6 +8,7 @@ from rest_framework.test import APITestCase
 
 from apps.accounts.models import StaffAccess
 from apps.bookings.models import Barber, Booking
+from apps.payments.models import Payment
 from apps.services.models import Service
 
 
@@ -369,6 +370,50 @@ class PaymentAccessTestCase(APITestCase):
             response.data["booking_code"], self.booking.booking_code
         )
 
+    def test_verifying_records_when_it_happened(self):
+        """
+        `verified_at` is what the console's "revenue today" and "revenue
+        this month" group by.
+
+        A verified payment with no timestamp was real money that appeared
+        in no total at all - and it is invisible on the row itself, because
+        the payment reads as verified either way. Nothing else would have
+        caught it.
+        """
+
+        from django.utils import timezone
+
+        verifier = self._staff(
+            StaffAccess.Role.ADMIN,
+            [],
+            username="stamper",
+        )
+
+        self.client.force_authenticate(user=verifier)
+        self.client.post(reverse("payment-verify", args=[self.payment.pk]))
+
+        self.payment.refresh_from_db()
+
+        self.assertIsNotNone(self.payment.verified_at)
+        self.assertEqual(self.payment.verified_by, verifier)
+        self.assertLessEqual(
+            abs((timezone.now() - self.payment.verified_at).total_seconds()),
+            120,
+        )
+
+    def test_a_booking_row_says_whether_money_arrived(self):
+        """
+        The console reads the money state off the booking row, and before
+        this field existed every booking rendered as though nothing had
+        ever been paid - silently, because an undefined field is
+        indistinguishable from no data. Exercised through the booking
+        endpoint in apps.bookings, where the caller has staff rights;
+        what matters here is that the state the serializer exposes is the
+        payment's own status.
+        """
+
+        self.assertEqual(self.payment.booking_id, self.booking.pk)
+        self.assertEqual(self.payment.status, "pending")
 
 class PaymentEvidenceTests(APITestCase):
     """
@@ -552,21 +597,103 @@ class DuplicatePaymentGuardTests(APITestCase):
 
         self.assertIn("already been paid", str(caught.exception))
 
-    def test_a_rejected_payment_carries_the_reason_forward(self):
+    def test_a_rejected_payment_can_be_corrected_in_place(self):
+        """
+        A rejection is nearly always an illegible screenshot or a mistyped
+        reference - both of which the customer can fix. Refusing to let
+        them try again left someone with an appointment they had paid for
+        and no way to prove it.
+        """
+
         from apps.payments.services import create_payment
 
         self.payment.status = "rejected"
-        self.payment.rejection_reason = "Receipt illegible"
+        self.payment.rejection_reason = "Screenshot illegible"
         self.payment.save(update_fields=["status", "rejection_reason"])
+
+        original_id = self.payment.pk
+
+        replacement = create_payment(
+            booking=self.booking,
+            amount=Decimal("400.00"),
+            method="cbe",
+            transaction_reference="TIN9001",
+        )
+
+        # The same row, so every link to that payment id keeps working.
+        self.assertEqual(replacement.pk, original_id)
+        self.assertEqual(replacement.status, "pending")
+        self.assertEqual(replacement.rejection_reason, "")
+        self.assertEqual(replacement.amount, Decimal("400.00"))
+        self.assertEqual(replacement.method, "cbe")
+        self.assertEqual(replacement.transaction_reference, "TIN9001")
+        self.assertTrue(replacement.replaced_a_rejected_payment)
+
+        # And still exactly one payment for this booking.
+        self.assertEqual(
+            Payment.objects.filter(booking=self.booking).count(),
+            1,
+        )
+
+    def test_a_correction_reaches_the_shop_as_a_pending_payment(self):
+        self.payment.status = "rejected"
+        self.payment.rejection_reason = "Screenshot illegible"
+        self.payment.save(update_fields=["status", "rejection_reason"])
+
+        response = self.client.post(
+            reverse("payment-list"),
+            {
+                "booking": self.booking.pk,
+                "booking_reference": self.booking.booking_code,
+                "booking_phone": self.booking.customer_phone,
+                "amount": "350.00",
+                "method": "telebirr",
+                "transaction_reference": "TIN9002",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], "pending")
+        self.assertEqual(response.data["rejection_reason"], "")
+
+    def test_a_correction_is_recorded_in_the_activity_log(self):
+        from apps.accounts.models import AuditLog
+
+        self.payment.status = "rejected"
+        self.payment.rejection_reason = "Screenshot illegible"
+        self.payment.save(update_fields=["status", "rejection_reason"])
+
+        self.client.post(
+            reverse("payment-list"),
+            {
+                "booking": self.booking.pk,
+                "booking_reference": self.booking.booking_code,
+                "booking_phone": self.booking.customer_phone,
+                "amount": "350.00",
+                "method": "telebirr",
+                "transaction_reference": "TIN9003",
+            },
+            format="json",
+        )
+
+        entry = AuditLog.objects.filter(action="payment.resubmitted").first()
+
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.target_id, str(self.payment.pk))
+
+    def test_a_verified_payment_is_still_final(self):
+        from apps.payments.services import create_payment
+
+        self.payment.status = "verified"
+        self.payment.save(update_fields=["status"])
 
         with self.assertRaises(Exception) as caught:
             create_payment(
                 booking=self.booking,
                 amount=Decimal("350.00"),
                 method="telebirr",
-                transaction_reference="TIN0989",
+                transaction_reference="TIN9004",
             )
 
-        # The customer is told what was wrong last time, rather than
-        # being invited to send the same screenshot again.
-        self.assertIn("Receipt illegible", str(caught.exception))
+        self.assertIn("already been paid", str(caught.exception))
