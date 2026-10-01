@@ -296,7 +296,7 @@ export function PaymentPrompt({ booking, payment, paymentDue }) {
         <div className="flex gap-3">
           <X size={17} className="mt-0.5 shrink-0 text-[#e0776b]" />
 
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold text-white">
               The shop could not match this payment
             </p>
@@ -304,9 +304,18 @@ export function PaymentPrompt({ booking, payment, paymentDue }) {
             <p className="mt-1 text-xs leading-6 text-white/55">
               {payment.rejection_reason ||
                 "The receipt or reference did not match anything."}{" "}
-              Your appointment is still being held. Please call the shop so
-              the two can be sorted out.
+              Your appointment is still being held — sending a clearer
+              screenshot, or the transaction reference (TIN) on its own,
+              is usually all it takes.
             </p>
+
+            <Link
+              to={`/payment/${booking.id}`}
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#e05a4f]/40 px-5 py-2.5 text-xs font-semibold text-[#e0776b] transition hover:bg-[#e05a4f]/10"
+            >
+              Send a clearer payment
+              <span>→</span>
+            </Link>
           </div>
         </div>
       </div>
