@@ -1,10 +1,11 @@
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
 from django.urls import reverse
 
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import AccountProfile, AuditLog, StaffAccess
+from .models import AccountProfile, AuditLog, ShopSettings, StaffAccess
+from apps.testimonials.models import Testimonial
 
 
 User = get_user_model()
@@ -847,6 +848,757 @@ class UserManagementTestCase(APITestCase):
 
         self.assertEqual(changes["role"], {"from": "customer", "to": "reception"})
         self.assertEqual(changes["permissions"], {"from": [], "to": ["bookings.view"]})
+
+
+class UserManagementCreateTestCase(APITestCase):
+    """
+    Creating an account from the console.
+
+    Onboarding someone is registering them and then promoting them, and
+    on a phone that was two screens and a good chance of stopping
+    halfway. These cover the one-call path, and the two things that make
+    it safe to hand a stranger console access: only the owner and
+    administrators may do it, and the password comes back exactly once.
+    """
+
+    def setUp(self):
+        self.create_url = reverse("user-management-create")
+
+        self.owner = User.objects.create_superuser(
+            username="owner",
+            email="owner@example.com",
+            password="StrongPassword123!",
+        )
+
+        self.administrator = User.objects.create_user(
+            username="administrator",
+            email="administrator@example.com",
+            password="StrongPassword123!",
+        )
+        StaffAccess.objects.create(
+            user=self.administrator,
+            role=StaffAccess.Role.ADMIN,
+            permissions=[],
+        )
+        self.administrator.is_staff = True
+        self.administrator.save(update_fields=["is_staff"])
+
+        self.receptionist = User.objects.create_user(
+            username="receptionist",
+            email="receptionist@example.com",
+            password="StrongPassword123!",
+        )
+        StaffAccess.objects.create(
+            user=self.receptionist,
+            role=StaffAccess.Role.RECEPTION,
+            permissions=["bookings.view"],
+        )
+        self.receptionist.is_staff = True
+        self.receptionist.save(update_fields=["is_staff"])
+
+    def payload(self, **overrides):
+        body = {
+            "username": "newbarber",
+            "email": "newbarber@example.com",
+            "first_name": "New",
+            "last_name": "Barber",
+            "phone": "0911222333",
+            "role": "reception",
+            "permissions": ["bookings.view", "bookings.manage"],
+        }
+
+        body.update(overrides)
+
+        return body
+
+    def test_creates_the_account_and_its_staff_access_in_one_call(self):
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(self.create_url, self.payload(), format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(username="newbarber")
+
+        self.assertTrue(user.is_active)
+        self.assertEqual(user.first_name, "New")
+        self.assertEqual(AccountProfile.objects.get(user=user).phone, "0911222333")
+
+        access = StaffAccess.objects.get(user=user)
+
+        self.assertEqual(access.role, StaffAccess.Role.RECEPTION)
+        self.assertEqual(
+            sorted(access.permissions),
+            ["bookings.manage", "bookings.view"],
+        )
+
+        # The role is not just a record: it is what lets them in.
+        self.assertTrue(user.is_staff)
+
+    def test_returns_a_temporary_password_exactly_once(self):
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(self.create_url, self.payload(), format="json")
+
+        password = response.data["temporary_password"]
+
+        self.assertTrue(password)
+        self.assertGreaterEqual(len(password), 12)
+
+        # Reading the account back must not disclose it again.
+        listed = self.client.get(reverse("user-management-list"))
+        detail = self.client.get(
+            reverse("user-management-detail", args=[response.data["id"]])
+        )
+
+        self.assertNotIn("temporary_password", listed.data[0])
+        self.assertNotIn("temporary_password", detail.data)
+
+    def test_a_generated_password_cannot_sign_in_until_it_is_changed(self):
+        """
+        The console hands the string over in person; nobody has typed it
+        into the account yet. Marking it unusable means an account cannot
+        be left reachable by a password the shop has forgotten about.
+        """
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(self.create_url, self.payload(), format="json")
+
+        user = User.objects.get(pk=response.data["id"])
+
+        self.assertFalse(user.has_usable_password())
+        self.assertFalse(
+            authenticate(username="newbarber", password=response.data["temporary_password"])
+        )
+
+    def test_a_chosen_password_is_honoured(self):
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(
+            self.create_url,
+            self.payload(password="ChosenPassword123!"),
+            format="json",
+        )
+
+        user = User.objects.get(pk=response.data["id"])
+
+        self.assertEqual(response.data["temporary_password"], "ChosenPassword123!")
+        self.assertTrue(user.check_password("ChosenPassword123!"))
+
+    def test_a_weak_password_is_refused(self):
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(
+            self.create_url,
+            self.payload(password="123"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password", response.data)
+        self.assertFalse(User.objects.filter(username="newbarber").exists())
+
+    def test_a_customer_role_creates_no_staff_access(self):
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(
+            self.create_url,
+            self.payload(role="customer", permissions=[]),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["role"], "customer")
+
+        user = User.objects.get(pk=response.data["id"])
+
+        self.assertFalse(StaffAccess.objects.filter(user=user).exists())
+        self.assertFalse(user.is_staff)
+
+    def test_ownership_cannot_be_handed_out(self):
+        """
+        Ownership is created with `createsuperuser`, not from the UI.
+
+        A console that could mint an owner could be used to make an
+        account no administrator could take away again.
+        """
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.post(
+            self.create_url,
+            self.payload(role="owner"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("role", response.data)
+
+    def test_a_duplicate_username_is_refused(self):
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(
+            self.create_url,
+            self.payload(username="receptionist"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("username", response.data)
+
+    def test_a_duplicate_email_is_refused(self):
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(
+            self.create_url,
+            self.payload(email="receptionist@example.com"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", response.data)
+
+    def test_an_unknown_capability_is_refused(self):
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(
+            self.create_url,
+            self.payload(permissions=["bookings.view", "launch.rockets"]),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("permissions", response.data)
+
+    def test_only_the_owner_and_administrators_may_create(self):
+        self.client.force_authenticate(user=self.receptionist)
+        response = self.client.post(self.create_url, self.payload(), format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(User.objects.filter(username="newbarber").exists())
+
+    def test_the_list_endpoint_still_refuses_writes(self):
+        """
+        Reading the directory and creating in it are different powers.
+
+        Keeping them on separate views means a read-only screen can never
+        quietly grow a write.
+        """
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(
+            reverse("user-management-list"),
+            self.payload(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_creation_is_recorded_in_the_activity_trail(self):
+        """
+        Who gave whom console access, and what they were given, has to be
+        answerable afterwards.
+        """
+        self.client.force_authenticate(user=self.administrator)
+        response = self.client.post(self.create_url, self.payload(), format="json")
+
+        entry = AuditLog.objects.filter(action="user.created").first()
+
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.actor, self.administrator)
+        self.assertEqual(entry.target_id, str(response.data["id"]))
+        self.assertEqual(entry.details["role"], "reception")
+        self.assertEqual(
+            sorted(entry.details["permissions"]),
+            ["bookings.manage", "bookings.view"],
+        )
+
+        # The password is a handoff, not a log entry.
+        self.assertNotIn("temporary_password", entry.details)
+
+    def test_a_rejected_role_leaves_nothing_behind(self):
+        """
+        Creating an account touches three tables. A failure part-way
+        through must not leave a user with no profile, or staff access
+        pointing at nobody.
+        """
+        self.client.force_authenticate(user=self.administrator)
+
+        # Rejected during validation, before any row is written.
+        response = self.client.post(
+            self.create_url,
+            self.payload(role="wizard"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("role", response.data)
+        self.assertFalse(User.objects.filter(username="newbarber").exists())
+        self.assertFalse(StaffAccess.objects.filter(role="wizard").exists())
+
+
+class ShopSettingsTestCase(APITestCase):
+    """
+    The shop's own details, in one editable row.
+
+    A settings screen that does not change anything is worse than no
+    settings screen, because it teaches staff that the numbers they can
+    change are not the numbers the shop uses. These cover that the write
+    actually lands, that it is the right people writing, and that it is
+    recorded.
+    """
+
+    def setUp(self):
+        self.url = reverse("shop-settings")
+
+        self.owner = User.objects.create_superuser(
+            username="owner",
+            email="owner@example.com",
+            password="StrongPassword123!",
+        )
+
+        self.receptionist = User.objects.create_user(
+            username="receptionist",
+            email="receptionist@example.com",
+            password="StrongPassword123!",
+        )
+        StaffAccess.objects.create(
+            user=self.receptionist,
+            role=StaffAccess.Role.RECEPTION,
+            permissions=["bookings.view", "customers.view"],
+        )
+        self.receptionist.is_staff = True
+        self.receptionist.save(update_fields=["is_staff"])
+
+    def payload(self, **overrides):
+        body = {
+            "business_name": "NOIR Barbers",
+            "tagline": "Sharp work, no rush.",
+            "phone": "+251911000000",
+            "email": "hello@noir.test",
+            "address": "Bole, Addis Ababa",
+            "currency": "ETB",
+            "opening_time": "09:00",
+            "closing_time": "21:00",
+            "booking_horizon_days": 60,
+        }
+
+        body.update(overrides)
+
+        return body
+
+    def test_reading_creates_the_row_rather_than_failing(self):
+        """
+        The storefront reads this on every load.
+
+        A 500 because nobody has opened the settings screen yet would
+        take the booking form down with it, so the row is created on
+        first read.
+        """
+        self.assertFalse(ShopSettings.objects.exists())
+
+        self.client.force_authenticate(self.receptionist)
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(ShopSettings.objects.exists())
+        self.assertEqual(response.data["business_name"], "NOIR Barbers")
+
+    def test_every_staff_account_may_read_it(self):
+        """
+        Reading is not editing.
+
+        A receptionist reading the address out over the phone needs the
+        same record an owner edits.
+        """
+        self.client.force_authenticate(self.receptionist)
+
+        self.assertEqual(
+            self.client.get(self.url).status_code,
+            status.HTTP_200_OK,
+        )
+
+    def test_writing_requires_the_settings_capability(self):
+        self.client.force_authenticate(self.receptionist)
+        response = self.client.patch(
+            self.url, self.payload(business_name="Hijacked"), format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(ShopSettings.load().business_name, "NOIR Barbers")
+
+    def test_a_partial_write_leaves_the_rest_alone(self):
+        self.client.force_authenticate(self.owner)
+
+        self.client.patch(self.url, self.payload(), format="json")
+        response = self.client.patch(
+            self.url, {"phone": "+251900000000"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["phone"], "+251900000000")
+        self.assertEqual(response.data["address"], "Bole, Addis Ababa")
+
+    def test_closing_before_opening_is_refused(self):
+        """
+        The failure this prevents is silent: the booking form computes an
+        empty range and offers nobody any slots, with no error anywhere.
+        """
+        self.client.force_authenticate(self.owner)
+        response = self.client.patch(
+            self.url,
+            self.payload(opening_time="18:00", closing_time="09:00"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("closing_time", response.data)
+
+    def test_a_write_is_recorded_field_by_field(self):
+        self.client.force_authenticate(self.owner)
+
+        self.client.patch(self.url, self.payload(), format="json")
+        self.client.patch(self.url, {"phone": "+251900000000"}, format="json")
+
+        entry = AuditLog.objects.filter(action="settings.updated").first()
+
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.actor, self.owner)
+        self.assertEqual(
+            entry.details["changes"]["phone"],
+            {"from": "+251911000000", "to": "+251900000000"},
+        )
+
+    def test_a_write_with_no_actual_change_is_not_logged(self):
+        """
+        Otherwise the activity log fills with "changed" entries that
+        changed nothing, which is exactly what makes an audit trail
+        unreadable.
+        """
+        self.client.force_authenticate(self.owner)
+
+        self.client.patch(self.url, self.payload(), format="json")
+        AuditLog.objects.filter(action="settings.updated").delete()
+
+        self.client.patch(self.url, self.payload(), format="json")
+
+        self.assertFalse(AuditLog.objects.filter(action="settings.updated").exists())
+
+    def test_the_row_records_who_changed_it(self):
+        self.client.force_authenticate(self.owner)
+        self.client.patch(self.url, self.payload(), format="json")
+
+        self.assertEqual(ShopSettings.load().updated_by, self.owner)
+
+    def test_anonymous_is_refused(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class CustomerManagementTestCase(APITestCase):
+    """
+    Adding, editing and removing a customer from the console.
+
+    The screen is read-only today, which means a walk-in who wants a
+    review account has to be sent to the public sign-up form. These
+    cover the write path and, more importantly, the boundaries: this
+    screen manages customers, and must not quietly become a way to make
+    staff.
+    """
+
+    def setUp(self):
+        self.list_url = reverse("admin-customer-list")
+
+        self.owner = User.objects.create_superuser(
+            username="owner",
+            email="owner@example.com",
+            password="StrongPassword123!",
+        )
+
+        self.manager = User.objects.create_user(
+            username="manager",
+            email="manager@example.com",
+            password="StrongPassword123!",
+        )
+        StaffAccess.objects.create(
+            user=self.manager,
+            role=StaffAccess.Role.RECEPTION,
+            permissions=[
+                "customers.view",
+                "customers.manage",
+                "customers.delete",
+            ],
+        )
+        self.manager.is_staff = True
+        self.manager.save(update_fields=["is_staff"])
+
+        self.viewer = User.objects.create_user(
+            username="viewer",
+            email="viewer@example.com",
+            password="StrongPassword123!",
+        )
+        StaffAccess.objects.create(
+            user=self.viewer,
+            role=StaffAccess.Role.RECEPTION,
+            permissions=["customers.view"],
+        )
+        self.viewer.is_staff = True
+        self.viewer.save(update_fields=["is_staff"])
+
+        self.customer = User.objects.create_user(
+            username="customer",
+            email="customer@example.com",
+            password="StrongPassword123!",
+            first_name="Customer",
+        )
+        # The post_save signal already made the profile; set the number.
+        AccountProfile.objects.update_or_create(
+            user=self.customer,
+            defaults={"phone": "0911000000"},
+        )
+
+    def detail_url(self, user):
+        return reverse("admin-customer-detail", args=[user.pk])
+
+    def delete_url(self, user):
+        return reverse("admin-customer-delete", args=[user.pk])
+
+    def payload(self, **overrides):
+        body = {
+            "username": "walkin",
+            "email": "walkin@example.com",
+            "first_name": "Walk",
+            "last_name": "In",
+            "phone": "0922000000",
+        }
+
+        body.update(overrides)
+
+        return body
+
+    # CREATE
+
+    def test_creates_a_customer_and_returns_a_one_time_password(self):
+        self.client.force_authenticate(self.manager)
+        response = self.client.post(self.list_url, self.payload(), format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(username="walkin")
+
+        self.assertTrue(user.is_active)
+        self.assertFalse(user.is_staff)
+        self.assertEqual(AccountProfile.objects.get(user=user).phone, "0922000000")
+
+        password = response.data["temporary_password"]
+
+        self.assertTrue(password)
+        self.assertGreaterEqual(len(password), 12)
+        self.assertFalse(user.has_usable_password())
+
+    def test_a_customer_cannot_be_made_staff_from_here(self):
+        """
+        The one boundary that matters most on this screen.
+
+        It only requires `customers.manage`, which a receptionist may
+        hold. If it could also hand out console access, then the one
+        capability that means "look after customers" would silently mean
+        "create staff", and the team screen's role gate would be
+        decorative.
+        """
+        self.client.force_authenticate(self.manager)
+        response = self.client.post(
+            self.list_url,
+            self.payload(is_staff=True, role="admin"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(username="walkin")
+
+        self.assertFalse(user.is_staff)
+        self.assertFalse(StaffAccess.objects.filter(user=user).exists())
+
+    def test_creating_needs_the_manage_capability_not_just_view(self):
+        self.client.force_authenticate(self.viewer)
+        response = self.client.post(self.list_url, self.payload(), format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(User.objects.filter(username="walkin").exists())
+
+    def test_a_duplicate_username_is_refused(self):
+        self.client.force_authenticate(self.manager)
+        response = self.client.post(
+            self.list_url, self.payload(username="customer"), format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("username", response.data)
+
+    def test_a_duplicate_email_is_refused(self):
+        self.client.force_authenticate(self.manager)
+        response = self.client.post(
+            self.list_url,
+            self.payload(email="customer@example.com"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", response.data)
+
+    def test_creation_is_recorded(self):
+        self.client.force_authenticate(self.manager)
+        self.client.post(self.list_url, self.payload(), format="json")
+
+        entry = AuditLog.objects.filter(action="customer.created").first()
+
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.details["username"], "walkin")
+
+    # UPDATE
+
+    def test_edits_contact_details(self):
+        self.client.force_authenticate(self.manager)
+        response = self.client.patch(
+            self.detail_url(self.customer),
+            {"phone": "0933333333", "first_name": "Renamed"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.customer.refresh_from_db()
+
+        self.assertEqual(self.customer.first_name, "Renamed")
+        self.assertEqual(
+            AccountProfile.objects.get(user=self.customer).phone,
+            "0933333333",
+        )
+
+    def test_can_disable_and_re_enable_a_customer(self):
+        self.client.force_authenticate(self.manager)
+
+        self.client.patch(
+            self.detail_url(self.customer),
+            {"is_active": False},
+            format="json",
+        )
+        self.customer.refresh_from_db()
+        self.assertFalse(self.customer.is_active)
+
+        self.client.patch(
+            self.detail_url(self.customer),
+            {"is_active": True},
+            format="json",
+        )
+        self.customer.refresh_from_db()
+        self.assertTrue(self.customer.is_active)
+
+    def test_the_response_confirms_the_change_it_just_made(self):
+        """
+        The console writes then re-renders from the response.
+
+        Returning the read-only serializer here would omit `is_active`
+        and the UI would have to refetch to discover whether the disable
+        it just asked for had happened.
+        """
+        self.client.force_authenticate(self.manager)
+        response = self.client.patch(
+            self.detail_url(self.customer),
+            {"is_active": False, "phone": "0933333333"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("is_active", response.data)
+        self.assertFalse(response.data["is_active"])
+        self.assertEqual(response.data["phone"], "0933333333")
+
+    def test_a_staff_account_is_not_reachable_here(self):
+        """
+        A typed id for a staff account gets a 404, not a surprising
+        edit. Staff are managed on the user and team screens.
+        """
+        self.client.force_authenticate(self.manager)
+        response = self.client.patch(
+            self.detail_url(self.manager),
+            {"first_name": "Hijack"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_an_edit_is_recorded_field_by_field(self):
+        self.client.force_authenticate(self.manager)
+        self.client.patch(
+            self.detail_url(self.customer),
+            {"phone": "0933333333"},
+            format="json",
+        )
+
+        entry = AuditLog.objects.filter(action="customer.updated").first()
+
+        self.assertIsNotNone(entry)
+        self.assertEqual(
+            entry.details["changes"]["phone"],
+            {"from": "0911000000", "to": "0933333333"},
+        )
+
+    # DELETE
+
+    def test_deleting_removes_the_account(self):
+        self.client.force_authenticate(self.manager)
+        response = self.client.delete(self.delete_url(self.customer))
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(User.objects.filter(pk=self.customer.pk).exists())
+
+    def test_deleting_needs_its_own_capability(self):
+        """
+        Why `customers.delete` is separate from `customers.manage`.
+
+        Someone who may correct a phone number should not also be able to
+        destroy an account and everything hanging off it.
+        """
+        editor = User.objects.create_user(
+            username="editor",
+            email="editor@example.com",
+            password="StrongPassword123!",
+        )
+        StaffAccess.objects.create(
+            user=editor,
+            role=StaffAccess.Role.RECEPTION,
+            permissions=["customers.view", "customers.manage"],
+        )
+        editor.is_staff = True
+        editor.save(update_fields=["is_staff"])
+
+        self.client.force_authenticate(editor)
+        response = self.client.delete(self.delete_url(self.customer))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(User.objects.filter(pk=self.customer.pk).exists())
+
+    def test_a_customer_with_reviews_cannot_be_deleted(self):
+        Testimonial.objects.create(
+            user=self.customer,
+            customer_name="Customer",
+            message="Sharp work.",
+            rating=5,
+            status=Testimonial.Status.APPROVED,
+        )
+
+        self.client.force_authenticate(self.manager)
+        response = self.client.delete(self.delete_url(self.customer))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", response.data)
+        self.assertTrue(User.objects.filter(pk=self.customer.pk).exists())
+
+    def test_deleting_a_staff_account_is_not_reachable_here(self):
+        self.client.force_authenticate(self.manager)
+        response = self.client.delete(self.delete_url(self.manager))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_deletion_is_recorded(self):
+        self.client.force_authenticate(self.manager)
+        self.client.delete(self.delete_url(self.customer))
+
+        entry = AuditLog.objects.filter(action="customer.deleted").first()
+
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.details["username"], "customer")
 
 
 class DashboardTestCase(APITestCase):

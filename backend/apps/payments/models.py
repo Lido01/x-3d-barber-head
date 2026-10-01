@@ -81,6 +81,16 @@ class Payment(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+        # The verification screen opens on `pending` and works down that
+        # queue, and the dashboard counts by status. Both are the same
+        # question, so the index is built for it.
+        indexes = [
+            models.Index(
+                fields=["status", "-created_at"],
+                name="payment_status_created_idx",
+            ),
+        ]
+
     def __str__(self):
         return (
             f"Payment #{self.id} - "

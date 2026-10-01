@@ -63,7 +63,7 @@ export default function Barbers() {
               {barbers.map((barber, index) => (
                 <article
                   key={barber.id}
-                  className="group overflow-hidden border border-white/10 bg-[#111]"
+                  className="group rounded-2xl overflow-hidden border border-white/10 bg-[#111]"
                 >
                   <div className="relative h-[430px] overflow-hidden bg-gradient-to-b from-[#292929] to-[#111]">
                     {barber.image ? (
@@ -81,7 +81,7 @@ export default function Barbers() {
                       </div>
                     )}
 
-                    <div className="absolute left-5 top-5 border border-white/10 bg-black/30 px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-white/40 backdrop-blur">
+                    <div className="absolute left-5 top-5 rounded-full border border-white/10 bg-black/30 px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-white/40 backdrop-blur">
                       0{index + 1}
                     </div>
                   </div>

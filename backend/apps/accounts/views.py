@@ -8,7 +8,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils.crypto import get_random_string
 
 from rest_framework import generics, permissions, status
@@ -22,6 +22,7 @@ from rest_framework_simplejwt.views import (
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
+    CustomerCreateSerializer,
     LoginResponseSerializer,
     DashboardSerializer,
     OperationsReportSerializer,
@@ -29,17 +30,44 @@ from .serializers import (
     PasswordChangeSerializer,
     PasswordResetSerializer,
     RegistrationSerializer,
+    ShopSettingsSerializer,
     StaffAccessSerializer,
     AuditLogSerializer,
     UserManagementSerializer,
+    UserManagementCreateSerializer,
+    CustomerUpdateSerializer,
     session_payload,
 )
-from .models import AuditLog, StaffAccess
+from .models import AuditLog, ShopSettings, StaffAccess
 from .audit import log_action
 from .permissions import IsStaffMember, can, capability_permission
 
 
 User = get_user_model()
+
+
+def _counts(queryset, **conditions):
+    """
+    A total plus any number of conditional breakdowns, from one query.
+
+    Each keyword is a field name and the ``Q`` it counts, so::
+
+        _counts(User.objects, active=Q(is_active=True))
+
+    returns ``{"total": 12, "active": 10}``.
+
+    Written as a single aggregate because the dashboard used to issue
+    one COUNT per figure - twenty-odd round trips to render a screen of
+    numbers, on a connection that may be a phone on shop wifi.
+    """
+    from django.db.models import Count
+
+    aggregate = {"total": Count("id")}
+
+    for name, condition in conditions.items():
+        aggregate[name] = Count("id", filter=condition)
+
+    return queryset.aggregate(**aggregate)
 
 
 @extend_schema(
@@ -50,11 +78,34 @@ User = get_user_model()
         "the name, username, email and phone number."
     ),
 )
-class AdminAccountListView(generics.ListAPIView):
-    """Staff-only, read-only customer directory for the mobile console."""
+class AdminAccountListView(generics.ListCreateAPIView):
+    """
+    The customer directory for the staff console.
 
-    serializer_class = AdminAccountSerializer
-    permission_classes = [capability_permission("customers.view")]
+    Read needs `customers.view`; creating needs `customers.manage`. They
+    are separate capabilities because looking someone up to read them a
+    phone number is a different job from being able to change it, and a
+    shop should be able to grant one without the other.
+
+    Writing here is deliberately narrower than user management. This
+    screen manages a *customer*: contact details and whether the account
+    is enabled. It cannot create staff, change a role, or grant console
+    access - those live on the user and team screens, which are gated on
+    being an owner or administrator. Two screens that both edited roles
+    is how they drift apart.
+    """
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [capability_permission("customers.manage")()]
+
+        return [capability_permission("customers.view")()]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return CustomerCreateSerializer
+
+        return AdminAccountSerializer
 
     def get_queryset(self):
         queryset = (
@@ -65,8 +116,6 @@ class AdminAccountListView(generics.ListAPIView):
         query = self.request.query_params.get("q", "").strip()
 
         if query:
-            from django.db.models import Q
-
             queryset = queryset.filter(
                 Q(username__icontains=query)
                 | Q(email__icontains=query)
@@ -76,6 +125,244 @@ class AdminAccountListView(generics.ListAPIView):
             )
 
         return queryset
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create the account and hand back its one-time password.
+
+        Returned in the same response the way user management does, so
+        the console has one shape of "here is the password" to render
+        rather than two.
+        """
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.save()
+
+        data = AdminAccountSerializer(
+            user, context={"request": request}
+        ).data
+        data["temporary_password"] = serializer.generated_password
+
+        log_action(
+            request,
+            "customer.created",
+            user,
+            {"username": user.get_username()},
+        )
+
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(
+    request=AdminAccountSerializer,
+    responses={
+        200: AdminAccountSerializer,
+        400: OpenApiResponse(description="Invalid customer data."),
+        403: OpenApiResponse(description="customers.manage required."),
+        404: OpenApiResponse(description="No such customer account."),
+    },
+    description=(
+        "Update a customer account's contact details, or enable and "
+        "disable it. Customers only - a staff account is managed through "
+        "user management, so a typed id for one gets a 404 here rather "
+        "than a surprising edit."
+    ),
+)
+class AdminAccountDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = CustomerUpdateSerializer
+    permission_classes = [capability_permission("customers.manage")]
+
+    def get_queryset(self):
+        return User.objects.filter(is_staff=False).select_related("profile")
+
+    def update(self, request, *args, **kwargs):
+        """
+        Record what changed, field by field.
+
+        A phone number being corrected and a customer being signed out
+        are both worth being able to answer for afterwards, and the
+        activity log is the only place that question is ever asked.
+
+        Deliberately not calling `super().update()`: that would fetch the
+        object a second time and mutate *that* instance, leaving the one
+        held here untouched - so the before and after snapshots would
+        always match and nothing would ever be logged.
+        """
+
+        user = self.get_object()
+        before = AdminAccountDetailView._snapshot(user)
+
+        serializer = self.get_serializer(
+            user,
+            data=request.data,
+            partial=kwargs.pop("partial", True),
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        after = AdminAccountDetailView._snapshot(user)
+
+        changes = {
+            field: {"from": before[field], "to": after[field]}
+            for field in before
+            if before[field] != after[field]
+        }
+
+        if changes:
+            log_action(request, "customer.updated", user, {"changes": changes})
+
+        # The update serializer's own output, not the read-only one:
+        # it carries `is_active`, so the console can confirm the change it
+        # just made instead of having to refetch to find out.
+        return Response(serializer.data)
+
+    @staticmethod
+    def _snapshot(user):
+        profile = getattr(user, "profile", None)
+
+        return {
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "phone": profile.phone if profile else "",
+            "is_active": user.is_active,
+        }
+
+
+@extend_schema(
+    request=None,
+    responses={
+        204: OpenApiResponse(description="Customer account deleted."),
+        403: OpenApiResponse(description="customers.delete required."),
+        404: OpenApiResponse(description="No such customer account."),
+    },
+    description=(
+        "Permanently delete a customer account. "
+        "Requires `customers.delete`, which is separate from "
+        "`customers.manage` on purpose: correcting a phone number and "
+        "destroying someone's history are not the same authority. "
+        "Accounts that own bookings, payments or reviews are refused - "
+        "disable them instead, so the shop's records stay intact."
+    ),
+)
+class AdminAccountDeleteView(generics.DestroyAPIView):
+    """
+    Permanently delete a customer account.
+
+    Gated on `customers.delete`, which is separate from
+    `customers.manage` on purpose: correcting a phone number and
+    destroying someone's history are not the same authority, and a shop
+    should be able to grant one without the other.
+
+    Deleting refuses an account that has left reviews, because a review
+    is a real foreign key to it and the shop's published wall would lose
+    the attribution.
+
+    It cannot, however, see a customer's bookings or payments. Those
+    tables record `customer_name` and `customer_phone` as free text -
+    most bookings are walk-ins who never made an account at all - so
+    there is no honest way to attribute them here. Guessing on the phone
+    number would either block legitimate deletions or let a real one
+    through, and both are worse than saying so. That is why the console
+    offers "disable" as the ordinary answer and keeps delete behind its
+    own capability and its own confirmation.
+    """
+
+    queryset = User.objects.filter(is_staff=False)
+    permission_classes = [capability_permission("customers.delete")]
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
+        username = user.get_username()
+
+        if user.testimonials.exists():
+            raise ValidationError(
+                {
+                    "detail": (
+                        "This account has reviews attached and deleting it "
+                        "would leave them without an author. Disable the "
+                        "account instead."
+                    )
+                }
+            )
+
+        log_action(request, "customer.deleted", details={"username": username})
+
+        self.perform_destroy(user)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(
+    responses={200: ShopSettingsSerializer, 403: OpenApiResponse(description="Staff only.")},
+    description=(
+        "The shop's own details - name, contact, opening hours, currency. "
+        "Readable by any staff account so the booking form and contact "
+        "details can be built from it; writable only with "
+        "`settings.manage`."
+    ),
+)
+class ShopSettingsView(generics.RetrieveUpdateAPIView):
+    """
+    One row, read and written in place.
+
+    GET is for every member of staff, not just those who may change it:
+    a receptionist reading out the address over the phone needs the same
+    record an owner edits, and serving two shapes of the same fact is how
+    the two disagree.
+    """
+
+    serializer_class = ShopSettingsSerializer
+
+    def get_permissions(self):
+        if self.request.method in ("GET", "HEAD", "OPTIONS"):
+            return [IsStaffMember()]
+
+        return [capability_permission("settings.manage")()]
+
+    def get_object(self):
+        return ShopSettings.load()
+
+    def update(self, request, *args, **kwargs):
+        instance = ShopSettings.load()
+        before = ShopSettingsView._snapshot(instance)
+
+        serializer = self.get_serializer(instance, data=request.data, partial=kwargs.pop("partial", True))
+        serializer.is_valid(raise_exception=True)
+
+        settings_row = serializer.save(updated_by=request.user)
+
+        after = ShopSettingsView._snapshot(settings_row)
+
+        changes = {
+            field: {"from": before[field], "to": after[field]}
+            for field in before
+            if before[field] != after[field]
+        }
+
+        if changes:
+            log_action(request, "settings.updated", settings_row, {"changes": changes})
+
+        return Response(
+            self.get_serializer(settings_row).data,
+            status=status.HTTP_200_OK,
+        )
+
+    @staticmethod
+    def _snapshot(row):
+        return {
+            "business_name": row.business_name,
+            "tagline": row.tagline,
+            "phone": row.phone,
+            "email": row.email,
+            "address": row.address,
+            "currency": row.currency,
+            "opening_time": row.opening_time.strftime("%H:%M") if row.opening_time else None,
+            "closing_time": row.closing_time.strftime("%H:%M") if row.closing_time else None,
+            "booking_horizon_days": row.booking_horizon_days,
+        }
 
 
 @extend_schema(
@@ -356,14 +643,17 @@ class UserManagementListView(generics.ListAPIView):
     accounts. Search covers the same fields the console shows, and
     `role` narrows the list to one kind of account so the console's
     role filter does not have to download every user to find them.
+
+    GET only. Creating an account lives on
+    ``UserManagementCreateView`` so that a read-only screen can never
+    accidentally grow a write, and so the two have separate
+    documentation of who is allowed to do what.
     """
 
     serializer_class = UserManagementSerializer
     permission_classes = [OwnerOrAdministrator]
 
     def get_queryset(self):
-        from django.db.models import Q
-
         queryset = User.objects.select_related("staff_access", "profile").order_by("-date_joined")
         params = self.request.query_params
         query = params.get("q", "").strip()
@@ -390,6 +680,73 @@ class UserManagementListView(generics.ListAPIView):
             )
 
         return queryset
+
+
+@extend_schema(
+    request=UserManagementCreateSerializer,
+    responses={
+        201: OpenApiResponse(
+            description=(
+                "The created account, plus `temporary_password` - shown "
+                "once and not retrievable again."
+            )
+        ),
+        400: OpenApiResponse(
+            description=(
+                "Invalid account data, a duplicate username or email, an "
+                "unknown capability, or an attempt to grant ownership."
+            )
+        ),
+        403: OpenApiResponse(
+            description="Owner or administrator only."
+        ),
+    },
+    description=(
+        "Create an account and decide what it may do, in one call. "
+        "Omit `password` to have a strong one generated; it comes back "
+        "once in `temporary_password` and is never stored in a "
+        "recoverable form. `owner` is not assignable."
+    ),
+)
+class UserManagementCreateView(generics.CreateAPIView):
+    """
+    Create an account and decide what it may do, in one call.
+
+    Owner and administrator only, for the same reason the screens that
+    hand out power are gated on role rather than capability: asking
+    "what may this person do?" to decide who may decide that is a
+    circular authority.
+
+    The response is the created account plus ``temporary_password``,
+    shown once. It is deliberately the only way to learn it - the shop
+    has no outbound mail configured, and a reset link that silently goes
+    nowhere is worse than a password handed over in person.
+    """
+
+    serializer_class = UserManagementCreateSerializer
+    permission_classes = [OwnerOrAdministrator]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.save()
+
+        data = UserManagementSerializer(user, context={"request": request}).data
+        data["temporary_password"] = serializer.generated_password
+
+        log_action(
+            request,
+            "user.created",
+            user,
+            {
+                "username": user.get_username(),
+                "role": data["role"],
+                "permissions": data["permissions"],
+            },
+        )
+
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class UserManagementDetailView(generics.RetrieveUpdateAPIView):
@@ -542,29 +899,36 @@ class DashboardView(generics.GenericAPIView):
             self._add_payments(payload, Payment, today)
 
         if "customers" in sections:
-            payload["counts"]["users"] = {
-                "total": User.objects.count(),
-                "active": User.objects.filter(is_active=True).count(),
-                "staff": User.objects.filter(is_staff=True).count(),
-                "disabled": User.objects.filter(is_active=False).count(),
-            }
+            # One aggregate instead of four counts. The dashboard is
+            # opened between customers, often on a phone, and four
+            # round trips to render four digits is the wrong shape for
+            # that.
+            payload["counts"]["users"] = _counts(
+                User.objects,
+                active=Q(is_active=True),
+                staff=Q(is_staff=True),
+                disabled=Q(is_active=False),
+            )
 
         if "services" in sections:
-            payload["counts"]["services"] = {
-                "total": Service.objects.count(),
-                "active": Service.objects.filter(is_active=True).count(),
-            }
+            payload["counts"]["services"] = _counts(
+                Service.objects,
+                active=Q(is_active=True),
+            )
 
         if "gallery" in sections:
-            payload["counts"]["gallery"] = {
-                "total": GalleryPost.objects.count(),
-                "visible": GalleryPost.objects.filter(is_active=True).count(),
-            }
+            payload["counts"]["gallery"] = _counts(
+                GalleryPost.objects,
+                visible=Q(is_active=True),
+            )
 
         if "reviews" in sections:
-            pending_reviews = Testimonial.objects.filter(status="pending").count()
-            payload["counts"]["reviews"] = {"total": Testimonial.objects.count(), "pending": pending_reviews}
-            payload["queues"]["reviews_to_approve"] = pending_reviews
+            reviews = _counts(
+                Testimonial.objects,
+                pending=Q(status=Testimonial.Status.PENDING),
+            )
+            payload["counts"]["reviews"] = reviews
+            payload["queues"]["reviews_to_approve"] = reviews["pending"]
 
         return Response(payload)
 
@@ -593,8 +957,6 @@ class DashboardView(generics.GenericAPIView):
 
         from datetime import timedelta
 
-        from django.db.models import Count
-
         horizon = today + timedelta(days=self.upcoming_days)
 
         base = (
@@ -613,19 +975,30 @@ class DashboardView(generics.GenericAPIView):
 
         payload["schedule"]["upcoming"] = [self._booking_row(row) for row in upcoming]
 
-        by_status = dict(todays.values_list("status").annotate(total=Count("id")))
+        # Every figure for today from one scan of today's rows, rather
+        # than a count, a GROUP BY and a per-status lookup.
+        today_counts = _counts(
+            todays,
+            pending=Q(status="pending"),
+            confirmed=Q(status="confirmed"),
+            completed=Q(status="completed"),
+        )
 
-        pending_total = base.filter(status="pending").count()
+        # And one scan of the table for the all-time and queue figures.
+        overall = _counts(
+            booking_model.objects,
+            pending=Q(status="pending"),
+        )
 
         payload["counts"]["bookings"] = {
-            "today": todays.count(),
-            "pending_today": by_status.get("pending", 0),
-            "confirmed_today": by_status.get("confirmed", 0),
-            "completed_today": by_status.get("completed", 0),
-            "all_time": booking_model.objects.count(),
+            "today": today_counts["total"],
+            "pending_today": today_counts["pending"],
+            "confirmed_today": today_counts["confirmed"],
+            "completed_today": today_counts["completed"],
+            "all_time": overall["total"],
         }
 
-        payload["queues"]["bookings_to_confirm"] = pending_total
+        payload["queues"]["bookings_to_confirm"] = overall["pending"]
 
     @staticmethod
     def _booking_row(booking):
@@ -645,31 +1018,43 @@ class DashboardView(generics.GenericAPIView):
     def _add_payments(self, payload, payment_model, today):
         """Payment queue and verified revenue."""
 
-        from django.db.models import Sum
-
         verified = payment_model.objects.filter(status="verified")
 
         month_start = today.replace(day=1)
 
+        queue = _counts(
+            payment_model.objects,
+            pending=Q(status="pending"),
+            verified=Q(status="verified"),
+        )
+
         payload["counts"]["payments"] = {
-            "total": payment_model.objects.count(),
-            "pending": payment_model.objects.filter(status="pending").count(),
-            "verified": verified.count(),
+            "total": queue["total"],
+            "pending": queue["pending"],
+            "verified": queue["verified"],
         }
+
+        # The three revenue figures differ only in a date bound, so one
+        # scan with conditional sums replaces three separate aggregates.
+        revenue = verified.aggregate(
+            verified_total=Sum("amount"),
+            verified_this_month=Sum(
+                "amount",
+                filter=Q(verified_at__date__gte=month_start),
+            ),
+            verified_today=Sum(
+                "amount",
+                filter=Q(verified_at__date=today),
+            ),
+        )
 
         payload["revenue"] = {
-            "verified_total": verified.aggregate(total=Sum("amount"))["total"] or 0,
-            "verified_this_month": verified.filter(
-                verified_at__date__gte=month_start
-            ).aggregate(total=Sum("amount"))["total"]
-            or 0,
-            "verified_today": verified.filter(
-                verified_at__date=today
-            ).aggregate(total=Sum("amount"))["total"]
-            or 0,
+            "verified_total": revenue["verified_total"] or 0,
+            "verified_this_month": revenue["verified_this_month"] or 0,
+            "verified_today": revenue["verified_today"] or 0,
         }
 
-        payload["queues"]["payments_to_verify"] = payment_model.objects.filter(status="pending").count()
+        payload["queues"]["payments_to_verify"] = queue["pending"]
 
 
 class OperationsReportView(generics.GenericAPIView):

@@ -128,7 +128,7 @@ export default function BottomBar() {
 
       {/* More sheet */}
       <div
-        className={`absolute inset-x-3 bottom-[calc(100%+0.75rem)] overflow-hidden border border-white/10 bg-[#0c0c0c]/95 backdrop-blur-2xl transition-all duration-300 ${
+        className={`absolute inset-x-3 bottom-[calc(100%+0.75rem)] rounded-2xl overflow-hidden border border-white/10 bg-[#0c0c0c]/95 backdrop-blur-2xl transition-all duration-300 ${
           moreOpen
             ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none translate-y-3 opacity-0"

@@ -40,7 +40,7 @@ export default function Alert({
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
-      className={`rounded-xl border p-4 ${box} ${className}`}
+      className={` rounded-xl border p-4 ${box} ${className}`}
     >
       <div className="flex gap-3">
         <Icon size={17} className={`mt-0.5 shrink-0 ${icon}`} />

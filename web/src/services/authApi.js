@@ -93,7 +93,14 @@ export function updateCurrentAccount(patch, { signal } = {}) {
     .then((response) => response.data);
 }
 
-/** Staff-only customer directory. A query is handled server-side. */
+/**
+ * Staff-only customer directory.
+ *
+ * A query is handled server-side, so typing filters the database rather
+ * than downloading every account to filter it in the browser.
+ *
+ * POST needs `customers.manage`; the list needs only `customers.view`.
+ */
 export function listRegisteredCustomers({ query = "", signal } = {}) {
   return api
     .get("/accounts/customers/", {
@@ -101,6 +108,74 @@ export function listRegisteredCustomers({ query = "", signal } = {}) {
       params: query.trim() ? { q: query.trim() } : undefined,
       signal,
     })
+    .then((response) => response.data);
+}
+
+/**
+ * Add a customer from the console — a walk-in who wants an account so
+ * they can leave a review, without being sent to the public sign-up page.
+ *
+ * Never staff: this endpoint has no role parameter, so the capability
+ * that means "look after customers" cannot quietly become "create
+ * staff". The response carries `temporary_password`, shown once.
+ */
+export function createCustomer({
+  username,
+  email,
+  firstName = "",
+  lastName = "",
+  phone = "",
+  password = "",
+}) {
+  const payload = {
+    username: username.trim(),
+    email: email.trim(),
+  };
+
+  if (firstName.trim()) payload.first_name = firstName.trim();
+  if (lastName.trim()) payload.last_name = lastName.trim();
+  if (phone.trim()) payload.phone = phone.trim();
+  if (password) payload.password = password;
+
+  return api
+    .post("/accounts/customers/", payload, { requiresAuth: true })
+    .then((response) => response.data);
+}
+
+/** Correct a customer's contact details, or enable/disable the account. */
+export function updateCustomer(id, payload) {
+  return api
+    .patch(`/accounts/customers/${id}/`, payload, { requiresAuth: true })
+    .then((response) => response.data);
+}
+
+/**
+ * Delete a customer account. Needs `customers.delete`, which is separate
+ * from `customers.manage` on purpose — correcting a phone number and
+ * destroying an account are not the same authority. Accounts with
+ * reviews attached are refused; disable them instead.
+ */
+export function deleteCustomer(id) {
+  return api
+    .delete(`/accounts/customers/${id}/delete/`, { requiresAuth: true })
+    .then(() => undefined);
+}
+
+/**
+ * The shop's own details — name, contact, hours, currency.
+ *
+ * Readable by any staff account; writable only with `settings.manage`.
+ * There is one row, created on first read, so this never 404s.
+ */
+export function getShopSettings({ signal } = {}) {
+  return api
+    .get("/accounts/settings/", { requiresAuth: true, signal })
+    .then((response) => response.data);
+}
+
+export function updateShopSettings(patch) {
+  return api
+    .patch("/accounts/settings/", patch, { requiresAuth: true })
     .then((response) => response.data);
 }
 
@@ -180,6 +255,46 @@ export function listManagedUsers({ query = "", role = "", signal } = {}) {
 
   return api
     .get("/accounts/users/", { requiresAuth: true, params, signal })
+    .then((response) => response.data);
+}
+
+/**
+ * Create an account, with its role, in one call.
+ *
+ * The alternative was two steps — register the person as a customer,
+ * then find them in the directory and promote them. On a phone, in a
+ * shop, that is the difference between onboarding someone before their
+ * shift and doing it tonight.
+ *
+ * The response carries `temporary_password`, shown once and never
+ * retrievable again. Omit `password` and the server generates one.
+ *
+ * @returns {Promise<object>} the created account plus temporary_password
+ */
+export function createManagedUser({
+  username,
+  email,
+  firstName = "",
+  lastName = "",
+  phone = "",
+  role = "customer",
+  permissions = [],
+  password = "",
+}) {
+  const payload = {
+    username: username.trim(),
+    email: email.trim(),
+    role,
+    permissions,
+  };
+
+  if (firstName.trim()) payload.first_name = firstName.trim();
+  if (lastName.trim()) payload.last_name = lastName.trim();
+  if (phone.trim()) payload.phone = phone.trim();
+  if (password) payload.password = password;
+
+  return api
+    .post("/accounts/users/new/", payload, { requiresAuth: true })
     .then((response) => response.data);
 }
 

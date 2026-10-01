@@ -39,7 +39,7 @@ export default function Gallery() {
         </div>
 
         {loading && (
-          <div className="mt-14 flex items-center justify-center  border border-white/10 bg-[#111] py-24">
+          <div className="mt-14 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
             <Spinner label="Loading the gallery..." />
           </div>
         )}
@@ -68,7 +68,7 @@ export default function Gallery() {
               <button
                 key={post.id}
                 onClick={() => setSelected(post)}
-                className="group relative h-80 overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
+                className="group relative h-80 rounded-2xl overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
               >
                 <img
                   src={mediaUrl(post.image)}
@@ -102,7 +102,7 @@ function PostModal({ post, close }) {
       onMouseDown={close}
     >
       <article
-        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
+        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto rounded-2xl border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button

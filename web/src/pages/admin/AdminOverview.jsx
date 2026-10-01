@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
   CalendarCheck,
-  CalendarDays,
   Check,
   CheckCheck,
   CreditCard,
@@ -14,17 +13,24 @@ import {
   UserRound,
 } from "lucide-react";
 
-import StatusBadge from "../../components/StatusBadge";
 import Alert from "../../components/ui/Alert";
 import {
   AdminButton,
+  AdminChip,
+  AdminDetails,
+  AdminEmpty,
   AdminLoading,
   AdminPageHeader,
   AdminPanel,
+  AdminSection,
+  AdminStat,
+  AdminStatGrid,
+  AdminStatus,
 } from "../../components/admin/AdminUi";
 import { completeBooking, confirmBooking } from "../../services/bookingApi";
 import { getDashboard } from "../../services/authApi";
 import { useAdminAuth } from "../../context/AdminAuthContext";
+import { invalidateQuery, useQuery } from "../../hooks/useQuery";
 import { hasCapability, staffRoleLabel } from "../../utils/staffRole";
 import { formatDate, formatPrice, formatTime } from "../../utils/format";
 
@@ -44,13 +50,21 @@ import { formatDate, formatPrice, formatTime } from "../../utils/format";
  * complete happens where the appointment already is, rather than
  * requiring a trip to the bookings screen to find the same row again.
  *
+ * The layout is ordered by what the person opening this actually needs,
+ * in the order they need it:
+ *
+ *   1. anything waiting on a decision, because that is work
+ *   2. today's numbers, because that is context for the work
+ *   3. today's schedule, because that is the work
+ *   4. the week ahead, because that is what to prepare for
+ *
+ * Queues sit above the figures deliberately. A dashboard that leads with
+ * revenue while three payments are unverified has its priorities
+ * upside-down for the person who opened it.
+ *
  * The response is scoped to the signed-in account, so a receptionist
  * sees today's schedule and the bookings queue and no revenue figure
  * or customer count they have no capability to fetch.
- *
- * Every action replaces its row with the server's response rather than
- * guessing the new state, so the schedule never shows a status the API
- * did not agree with.
  */
 
 const SECTIONS = {
@@ -62,31 +76,35 @@ const SECTIONS = {
   reviews: "reviews.moderate",
 };
 
+const QUICK_ACTIONS = [
+  { key: "payments", label: "Verify payments", to: "/admin/payments" },
+  { key: "bookings", label: "Confirm bookings", to: "/admin/bookings" },
+  { key: "customers", label: "Customers", to: "/admin/customers" },
+  { key: "services", label: "Services", to: "/admin/services" },
+  { key: "gallery", label: "Gallery", to: "/admin/gallery" },
+  { key: "reviews", label: "Reviews", to: "/admin/testimonials" },
+];
+
 export default function AdminOverview() {
   const { account } = useAdminAuth();
 
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState(null);
 
-  const load = useCallback(async () => {
-    setRefreshing(true);
-
-    try {
-      setData(await getDashboard());
-      setError(null);
-    } catch (apiError) {
-      setError(apiError);
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  // This is the screen a barber opens between customers, and it is the
+  // one place where a stale number is actively misleading, so it is
+  // always fetched fresh rather than served from cache. Every write on
+  // this screen invalidates it, so the counts and the schedule move
+  // together.
+  const {
+    data,
+    error,
+    isFetching: refreshing,
+    refetch: load,
+  } = useQuery("/accounts/reports/dashboard/", getDashboard, {
+    scope: "staff",
+    staleMs: 0,
+  });
 
   const can = (section) => hasCapability(account, SECTIONS[section]);
   const canManageBookings = hasCapability(account, "bookings.manage");
@@ -94,35 +112,22 @@ export default function AdminOverview() {
   /**
    * Run a status transition on a schedule row.
    *
-   * Only the status is copied back from the response: the row was built
-   * by the dashboard endpoint and carries a different field shape from
-   * the bookings endpoint, so merging the whole booking in would
-   * blank out the service and barber names on a card that already had
-   * them. The status is the only thing the transition can change.
+   * The whole dashboard is re-read afterwards rather than the row being
+   * patched in place. This payload aggregates counts and rows from
+   * several tables, so a booking transition changes today's count, the
+   * pending tally and the revenue figure at the same time - there is no
+   * correct way to patch one card in isolation and leave the rest true.
    */
   const runBookingAction = async (booking, action) => {
     setBusyId(booking.id);
     setActionError(null);
 
     try {
-      const updated = await action(booking.id);
+      await action(booking.id);
 
-      setData((current) => {
-        if (!current) {
-          return current;
-        }
-
-        const patch = (row) =>
-          row.id === updated.id ? { ...row, status: updated.status } : row;
-
-        return {
-          ...current,
-          schedule: {
-            today: current.schedule.today.map(patch),
-            upcoming: current.schedule.upcoming.map(patch),
-          },
-        };
-      });
+      invalidateQuery("reports/dashboard");
+      invalidateQuery("bookings");
+      invalidateQuery("availability");
     } catch (apiError) {
       setActionError(apiError);
     } finally {
@@ -130,98 +135,50 @@ export default function AdminOverview() {
     }
   };
 
-  const stats = data
-    ? [
-        data.counts?.bookings && {
-          label: "Bookings today",
-          to: "/admin/bookings",
-          icon: CalendarCheck,
-          count: data.counts.bookings.today,
-          sub: `${data.counts.bookings.pending_today} awaiting confirmation`,
-        },
-        data.counts?.users && {
-          label: "Customers",
-          to: "/admin/customers",
-          icon: UserRound,
-          count: data.counts.users.total,
-          sub: `${data.counts.users.staff} staff accounts`,
-        },
-        data.counts?.payments && {
-          label: "Payments to verify",
-          to: "/admin/payments",
-          icon: CreditCard,
-          count: data.counts.payments.pending,
-          sub: `${data.counts.payments.verified} verified`,
-        },
-        data.revenue?.verified_total != null && {
-          label: "Verified revenue",
-          to: "/admin/payments",
-          icon: TrendingUp,
-          // A currency figure is text, not a count — it has to be
-          // allowed to shrink where a four-digit number would fit.
-          count: formatPrice(data.revenue.verified_total),
-          sub: `${formatPrice(data.revenue.verified_this_month)} this month`,
-          isText: true,
-        },
-        data.counts?.services && {
-          label: "Services live",
-          to: "/admin/services",
-          icon: Scissors,
-          count: data.counts.services.active,
-          sub: `${data.counts.services.total} in total`,
-        },
-        data.counts?.reviews && {
-          label: "Reviews to approve",
-          to: "/admin/testimonials",
-          icon: MessageSquareQuote,
-          count: data.counts.reviews.pending,
-          sub: `${data.counts.reviews.total} submitted`,
-        },
-      ].filter(Boolean)
-    : [];
-
-  const queues = data
-    ? [
-        data.queues?.bookings_to_confirm != null && {
-          label: "Bookings to confirm",
-          count: data.queues.bookings_to_confirm,
-          to: "/admin/bookings",
-        },
-        data.queues?.payments_to_verify != null && {
-          label: "Payments to verify",
-          count: data.queues.payments_to_verify,
-          to: "/admin/payments",
-        },
-        data.queues?.reviews_to_approve != null && {
-          label: "Reviews to approve",
-          count: data.queues.reviews_to_approve,
-          to: "/admin/testimonials",
-        },
-      ].filter(Boolean)
-    : [];
+  const queues = [
+    data?.queues?.bookings_to_confirm != null && {
+      label: "Bookings to confirm",
+      count: data.queues.bookings_to_confirm,
+      to: "/admin/bookings",
+      icon: CalendarCheck,
+    },
+    data?.queues?.payments_to_verify != null && {
+      label: "Payments to verify",
+      count: data.queues.payments_to_verify,
+      to: "/admin/payments",
+      icon: CreditCard,
+    },
+    data?.queues?.reviews_to_approve != null && {
+      label: "Reviews to approve",
+      count: data.queues.reviews_to_approve,
+      to: "/admin/testimonials",
+      icon: MessageSquareQuote,
+    },
+  ].filter(Boolean);
 
   const queueTotal = queues.reduce((sum, item) => sum + item.count, 0);
 
-  const quickActions = data
-    ? [
-        can("payments") && { label: "Verify payments", to: "/admin/payments" },
-        can("bookings") && { label: "Confirm bookings", to: "/admin/bookings" },
-        can("customers") && { label: "View customers", to: "/admin/customers" },
-        can("services") && { label: "Add a service", to: "/admin/services" },
-        can("gallery") && { label: "Add gallery post", to: "/admin/gallery" },
-        can("reviews") && { label: "Review testimonials", to: "/admin/testimonials" },
-      ].filter(Boolean)
-    : [];
+  const quickActions = QUICK_ACTIONS.filter((action) => can(action.key));
+
+  const todayCount = data?.counts?.bookings?.today ?? 0;
 
   return (
-    <div>
+    <div className="space-y-5">
       <AdminPageHeader
-        eyebrow={`${staffRoleLabel(account?.staff_role)} dashboard`}
-        title="Overview"
-        description="Today's schedule, what needs a decision, and the numbers behind them — counted in the database, not in the browser."
+        eyebrow={`${staffRoleLabel(account?.staff_role)} console`}
+        title={`Good to see you, ${account?.username || "there"}`}
+        description={
+          data
+            ? `${formatDate(data.today)} — the shop as it stands right now.`
+            : "The shop as it stands right now."
+        }
         actions={
-          <AdminButton onClick={load} icon={RefreshCw} disabled={refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh"}
+          <AdminButton
+            onClick={load}
+            icon={RefreshCw}
+            loading={refreshing}
+          >
+            Refresh
           </AdminButton>
         }
       />
@@ -232,7 +189,6 @@ export default function AdminOverview() {
           title="Could not load the dashboard"
           details={error.fieldErrors}
           onRetry={load}
-          className="mt-6"
         >
           {error.message}
         </Alert>
@@ -243,7 +199,6 @@ export default function AdminOverview() {
           tone="error"
           title="Action failed"
           details={actionError.fieldErrors}
-          className="mt-6"
         >
           {actionError.message}
         </Alert>
@@ -253,240 +208,368 @@ export default function AdminOverview() {
 
       {data && (
         <>
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
-            {stats.map((stat) => {
-              const Icon = stat.icon;
-
-              return (
-                <Link
-                  key={stat.label}
-                  to={stat.to}
-                  className="group min-w-0 rounded-2xl border border-white/10 bg-[#111] p-4 transition hover:border-[#d6a85f]/40 sm:p-6"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#181818]">
-                      <Icon size={17} className="text-[#d6a85f]" />
-                    </span>
-
-                    <ArrowRight
-                      size={16}
-                      className="mt-1 shrink-0 text-white/25 transition group-hover:translate-x-0.5 group-hover:text-[#d6a85f]"
-                    />
-                  </div>
-
-                  <p
-                    className={`mt-4 truncate font-serif leading-none text-white ${
-                      stat.isText ? "text-2xl sm:text-3xl" : "text-4xl sm:text-5xl"
-                    }`}
-                  >
-                    {stat.count}
-                  </p>
-
-                  <p className="mt-2 truncate text-sm font-medium text-white/75">
-                    {stat.label}
-                  </p>
-
-                  <p className="mt-1 truncate text-[11px] uppercase tracking-[0.12em] text-white/30">
-                    {stat.sub}
-                  </p>
-                </Link>
-              );
-            })}
-          </div>
-
+          {/* Work first. A dashboard that leads with revenue while
+              three payments sit unverified has its priorities
+              upside-down for whoever just opened it. */}
           {queueTotal > 0 && (
-            <AdminPanel className="mt-6">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
-                    Needs attention
-                  </p>
-                  <p className="mt-2 text-sm text-white/55">
-                    Work through the live queue from your phone.
-                  </p>
-                </div>
+            <AdminSection
+              title="Needs a decision"
+              description="Work through these from your phone — each one is a tap away."
+              actions={<AdminChip tone="warn">{queueTotal} waiting</AdminChip>}
+            >
+              <div className="grid gap-2 sm:grid-cols-3">
+                {queues.map((item) => {
+                  const Icon = item.icon;
 
-                <span className="shrink-0 rounded-full border border-[#d6a85f]/25 bg-[#d6a85f]/10 px-3 py-1.5 text-xs font-semibold text-[#d6a85f]">
-                  {queueTotal}
-                </span>
-              </div>
+                  return (
+                    <Link
+                      key={item.label}
+                      to={item.to}
+                      className="group flex min-h-16 items-center justify-between gap-3 rounded-xl border border-console-line bg-console-sunken px-3.5 py-3 transition hover:border-console-accent"
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <Icon size={16} className="shrink-0 text-console-accent" />
+                        <span className="text-sm font-medium text-console-body">
+                          {item.label}
+                        </span>
+                      </span>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                {queues.map((item) => (
-                  <Link
-                    key={item.label}
-                    to={item.to}
-                    className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 transition hover:border-[#d6a85f]/40"
-                  >
-                    <span className="text-xs text-white/65">{item.label}</span>
-                    <span className="font-serif text-2xl leading-none text-white">
-                      {item.count}
-                    </span>
-                  </Link>
-                ))}
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <span className="font-serif text-2xl leading-none tabular-nums text-console-ink">
+                          {item.count}
+                        </span>
+                        <ArrowRight
+                          size={14}
+                          className="text-console-faint transition group-hover:translate-x-0.5 group-hover:text-console-accent"
+                        />
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
-            </AdminPanel>
+            </AdminSection>
           )}
 
+          {/* Then the numbers behind the work. */}
+          <AdminStatGrid columns={4}>
+            {data.counts?.bookings && (
+              <AdminStat
+                label="Bookings today"
+                value={data.counts.bookings.today}
+                sub={`${data.counts.bookings.pending_today} awaiting confirmation`}
+                icon={CalendarCheck}
+                to="/admin/bookings"
+              />
+            )}
+
+            {data.counts?.payments && (
+              <AdminStat
+                label="Payments to verify"
+                value={data.counts.payments.pending}
+                sub={`${data.counts.payments.verified} verified all time`}
+                icon={CreditCard}
+                to="/admin/payments"
+                tone={data.counts.payments.pending > 0 ? "warn" : "neutral"}
+              />
+            )}
+
+            {data.revenue?.verified_total != null && (
+              <AdminStat
+                label="Verified revenue"
+                value={formatPrice(data.revenue.verified_total)}
+                sub={`${formatPrice(data.revenue.verified_this_month)} this month`}
+                icon={TrendingUp}
+                to="/admin/payments"
+                tone="accent"
+              />
+            )}
+
+            {data.counts?.users && (
+              <AdminStat
+                label="Customers"
+                value={data.counts.users.total}
+                sub={`${data.counts.users.staff} staff · ${data.counts.users.disabled} disabled`}
+                icon={UserRound}
+                to="/admin/customers"
+              />
+            )}
+
+            {data.counts?.services && (
+              <AdminStat
+                label="Services live"
+                value={data.counts.services.active}
+                sub={`${data.counts.services.total} in total`}
+                icon={Scissors}
+                to="/admin/services"
+              />
+            )}
+
+            {data.counts?.reviews && (
+              <AdminStat
+                label="Reviews to approve"
+                value={data.counts.reviews.pending}
+                sub={`${data.counts.reviews.total} submitted`}
+                icon={MessageSquareQuote}
+                to="/admin/testimonials"
+                tone={data.counts.reviews.pending > 0 ? "warn" : "neutral"}
+              />
+            )}
+          </AdminStatGrid>
+
+          {/* Then the work itself, with the actions attached to the row
+              they belong to. */}
           {can("bookings") && (
-            <AdminPanel className="mt-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <CalendarCheck size={18} className="shrink-0 text-[#d6a85f]" />
-
-                  <div>
-                    <p className="font-semibold text-white">Today’s schedule</p>
-                    <p className="mt-1 text-xs text-white/45">
-                      {formatDate(data.today)}
-                    </p>
-                  </div>
-                </div>
-
+            <AdminSection
+              title="Today's schedule"
+              description={formatDate(data.today)}
+              actions={
                 <Link
                   to="/admin/bookings"
-                  className="text-xs font-semibold text-[#d6a85f] hover:underline"
+                  className="text-xs font-semibold text-console-accent hover:underline"
                 >
                   All bookings
                 </Link>
-              </div>
-
-              {data.schedule.today.length === 0 ? (
-                <p className="mt-5 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-8 text-center text-sm text-white/40">
-                  Nothing booked for today.
-                </p>
+              }
+            >
+              {todayCount === 0 ? (
+                <AdminEmpty
+                  title="Nothing booked today"
+                  body="No appointments on the book. A quiet day, or a gap worth filling."
+                  action={
+                    <Link
+                      to="/admin/bookings"
+                      className="text-sm font-semibold text-console-accent hover:underline"
+                    >
+                      Open bookings
+                    </Link>
+                  }
+                />
               ) : (
-                <div className="mt-5 space-y-2">
-                  {data.schedule.today.map((booking) => {
-                    const busy = busyId === booking.id;
-                    const actionable =
-                      canManageBookings &&
-                      (booking.status === "pending" ||
-                        booking.status === "confirmed");
+                <>
+                  {/* A dense row list from `sm` up. Below that the same
+                      data as cards, because a 6-column grid at 360px is
+                      60px per column and unreadable. */}
+                  <ul className="hidden divide-y divide-console-line sm:block">
+                    {data.schedule.today.map((booking) => {
+                      const busy = busyId === booking.id;
+                      const actionable =
+                        canManageBookings &&
+                        (booking.status === "pending" ||
+                          booking.status === "confirmed");
 
-                    return (
-                      <div
-                        key={booking.id}
-                        className="rounded-xl border border-white/10 bg-white/[0.02] p-4"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <p className="shrink-0 font-serif text-lg leading-none text-[#d6a85f]">
-                              {formatTime(booking.start_time)}
-                            </p>
+                      return (
+                        <li
+                          key={booking.id}
+                          className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0"
+                        >
+                          <span className="w-14 shrink-0 font-serif text-lg leading-none tabular-nums text-console-accent-strong">
+                            {formatTime(booking.start_time)}
+                          </span>
 
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-white">
-                                {booking.customer_name}
-                              </p>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium text-console-ink">
+                              {booking.customer_name}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-console-muted">
+                              {[
+                                booking.service_name,
+                                booking.barber_name || "Auto-assigned",
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          </span>
 
-                              <p className="mt-1 truncate text-xs text-white/40">
-                                {[
-                                  booking.service_name,
-                                  booking.barber_name || "Auto-assigned",
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </p>
+                          <AdminStatus status={booking.status} />
+
+                          {actionable && (
+                            <span className="shrink-0">
+                              {booking.status === "pending" ? (
+                                <AdminButton
+                                  tone="primary"
+                                  size="sm"
+                                  icon={Check}
+                                  loading={busy}
+                                  onClick={() =>
+                                    runBookingAction(booking, confirmBooking)
+                                  }
+                                >
+                                  Confirm
+                                </AdminButton>
+                              ) : (
+                                <AdminButton
+                                  tone="primary"
+                                  size="sm"
+                                  icon={CheckCheck}
+                                  loading={busy}
+                                  onClick={() =>
+                                    runBookingAction(booking, completeBooking)
+                                  }
+                                >
+                                  Complete
+                                </AdminButton>
+                              )}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <ul className="grid gap-2 sm:hidden">
+                    {data.schedule.today.map((booking) => {
+                      const busy = busyId === booking.id;
+                      const actionable =
+                        canManageBookings &&
+                        (booking.status === "pending" ||
+                          booking.status === "confirmed");
+
+                      return (
+                        <li
+                          key={booking.id}
+                          className=" rounded-xl border border-console-line bg-console-sunken p-3.5"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <span className="shrink-0 font-serif text-lg leading-none tabular-nums text-console-accent-strong">
+                                {formatTime(booking.start_time)}
+                              </span>
+
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-console-ink">
+                                  {booking.customer_name}
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-console-muted">
+                                  {[
+                                    booking.service_name,
+                                    booking.barber_name || "Auto-assigned",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </p>
+                              </div>
                             </div>
+
+                            <AdminStatus status={booking.status} />
                           </div>
 
-                          <StatusBadge status={booking.status} kind="booking" />
-                        </div>
-
-                        {actionable && (
-                          <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
-                            {booking.status === "pending" ? (
-                              <AdminButton
-                                tone="primary"
-                                icon={Check}
-                                disabled={busy}
-                                onClick={() =>
-                                  runBookingAction(booking, confirmBooking)
-                                }
-                              >
-                                {busy ? "Working..." : "Confirm"}
-                              </AdminButton>
-                            ) : (
-                              <AdminButton
-                                tone="primary"
-                                icon={CheckCheck}
-                                disabled={busy}
-                                onClick={() =>
-                                  runBookingAction(booking, completeBooking)
-                                }
-                              >
-                                {busy ? "Working..." : "Mark completed"}
-                              </AdminButton>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                          {actionable && (
+                            <div className="mt-3">
+                              {booking.status === "pending" ? (
+                                <AdminButton
+                                  tone="primary"
+                                  block
+                                  icon={Check}
+                                  loading={busy}
+                                  onClick={() =>
+                                    runBookingAction(booking, confirmBooking)
+                                  }
+                                >
+                                  Confirm booking
+                                </AdminButton>
+                              ) : (
+                                <AdminButton
+                                  tone="primary"
+                                  block
+                                  icon={CheckCheck}
+                                  loading={busy}
+                                  onClick={() =>
+                                    runBookingAction(booking, completeBooking)
+                                  }
+                                >
+                                  Mark completed
+                                </AdminButton>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
               )}
-            </AdminPanel>
+            </AdminSection>
           )}
 
           {can("bookings") && data.schedule.upcoming.length > 0 && (
-            <AdminPanel className="mt-3">
-              <div className="flex items-center gap-3">
-                <CalendarDays size={18} className="shrink-0 text-[#d6a85f]" />
-                <p className="font-semibold text-white">Coming up</p>
-              </div>
-
-              <p className="mt-1 text-xs text-white/45">
-                The next seven days, so a quiet one can be covered before
-                it is empty.
-              </p>
-
-              <div className="mt-5 space-y-2">
+            <AdminSection
+              title="The week ahead"
+              description="The next seven days, so a quiet one can be covered before it is empty."
+            >
+              <ul className="divide-y divide-console-line">
                 {data.schedule.upcoming.map((booking) => (
-                  <div
+                  <li
                     key={booking.id}
-                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3"
+                    className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0"
                   >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <p className="shrink-0 text-xs font-semibold text-white/55">
-                        {formatDate(booking.booking_date).replace(/, \d{4}$/, "")}
-                      </p>
+                    <span className="w-24 shrink-0 text-xs font-medium text-console-muted">
+                      {formatDate(booking.booking_date).replace(/, \d{4}$/, "")}
+                    </span>
 
-                      <p className="shrink-0 text-xs text-[#d6a85f]">
-                        {formatTime(booking.start_time)}
-                      </p>
+                    <span className="w-12 shrink-0 text-xs font-semibold tabular-nums text-console-accent-strong">
+                      {formatTime(booking.start_time)}
+                    </span>
 
-                      <p className="truncate text-sm text-white/75">
-                        {booking.customer_name}
-                      </p>
-                    </div>
+                    <span className="min-w-0 flex-1 truncate text-sm text-console-ink">
+                      {booking.customer_name}
+                    </span>
 
-                    <p className="truncate text-xs text-white/35">
+                    <span className="min-w-0 shrink-0 truncate text-xs text-console-muted">
                       {booking.service_name}
-                    </p>
-                  </div>
+                    </span>
+                  </li>
                 ))}
-              </div>
+              </ul>
+            </AdminSection>
+          )}
+
+          {can("bookings") && data.schedule.today.length > 0 && (
+            <AdminPanel>
+              <AdminDetails columns={3}>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-console-muted">
+                    Confirmed today
+                  </p>
+                  <p className="mt-1 font-serif text-2xl leading-none tabular-nums text-console-ink">
+                    {data.counts?.bookings?.confirmed_today ?? 0}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-console-muted">
+                    Completed today
+                  </p>
+                  <p className="mt-1 font-serif text-2xl leading-none tabular-nums text-console-ink">
+                    {data.counts?.bookings?.completed_today ?? 0}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-console-muted">
+                    Booked all time
+                  </p>
+                  <p className="mt-1 font-serif text-2xl leading-none tabular-nums text-console-ink">
+                    {data.counts?.bookings?.all_time ?? 0}
+                  </p>
+                </div>
+              </AdminDetails>
             </AdminPanel>
           )}
 
           {quickActions.length > 0 && (
-            <AdminPanel className="mt-3">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
-                Quick actions
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
+            <AdminSection title="Go to" bodyClassName="p-4 sm:p-5">
+              <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
                 {quickActions.map((action) => (
                   <Link
-                    key={action.to + action.label}
+                    key={action.to}
                     to={action.to}
-                    className="inline-flex min-h-10 items-center rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
+                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-console-line bg-console-raised px-3 py-2.5 text-center text-xs font-semibold text-console-body transition hover:border-console-accent hover:text-console-accent-strong"
                   >
                     {action.label}
                   </Link>
                 ))}
               </div>
-            </AdminPanel>
+            </AdminSection>
           )}
         </>
       )}

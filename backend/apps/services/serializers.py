@@ -102,11 +102,20 @@ class ServiceSerializer(serializers.ModelSerializer):
 
         Inactive styles remain in the database for admin
         management but are hidden from customers.
+
+        Reads the prefetched list when the queryset provided one (see
+        `ACTIVE_STYLES` in services.py). Falling back to a query keeps
+        this correct for a single object fetched without that prefetch -
+        at the cost of one query, which is the right trade for a
+        detail view.
         """
 
-        styles = obj.styles.filter(
-            is_active=True
-        )
+        styles = getattr(obj, "cached_active_styles", None)
+
+        if styles is None:
+            styles = obj.styles.filter(
+                is_active=True
+            )
 
         return HaircutStyleSerializer(
             styles,

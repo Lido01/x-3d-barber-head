@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "./useQuery";
 
 import { getAvailability } from "../services/bookingApi";
 
@@ -9,66 +9,36 @@ import { getAvailability } from "../services/bookingApi";
  * list over untouched - no slot is added, removed, sorted or filtered
  * on the client.
  *
- * Refetches whenever the service, date or barber changes, and cancels
- * the in-flight request so a slow earlier response cannot overwrite a
- * newer one.
+ * The service, date and barber are part of the cache key, so moving
+ * between dates fetches once per date and going back to a date already
+ * seen is instant. The TTL is deliberately short: a slot list is only
+ * as true as the bookings behind it, so it must not be trusted for long.
+ * Booking the slot invalidates the key, so the list is corrected the
+ * moment it goes out of date.
  */
 export function useAvailability({ serviceId, bookingDate, barberId }) {
-  const [times, setTimes] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  const reload = useCallback(() => {
-    setReloadKey((key) => key + 1);
-  }, []);
-
   const ready = Boolean(serviceId && bookingDate);
 
-  useEffect(() => {
-    if (!ready) {
-      setTimes([]);
-      setError(null);
-      setLoading(false);
-
-      return undefined;
+  const { data, error, loading, refetch } = useQuery(
+    "/bookings/availability/",
+    (signal) =>
+      getAvailability({ serviceId, bookingDate, barberId }, { signal }),
+    {
+      params: { service: serviceId, booking_date: bookingDate, barber: barberId },
+      enabled: ready,
+      staleMs: 60 * 1000,
+      select: (payload) =>
+        Array.isArray(payload?.available_times) ? payload.available_times : [],
     }
+  );
 
-    const controller = new AbortController();
-
-    setLoading(true);
-    setError(null);
-
-    getAvailability(
-      { serviceId, bookingDate, barberId },
-      { signal: controller.signal }
-    )
-      .then((data) => {
-        setTimes(
-          Array.isArray(data?.available_times) ? data.available_times : []
-        );
-        setLoading(false);
-      })
-      .catch((apiError) => {
-        if (apiError?.isCancelled) {
-          return;
-        }
-
-        setError(apiError);
-        setTimes([]);
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [ready, serviceId, bookingDate, barberId, reloadKey]);
+  const times = ready ? data || [] : [];
 
   return {
     times,
-    loading,
-    error,
-    reload,
+    loading: ready && loading,
+    error: ready ? error : null,
+    reload: refetch,
     /** Backend answered, and answered with nothing bookable. */
     isEmpty: ready && !loading && !error && times.length === 0,
   };

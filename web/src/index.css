@@ -9,6 +9,172 @@
 
 @import "tailwindcss";
 
+/*
+ * Staff console theme.
+ *
+ * The storefront is near-black and gold: a shop's brand, and right for a
+ * page a customer chooses to look at. The console is the opposite
+ * problem - it is the screen a person stares at for a whole shift, often
+ * one-handed on a phone, and the job is to read numbers and act on them.
+ * So the console has its own neutral ramp and can run light or dark,
+ * while keeping the gold accent either way so it still reads as the same
+ * product.
+ *
+ * `@theme inline` rather than `@theme`, and that is the whole trick.
+ * A plain `@theme` bakes each value into a static utility at build time,
+ * so the colour cannot change without a rebuild. `inline` makes Tailwind
+ * emit `var(--console-raised)` instead of the resolved hex, so the real
+ * values live in ordinary custom properties below and can be swapped at
+ * runtime by flipping `data-theme` on <html>.
+ *
+ * The storefront is deliberately NOT covered by this. It is 800-odd
+ * arbitrary-hex utilities across twenty brand-critical pages; a partial
+ * conversion would look broken rather than themed, so it stays dark and
+ * the toggle is labelled as applying to the console.
+ */
+@theme inline {
+  /* Surfaces, flattest page to the most recessed control. */
+  --color-console: var(--console-page);
+  --color-console-raised: var(--console-surface);
+  --color-console-sunken: var(--console-recess);
+  --color-console-line: var(--console-border);
+  --color-console-line-strong: var(--console-border-strong);
+
+  /* Ink. Four steps is enough to build a hierarchy without inventing
+     a new grey for every element. */
+  --color-console-ink: var(--console-ink-1);
+  --color-console-body: var(--console-ink-2);
+  --color-console-muted: var(--console-ink-3);
+  --color-console-faint: var(--console-ink-4);
+
+  /* The brand accent. Gold is unreadable as text on white and
+     unreadable-on-gold the other way, so each theme gets the shade
+     that works for its own surfaces plus an explicit "on accent"
+     colour for text sitting on top of it. */
+  --color-console-accent: var(--console-accent);
+  --color-console-accent-strong: var(--console-accent-strong);
+  --color-console-accent-soft: var(--console-accent-soft);
+  --color-console-on-accent: var(--console-on-accent);
+
+  /* Status. Read at a glance to decide what to do next, so both ramps
+     are the WCAG AA version of the same hue. */
+  --color-console-good: var(--console-good);
+  --color-console-good-soft: var(--console-good-soft);
+  --color-console-warn: var(--console-warn);
+  --color-console-warn-soft: var(--console-warn-soft);
+  --color-console-bad: var(--console-bad);
+  --color-console-bad-soft: var(--console-bad-soft);
+  --color-console-info: var(--console-info);
+  --color-console-info-soft: var(--console-info-soft);
+}
+
+/*
+ * Light is the default.
+ *
+ * Not because light is better - a barber working a night shift in a dim
+ * shop may want the opposite - but because the console's original
+ * surface was light and a first-time visitor should see what they were
+ * built for. The stored preference wins over this; see web/index.html.
+ */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --console-page: #f4f5f7;
+  --console-surface: #ffffff;
+  --console-recess: #eceef1;
+  --console-border: #dfe2e7;
+  --console-border-strong: #c7ccd4;
+
+  --console-ink-1: #14161a;
+  --console-ink-2: #3d434d;
+  --console-ink-3: #6b7280;
+  --console-ink-4: #9aa1ac;
+
+  --console-accent: #9a7524;
+  --console-accent-strong: #7a5c15;
+  --console-accent-soft: #fbf3e0;
+  --console-on-accent: #ffffff;
+
+  --console-good: #1a7f4b;
+  --console-good-soft: #e6f4ec;
+  --console-warn: #92600c;
+  --console-warn-soft: #fbf1dc;
+  --console-bad: #b3382c;
+  --console-bad-soft: #fbeae8;
+  --console-info: #1f5f9e;
+  --console-info-soft: #e8f0f8;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --console-page: #0d0d0d;
+  --console-surface: #171717;
+  --console-recess: #202020;
+  --console-border: #2b2b2b;
+  --console-border-strong: #3f3f3f;
+
+  --console-ink-1: #f4f0e8;
+  --console-ink-2: #cdc8bf;
+  --console-ink-3: #9c978e;
+  --console-ink-4: #736f68;
+
+  --console-accent: #d6a85f;
+  --console-accent-strong: #e5bd7a;
+  --console-accent-soft: #2a2317;
+  /* Black on gold. White on this accent fails contrast badly. */
+  --console-on-accent: #0d0d0d;
+
+  --console-good: #7fcfa4;
+  --console-good-soft: #16281e;
+  --console-warn: #e5bd7a;
+  --console-warn-soft: #2a2317;
+  --console-bad: #e0776b;
+  --console-bad-soft: #2b1a17;
+  --console-info: #8ab8e8;
+  --console-info-soft: #16202b;
+}
+
+/*
+ * A first visit with no stored preference follows the operating system.
+ *
+ * Scoped to the console wrapper rather than `:root`, so a visitor whose
+ * phone is in dark mode does not get a light admin sidebar sitting on a
+ * dark storefront - the two disagreeing on one screen is worse than
+ * either choice.
+ */
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] {
+    color-scheme: dark;
+
+    --console-page: #0d0d0d;
+    --console-surface: #171717;
+    --console-recess: #202020;
+    --console-border: #2b2b2b;
+    --console-border-strong: #3f3f3f;
+
+    --console-ink-1: #f4f0e8;
+    --console-ink-2: #cdc8bf;
+    --console-ink-3: #9c978e;
+    --console-ink-4: #736f68;
+
+    --console-accent: #d6a85f;
+    --console-accent-strong: #e5bd7a;
+    --console-accent-soft: #2a2317;
+    --console-on-accent: #0d0d0d;
+
+    --console-good: #7fcfa4;
+    --console-good-soft: #16281e;
+    --console-warn: #e5bd7a;
+    --console-warn-soft: #2a2317;
+    --console-bad: #e0776b;
+    --console-bad-soft: #2b1a17;
+    --console-info: #8ab8e8;
+    --console-info-soft: #16202b;
+  }
+}
+
 :root {
   font-family: "Manrope", "Noto Sans Ethiopic", sans-serif;
   color: #f4f0e8;

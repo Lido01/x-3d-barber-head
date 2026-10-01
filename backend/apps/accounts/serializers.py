@@ -2,13 +2,14 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.utils.crypto import get_random_string
 
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import (
     TokenObtainPairSerializer,
 )
 
-from .models import AccountProfile, AuditLog, StaffAccess
+from .models import AccountProfile, AuditLog, ShopSettings, StaffAccess
 from .permissions import CAPABILITIES, CAPABILITY_CATALOG, granted_capabilities
 
 
@@ -176,6 +177,74 @@ class AdminAccountSerializer(AccountSerializer):
 
     def get_full_name(self, user) -> str:
         return user.get_full_name().strip()
+
+
+class CustomerUpdateSerializer(AdminAccountSerializer):
+    """
+    A customer record the staff console may edit.
+
+    Separate from `AdminAccountSerializer` rather than loosening that
+    one, because that serializer is used to *list* customers and marking
+    its fields writable would quietly turn every list response into
+    something that looks updatable. Being explicit about which endpoint
+    accepts a write is worth one more class.
+
+    Writable: the contact details and whether the account is enabled.
+    Not writable: `username`, because it is the login identity and
+    renaming it out from under the person using it invalidates the idea
+    of a stable handle; `id`; and anything role-shaped, which this
+    screen has no business touching.
+    """
+
+    is_active = serializers.BooleanField(required=False)
+
+    class Meta(AdminAccountSerializer.Meta):
+        fields = AdminAccountSerializer.Meta.fields + ["is_active"]
+        read_only_fields = [
+            "id",
+            "username",
+            "full_name",
+            "created_at",
+        ]
+
+    def validate_email(self, value):
+        value = (value or "").strip().lower()
+
+        if not value:
+            raise serializers.ValidationError("An email address is required.")
+
+        duplicates = User.objects.filter(email__iexact=value)
+
+        if self.instance is not None:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+
+        if duplicates.exists():
+            raise serializers.ValidationError(
+                "An account with this email already exists."
+            )
+
+        return value
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        phone = validated_data.pop("phone", None)
+
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+
+        instance.save()
+
+        if phone is not None:
+            profile, _ = AccountProfile.objects.update_or_create(
+                user=instance,
+                defaults={"phone": phone},
+            )
+
+            # The cached relation would otherwise serialise the old
+            # number back in the same response that changed it.
+            instance.profile = profile
+
+        return instance
 
 
 class RegistrationSerializer(serializers.ModelSerializer):
@@ -396,6 +465,170 @@ class StaffAccessSerializer(serializers.ModelSerializer):
         if unknown:
             raise serializers.ValidationError(f"Unknown permissions: {', '.join(sorted(unknown))}")
         return value
+
+
+class CustomerCreateSerializer(serializers.ModelSerializer):
+    """
+    Add a customer from the console.
+
+    A walk-in who wants a review account created over the counter, without
+    going to the public sign-up page on their own phone. The same trade
+    the user-management create endpoint makes, narrowed to a customer:
+    there is no role to choose here, because this screen cannot make
+    staff - that is the team screen's job and it is gated differently.
+
+    The password is returned once, and marked unusable on the account so
+    it cannot be used to sign in until it is reset. Whoever made this
+    account hands the person a password they choose at the counter; an
+    account that is reachable by a password the shop has never seen used
+    is not one anybody asked for.
+    """
+
+    phone = serializers.CharField(max_length=30, required=False, allow_blank=True)
+
+    #: Optional. Omitted or blank means a strong one is generated.
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=False,
+        style={"input_type": "password"},
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "phone",
+            "password",
+        ]
+
+    def validate_username(self, value):
+        value = (value or "").strip()
+
+        if not value:
+            raise serializers.ValidationError("A username is required.")
+
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError("That username is already taken.")
+
+        return value
+
+    def validate_email(self, value):
+        value = (value or "").strip().lower()
+
+        if not value:
+            raise serializers.ValidationError("An email address is required.")
+
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError(
+                "An account with this email already exists."
+            )
+
+        return value
+
+    def validate_password(self, value):
+        """Only a password a human actually chose is validated."""
+
+        if not value:
+            return value
+
+        try:
+            validate_password(value)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(list(error.messages))
+
+        return value
+
+    @transaction.atomic
+    def create(self, validated_data):
+        phone = validated_data.pop("phone", "")
+        chosen = validated_data.pop("password", "")
+
+        # Stashed for the view; not a field, so it can never be read
+        # back off the instance.
+        self.generated_password = chosen or get_temporary_password()
+
+        user = User(**validated_data, is_active=True)
+
+        if chosen:
+            user.set_password(chosen)
+        else:
+            user.set_unusable_password()
+
+        # Never staff. This screen has no role parameter on purpose; a
+        # console that could mint staff from here would hand out power
+        # through the one screen that only requires customers.manage.
+        user.is_staff = False
+        user.save()
+
+        AccountProfile.objects.update_or_create(
+            user=user,
+            defaults={"phone": phone},
+        )
+
+        return user
+
+
+class ShopSettingsSerializer(serializers.ModelSerializer):
+    """
+    The shop's own details.
+
+    Every staff account may read this - the booking form and the public
+    contact block are built from it, so a receptionist answering the
+    phone needs the real address - but only `settings.manage` may write.
+    """
+
+    updated_by_name = serializers.CharField(
+        source="updated_by.username",
+        read_only=True,
+        default=None,
+    )
+
+    class Meta:
+        model = ShopSettings
+        fields = [
+            "id",
+            "business_name",
+            "tagline",
+            "phone",
+            "email",
+            "address",
+            "currency",
+            "opening_time",
+            "closing_time",
+            "booking_horizon_days",
+            "updated_at",
+            "updated_by_name",
+        ]
+        read_only_fields = ["id", "updated_at", "updated_by_name"]
+
+    def validate(self, attrs):
+        """
+        The one rule that is not field-shaped.
+
+        Closing before opening would make the booking form compute an
+        empty range and quietly offer nobody any slots, so it is refused
+        here rather than discovered in production.
+        """
+
+        attrs = super().validate(attrs)
+
+        instance = self.instance or ShopSettings()
+
+        opening = attrs.get("opening_time", getattr(instance, "opening_time", None))
+        closing = attrs.get("closing_time", getattr(instance, "closing_time", None))
+
+        if opening and closing and closing <= opening:
+            raise serializers.ValidationError(
+                {"closing_time": "Closing time must be after opening time."}
+            )
+
+        return attrs
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
@@ -731,6 +964,169 @@ class UserManagementSerializer(serializers.ModelSerializer):
         user.is_staff = access.is_active
         user.save(update_fields=["is_staff"])
         user.staff_access = access
+
+
+class UserManagementCreateSerializer(serializers.ModelSerializer):
+    """
+    Create an account from the console, with its role, in one call.
+
+    The alternative was two steps - register the person as a customer,
+    then go to the directory and promote them. On a phone, in a shop,
+    that is the difference between onboarding someone before their shift
+    and doing it tonight. So this creates the account *and* decides what
+    it may do, and hands back a temporary password because the person
+    setting this up does not know it yet.
+
+    The password is returned exactly once, in this response, and is not
+    stored anywhere recoverable. An administrator who loses it resets it
+    from the same screen; there is deliberately no "email it to them"
+    path, because the shop has no mail delivery configured and a reset
+    link that silently goes nowhere is worse than a password handed over
+    in person.
+    """
+
+    phone = serializers.CharField(
+        max_length=30,
+        required=False,
+        allow_blank=True,
+    )
+
+    role = ManagedRoleField(choices=UserManagementSerializer.ASSIGNABLE_ROLES)
+
+    permissions = ManagedPermissionsField(required=False)
+
+    #: Optional. Omitted or blank means a strong one is generated.
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=False,
+        style={"input_type": "password"},
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "phone",
+            "role",
+            "permissions",
+            "password",
+        ]
+
+    def validate_username(self, value):
+        value = (value or "").strip()
+
+        if not value:
+            raise serializers.ValidationError("A username is required.")
+
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError(
+                "That username is already taken."
+            )
+
+        return value
+
+    def validate_email(self, value):
+        value = (value or "").strip().lower()
+
+        if not value:
+            raise serializers.ValidationError(
+                "An email address is required so the account can be "
+                "identified and reset later."
+            )
+
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError(
+                "An account with this email already exists."
+            )
+
+        return value
+
+    def validate_password(self, value):
+        """
+        Only validate a password a human actually chose.
+
+        A generated one is ours, already long, and was never typed by
+        anyone - running the similarity and common-password checks over
+        it would reject strong generated values for no reason.
+        """
+
+        if not value:
+            return value
+
+        try:
+            validate_password(value)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(list(error.messages))
+
+        return value
+
+    @transaction.atomic
+    def create(self, validated_data):
+        phone = validated_data.pop("phone", "")
+        role = validated_data.pop("role", UserManagementSerializer.BASE_ROLE)
+        permissions = validated_data.pop("permissions", [])
+
+        chosen = validated_data.pop("password", "")
+
+        # Stashed for the view to return exactly once. Not a field,
+        # because it must never be readable back off the instance.
+        self.generated_password = chosen or get_temporary_password()
+
+        user = User(
+            **validated_data,
+            is_active=True,
+        )
+
+        if chosen:
+            # A password a human chose is one they intend the person to
+            # use, so it is honoured as-is.
+            user.set_password(chosen)
+        else:
+            # A generated one is a handoff, not a credential: nobody has
+            # typed it into the account, and leaving it usable would mean
+            # an account is reachable by a password the shop has never
+            # seen used. The reset flow sets a real one.
+            user.set_unusable_password()
+
+        user.save()
+
+        AccountProfile.objects.update_or_create(
+            user=user,
+            defaults={"phone": phone},
+        )
+
+        # Reuse the edit path's role logic, so creating someone and
+        # promoting someone cannot disagree about what a role means.
+        UserManagementSerializer()._sync_staff_access(
+            user,
+            role=role,
+            permissions=list(permissions),
+        )
+
+        user.refresh_from_db()
+
+        return user
+
+
+def get_temporary_password():
+    """
+    A readable, strong, one-time password.
+
+    Ambiguous characters (0/O, 1/l/I) are excluded on purpose: this gets
+    read aloud across a counter or copied off a phone screen, and a
+    password nobody can transcribe correctly is worse than a slightly
+    weaker one.
+    """
+    return get_random_string(
+        18,
+        allowed_chars="abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+    )
 
 
 class OperationsReportSerializer(serializers.Serializer):

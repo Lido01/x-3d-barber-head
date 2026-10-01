@@ -140,7 +140,7 @@ export default function Testimonials() {
   function reviewPanel() {
     if (checkingSession) {
       return (
-        <div className="flex items-center justify-center border border-white/10 bg-white/[0.02] py-16">
+        <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] py-16">
           <Spinner label={t("testimonials.loading")} />
         </div>
       );
@@ -153,7 +153,7 @@ export default function Testimonials() {
     if (submitted) {
       return (
         <div className="py-10 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center  bg-[#5fb98a]/15 text-2xl text-[#7fcfa4]">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#5fb98a]/15 text-2xl text-[#7fcfa4]">
             ✓
           </div>
           <h3 className="mt-5 font-serif text-2xl">{t("testimonials.form.thanksTitle")}</h3>
@@ -229,7 +229,7 @@ export default function Testimonials() {
         {/* optional photo */}
         <div className="mt-4">
           {photoPreview ? (
-            <div className="relative overflow-hidden  border border-white/10">
+            <div className="relative overflow-hidden rounded-2xl border border-white/10">
               <img
                 src={photoPreview}
                 alt={t("testimonials.form.previewAlt")}
@@ -241,7 +241,7 @@ export default function Testimonials() {
                 onClick={clearPhoto}
                 disabled={submitting}
                 aria-label={t("testimonials.form.removePhoto")}
-                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center  bg-black/70 text-white transition hover:bg-black"
+                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
               >
                 <X size={15} />
               </button>
@@ -251,7 +251,7 @@ export default function Testimonials() {
               type="button"
               onClick={() => photoInput.current?.click()}
               disabled={submitting}
-              className="flex w-full items-center justify-center gap-2.5  border border-dashed border-white/15 bg-white/[0.02] px-4 py-4 text-xs text-white/40 transition hover:border-[#d6a85f]/40 hover:text-white/70"
+              className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-4 text-xs text-white/40 transition hover:border-[#d6a85f]/40 hover:text-white/70"
             >
               <Camera size={16} className="text-[#d6a85f]" />
               {t("testimonials.form.addPhoto")}
@@ -286,7 +286,7 @@ export default function Testimonials() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-6 flex w-full items-center justify-center  bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-6 flex w-full items-center justify-center rounded-full bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? (
             <Spinner size={15} label={t("testimonials.form.submitting")} />
@@ -319,7 +319,7 @@ export default function Testimonials() {
           </Reveal>
 
           {loading && (
-            <div className="mt-12 flex items-center justify-center  border border-white/10 bg-white/[0.02] py-16">
+            <div className="mt-12 flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] py-16">
               <Spinner label={t("testimonials.loading")} />
             </div>
           )}
@@ -360,7 +360,7 @@ export default function Testimonials() {
 
         {/* ---------- leave a review ---------- */}
         <Reveal className="lg:pt-16" delay={120}>
-          <div className="border border-white/10 bg-black/55 p-6 backdrop-blur-md sm:p-8">
+          <div className="rounded-2xl border border-white/10 bg-black/55 p-6 backdrop-blur-md sm:p-8">
             {reviewPanel()}
           </div>
         </Reveal>
@@ -398,7 +398,7 @@ function SignInPrompt() {
         <Link
           to="/login"
           state={state}
-          className="flex w-full items-center justify-center gap-2.5  bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
+          className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
         >
           <LogIn size={15} />
           {t("testimonials.form.signInCta")}
@@ -407,7 +407,7 @@ function SignInPrompt() {
         <Link
           to="/register"
           state={state}
-          className="flex w-full items-center justify-center gap-2.5  border border-white/15 px-6 py-3.5 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
+          className="flex w-full items-center justify-center gap-2.5 rounded-full border border-white/15 px-6 py-3.5 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
         >
           <UserPlus size={15} />
           {t("testimonials.form.registerCta")}
@@ -433,7 +433,7 @@ function TestimonialCard({ item, delay, t, locale, languageName }) {
   return (
     <Reveal
       delay={delay}
-      className="group overflow-hidden  border border-white/10 bg-white/[.025]"
+      className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[.025]"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-[#1a1a1a]">
         {item.photo ? (

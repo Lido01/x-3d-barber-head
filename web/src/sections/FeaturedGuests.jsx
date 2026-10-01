@@ -27,10 +27,10 @@ export default function FeaturedGuests() {
   return (
     <section
       id="guests"
-      className="relative overflow-hidden  px-5 py-20 sm:px-8 sm:py-24 lg:px-10"
+      className="relative overflow-hidden px-5 py-20 sm:px-8 sm:py-24 lg:px-10"
     >
       {/* soft gold wash so the section separates from the black page */}
-      <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[820px] -translate-x-1/2  bg-[#d6a85f]/[0.07] blur-[150px]" />
+      <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-[#d6a85f]/[0.07] blur-[150px]" />
 
       <div className="relative mx-auto max-w-[1440px]">
         <div className="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
@@ -53,7 +53,7 @@ export default function FeaturedGuests() {
             </p>
 
             {/* ---------- stats ---------- */}
-            <dl className="mt-10 grid grid-cols-2 gap-px overflow-hidden border border-white/10 bg-white/[0.04] sm:grid-cols-4">
+            <dl className="mt-10 grid grid-cols-2 gap-px rounded-2xl overflow-hidden border border-white/10 bg-white/[0.04] sm:grid-cols-4">
               {guestStats.map((stat) => (
                 <div key={stat.id} className="bg-[#0b0b0b] p-5">
                   <dt className="text-[9px] uppercase leading-4 tracking-[.18em] text-white/35">
@@ -70,7 +70,7 @@ export default function FeaturedGuests() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 to="/gallery"
-                className="inline-flex items-center gap-2  bg-[#d6a85f] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
+                className="inline-flex items-center gap-2 rounded-full bg-[#d6a85f] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
               >
                 <Camera size={15} />
                 {t("guests.viewGallery")}
@@ -92,7 +92,7 @@ export default function FeaturedGuests() {
             {activeGuest && (
               <Reveal>
                 <figure
-                  className="relative overflow-hidden border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-7 sm:p-9"
+                  className="relative rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-7 sm:p-9"
                   style={{ borderTopColor: activeGuest.accent }}
                 >
                   <Quote
@@ -113,7 +113,7 @@ export default function FeaturedGuests() {
                       height={52}
                       loading="lazy"
                       decoding="async"
-                      className="h-13 w-13 shrink-0 border object-cover"
+                      className="h-13 w-13 shrink-0 rounded-2xl border object-cover"
                       style={{ borderColor: activeGuest.accent }}
                     />
 
@@ -124,7 +124,7 @@ export default function FeaturedGuests() {
                       </p>
                     </div>
 
-                    <span className="ml-auto inline-flex items-center gap-1.5 border border-[#5fb98a]/30 bg-[#5fb98a]/10 px-2.5 py-1 text-[10px] font-medium tracking-wide text-[#7fcfa4]">
+                    <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[#5fb98a]/30 bg-[#5fb98a]/10 px-2.5 py-1 text-[10px] font-medium tracking-wide text-[#7fcfa4]">
                       <BadgeCheck size={12} />
                       {t("guests.verified")}
                     </span>
@@ -162,7 +162,7 @@ export default function FeaturedGuests() {
                         height={44}
                         loading="lazy"
                         decoding="async"
-                        className="h-11 w-11 shrink-0 border border-white/10 object-cover"
+                        className="h-11 w-11 shrink-0 rounded-xl border border-white/10 object-cover"
                       />
 
                       <span className="min-w-0 flex-1">

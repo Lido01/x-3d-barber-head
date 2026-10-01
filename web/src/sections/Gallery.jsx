@@ -79,7 +79,7 @@ export default function Gallery({ onSelect }) {
             >
               <button
                 onClick={() => onSelect(post)}
-                className="relative h-full w-full overflow-hidden border border-white/10 text-left transition hover:border-[#d6a85f]/50"
+                className="relative h-full w-full rounded-2xl overflow-hidden border border-white/10 text-left transition hover:border-[#d6a85f]/50"
               >
                 <img
                   src={mediaUrl(post.image)}

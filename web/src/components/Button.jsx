@@ -45,7 +45,7 @@ export default function Button({
       <span>{children}</span>
 
       {icon && (
-        <span className="flex h-7 w-7 items-center justify-center  bg-black/10 transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-0.5">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black/10 transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-0.5">
           <ArrowUpRight size={15} strokeWidth={2.2} />
         </span>
       )}

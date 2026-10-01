@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "./useQuery";
 
 import { listBarbers } from "../services/bookingApi";
 
@@ -6,41 +6,14 @@ import { listBarbers } from "../services/bookingApi";
  * Active barbers from GET /api/barbers/ for display pages.
  *
  * The backend returns only active barbers to the public.
+ *
+ * Shared with the booking flow through the same cache key, so the
+ * /barbers page and the booking page's picker cost one request, not two.
  */
 export function useBarberList() {
-  const [barbers, setBarbers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data, error, loading, refetch } = useQuery("/barbers/", listBarbers, {
+    select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+  });
 
-  const reload = useCallback(() => {
-    setReloadKey((key) => key + 1);
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    setLoading(true);
-    setError(null);
-
-    listBarbers({ signal: controller.signal })
-      .then((data) => {
-        setBarbers(Array.isArray(data) ? data : data?.results || []);
-        setLoading(false);
-      })
-      .catch((apiError) => {
-        if (apiError?.isCancelled) {
-          return;
-        }
-
-        setError(apiError);
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [reloadKey]);
-
-  return { barbers, loading, error, reload };
+  return { barbers: data || [], loading, error, reload: refetch };
 }

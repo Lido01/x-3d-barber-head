@@ -9,6 +9,7 @@ import Alert from "../components/ui/Alert";
 import FieldError from "../components/ui/FieldError";
 import Spinner from "../components/ui/Spinner";
 import { useAvailability } from "../hooks/useAvailability";
+import { invalidateQuery } from "../hooks/useQuery";
 import { useBarbers } from "../hooks/useBarbers";
 import { useServices } from "../hooks/useServices";
 import { createBooking } from "../services/bookingApi";
@@ -199,6 +200,12 @@ export default function Booking() {
       });
 
       rememberBooking(booking);
+
+      // The slot just taken is no longer bookable. Dropping the cached
+      // availability means going back to this date shows the truth
+      // rather than a slot that has already gone.
+      invalidateQuery("availability");
+
       navigate(`/payment/${booking.id}`, {
         replace: true,
         state: { booking },
@@ -221,36 +228,11 @@ export default function Booking() {
       <div className="mx-auto max-w-[1200px]">
         <div className="mt-12 grid gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-              Reservations
-            </p>
             <h1 className="mt-5 font-serif text-6xl leading-[0.85] sm:text-7xl">
               Book your
               <br />
               <span className="italic text-[#d6a85f]">chair.</span>
             </h1>
-            <p className="mt-8 max-w-md text-sm leading-7 text-white/45">
-              Three quick steps. Live availability. No account needed.
-            </p>
-
-            <div className="mt-10 space-y-5 border-t border-white/10 pt-7">
-              <div className="flex gap-4">
-                <Scissors size={17} className="mt-1" />
-                <div>
-                  <p className="mt-1 text-xs text-white/35">
-                    Every service includes a clear price and time.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-4">
-                <Clock3 size={17} className="mt-1" />
-                <div>
-                  <p className="mt-1 text-xs text-white/35">
-                    Choose only from slots the backend confirms.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
 
           <form
@@ -260,16 +242,13 @@ export default function Booking() {
           >
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
-                  Quick booking
-                </p>
                 <p className="mt-2 text-sm text-white/65">{stepCopy}</p>
               </div>
               <div className="flex items-center gap-2" aria-label={`Step ${step} of 3`}>
                 {[1, 2, 3].map((number) => (
                   <span
                     key={number}
-                    className={`flex h-8 w-8 items-center justify-center  border text-xs font-semibold transition ${
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold transition ${
                       step >= number
                         ? "border-[#d6a85f] bg-[#d6a85f] text-black"
                         : "border-white/15 text-white/35"
@@ -397,7 +376,7 @@ export default function Booking() {
                       </div>
                     </div>
 
-                    <details className="group mt-3  border border-white/10 bg-white/[0.02] px-4 py-3">
+                    <details className="group mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
                       <summary className="cursor-pointer list-none text-xs text-white/45 marker:hidden">
                         Add a note for your barber <span className="text-white/20">(optional)</span>
                       </summary>
@@ -413,7 +392,7 @@ export default function Booking() {
                     </details>
 
                     {barbers.available && (
-                      <details className="group mt-3  border border-white/10 bg-white/[0.02] px-4 py-3">
+                      <details className="group mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs text-white/45 marker:hidden">
                           <span>Prefer a specific barber?</span>
                           <span className="text-[#d6a85f]">Optional</span>
@@ -457,11 +436,11 @@ export default function Booking() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="group flex w-full items-center justify-center gap-3  bg-[#d6a85f] px-6 py-4 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group flex w-full items-center justify-center gap-3 rounded-full bg-[#d6a85f] px-6 py-4 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting ? (
                     <>
-                      <span className="h-4 w-4 animate-spin  border-2 border-black/25 border-t-black" />
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
                       Reserving your slot...
                     </>
                   ) : (
@@ -480,7 +459,7 @@ export default function Booking() {
         </div>
 
         {selectedService && (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3  border border-[#d6a85f]/20 bg-[#d6a85f]/[0.05] px-5 py-4 text-xs text-white/50">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#d6a85f]/20 bg-[#d6a85f]/[0.05] px-5 py-4 text-xs text-white/50">
             <span>{selectedService.name} · {formatPrice(selectedService.price)} · {formatDuration(selectedService.duration)}</span>
             <span>
               {bookingDate ? formatDate(bookingDate) : "Choose a date"}

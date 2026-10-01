@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "./useQuery";
 
 import { listGalleryPosts } from "../services/galleryApi";
 
@@ -9,39 +9,13 @@ import { listGalleryPosts } from "../services/galleryApi";
  * anonymous visitors, so there is no client-side filtering here.
  */
 export function useGallery() {
-  const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data, error, loading, refetch } = useQuery(
+    "/gallery/gallery/",
+    listGalleryPosts,
+    {
+      select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+    }
+  );
 
-  const reload = useCallback(() => {
-    setReloadKey((key) => key + 1);
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    setLoading(true);
-    setError(null);
-
-    listGalleryPosts({ signal: controller.signal })
-      .then((data) => {
-        setPosts(Array.isArray(data) ? data : data?.results || []);
-        setLoading(false);
-      })
-      .catch((apiError) => {
-        if (apiError?.isCancelled) {
-          return;
-        }
-
-        setError(apiError);
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [reloadKey]);
-
-  return { posts, loading, error, reload };
+  return { posts: data || [], loading, error, reload: refetch };
 }

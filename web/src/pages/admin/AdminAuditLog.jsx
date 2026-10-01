@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, ClipboardList, Search, X } from "lucide-react";
+import { useState } from "react";
+import { ChevronLeft, ChevronRight, ClipboardList, RefreshCw } from "lucide-react";
 
 import Alert from "../../components/ui/Alert";
 import {
   AdminButton,
+  AdminChip,
   AdminEmpty,
   AdminFilterTabs,
   AdminLoading,
   AdminPageHeader,
   AdminPanel,
+  AdminSearch,
 } from "../../components/admin/AdminUi";
+import { useQuery } from "../../hooks/useQuery";
 import { listAuditLogs } from "../../services/authApi";
 
 /**
@@ -27,6 +30,10 @@ import { listAuditLogs } from "../../services/authApi";
  * with offset rather than replacing the list, because the newest
  * entries are the ones being looked for and they should stay on
  * screen.
+ *
+ * Each page is cached under its own key, so paging forward and back
+ * again costs no request, and so does returning to a filter that was
+ * already looked at.
  */
 
 const PAGE_SIZE = 50;
@@ -41,9 +48,6 @@ const FILTERS = [
   { key: "gallery", label: "Gallery" },
   { key: "testimonial", label: "Reviews" },
 ];
-
-const SEARCH =
-  "w-full rounded-xl border border-white/10 bg-[#181818] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50";
 
 /**
  * Turn `user.updated` into `User updated`.
@@ -76,7 +80,7 @@ function ActionDetails({ details }) {
   }
 
   return (
-    <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/40">
+    <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-console-muted">
       {entries.map(([key, value]) => {
         const isChange =
           value &&
@@ -94,7 +98,7 @@ function ActionDetails({ details }) {
 
         return (
           <div key={key} className="flex min-w-0 gap-1.5">
-            <dt className="shrink-0 text-white/30">
+            <dt className="shrink-0 text-console-faint">
               {key.replace(/_/g, " ")}:
             </dt>
             <dd className="min-w-0 break-words">{text}</dd>
@@ -105,84 +109,131 @@ function ActionDetails({ details }) {
   );
 }
 
-export default function AdminAuditLog() {
-  const [logs, setLogs] = useState([]);
-  const [count, setCount] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+/** One entry in the trail. */
+function LogRow({ log }) {
+  return (
+    <li className="flex gap-3 py-3 first:pt-0 last:pb-0">
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-console-sunken text-console-accent">
+        <ClipboardList size={15} />
+      </span>
 
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-console-ink">
+          {actionLabel(log.action)}
+        </p>
+
+        <p className="mt-0.5 text-xs text-console-muted">
+          {log.actor_name} · {new Date(log.created_at).toLocaleString()}
+          {log.target_id ? ` · #${log.target_id}` : ""}
+          {log.ip_address ? ` · ${log.ip_address}` : ""}
+        </p>
+
+        <ActionDetails details={log.details} />
+      </div>
+    </li>
+  );
+}
+
+/**
+ * A page after the first.
+ *
+ * Kept as its own component so each offset is independently cached and
+ * independently renders. A page that is already in the cache paints
+ * immediately, which is what makes reading several pages feel like
+ * reading a document rather than waiting on a spinner each time.
+ */
+function AuditPageTail({ filters, offset }) {
+  const { data, loading, error } = useQuery(
+    "/accounts/audit-logs/",
+    (signal) => listAuditLogs({ filters, limit: PAGE_SIZE, offset, signal }),
+    {
+      params: { ...filters, limit: PAGE_SIZE, offset },
+      scope: "staff",
+      staleMs: 60 * 1000,
+    }
+  );
+
+  if (error) {
+    return (
+      <Alert
+        tone="error"
+        title="Could not load more of the activity log"
+        details={error.fieldErrors}
+      >
+        {error.message}
+      </Alert>
+    );
+  }
+
+  if (loading) {
+    return <AdminLoading label="Loading more..." />;
+  }
+
+  const results = data?.results || [];
+
+  if (results.length === 0) {
+    return null;
+  }
+
+  return (
+    <ol className="divide-y divide-console-line">
+      {results.map((log) => (
+        <LogRow key={log.id} log={log} />
+      ))}
+    </ol>
+  );
+}
+
+export default function AdminAuditLog() {
   const [filter, setFilter] = useState("");
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
 
-  /**
-   * Fetch one page.
-   *
-   * `append` is what "load more" uses, so the rows already on screen
-   * stay put and a new filter replaces them instead.
-   */
-  const fetchPage = useCallback(
-    async ({ nextOffset, append, filters }) => {
-      if (append) {
-        setLoadingMore(true);
-      } else {
-        setLoading(true);
-      }
+  /** How many pages are open. The first is always shown. */
+  const [pages, setPages] = useState(1);
 
-      try {
-        const data = await listAuditLogs({
-          filters,
-          limit: PAGE_SIZE,
-          offset: nextOffset,
-        });
+  const filters = { action: filter, q: search };
 
-        setLogs((current) =>
-          append ? [...current, ...data.results] : data.results
-        );
-        setCount(data.count);
-        setHasMore(data.has_more);
-        setOffset(nextOffset);
-        setError(null);
-      } catch (apiError) {
-        setError(apiError);
-      } finally {
-        setLoading(false);
-        setLoadingMore(false);
-      }
-    },
-    []
+  const {
+    data,
+    loading,
+    error,
+    refetch,
+  } = useQuery(
+    "/accounts/audit-logs/",
+    (signal) => listAuditLogs({ filters, limit: PAGE_SIZE, offset: 0, signal }),
+    {
+      params: { ...filters, limit: PAGE_SIZE, offset: 0 },
+      scope: "staff",
+      staleMs: 30 * 1000,
+    }
   );
+
+  const logs = data?.results || [];
+  const count = data?.count ?? 0;
+  const hasMore = Boolean(data?.has_more);
+
+  /** Entries the open pages cover, capped at the real total. */
+  const shown = Math.min(pages * PAGE_SIZE, count);
 
   const runSearch = (event) => {
     event.preventDefault();
 
-    const next = { action: filter, q: search.trim() };
-
     setSearch(query.trim());
-    fetchPage({ nextOffset: 0, append: false, filters: next });
-  };
-
-  useEffect(() => {
-    fetchPage({
-      nextOffset: 0,
-      append: false,
-      filters: { action: "", q: "" },
-    });
-  }, [fetchPage]);
-
-  const counts = {
-    "": count,
+    setPages(1);
   };
 
   return (
-    <div>
+    <div className="space-y-5">
       <AdminPageHeader
         eyebrow="Oversight"
         title="Activity log"
         description="Every privileged action, in the order it happened: account and role changes, booking decisions, payment verifications and content changes."
+        actions={
+          <AdminButton onClick={refetch} icon={RefreshCw}>
+            Refresh
+          </AdminButton>
+        }
       />
 
       {error && (
@@ -190,75 +241,38 @@ export default function AdminAuditLog() {
           tone="error"
           title="Could not load the activity log"
           details={error.fieldErrors}
-          onRetry={() =>
-            fetchPage({
-              nextOffset: 0,
-              append: false,
-              filters: { action: filter, q: search },
-            })
-          }
-          className="mt-6"
+          onRetry={refetch}
         >
           {error.message}
         </Alert>
       )}
 
-      <form onSubmit={runSearch} className="relative mt-6">
-        <Search
-          size={15}
-          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30"
-        />
-
-        <input
-          type="search"
+      <form onSubmit={runSearch} className="space-y-4">
+        <AdminSearch
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={setQuery}
           placeholder="Search action, person or record type"
-          aria-label="Search the activity log"
-          className={`${SEARCH} pl-11 pr-11`}
         />
 
-        {query && (
-          <button
-            type="button"
-            onClick={() => {
-              setQuery("");
-              setSearch("");
-              fetchPage({
-                nextOffset: 0,
-                append: false,
-                filters: { action: filter, q: "" },
-              });
-            }}
-            aria-label="Clear search"
-            className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-white/40 transition hover:text-white"
-          >
-            <X size={15} />
-          </button>
-        )}
-      </form>
+        {/* The kind filter is applied by the API. Only the active
+            selection could carry a count, and even that would need a
+            request per kind to know, so the tabs stay unnumbered. */}
+        <AdminFilterTabs
+          options={FILTERS.map((option) => ({
+            key: option.key,
+            label: option.label,
+          }))}
+          value={filter}
+          onChange={(next) => {
+            setFilter(next);
+            setSearch("");
+            setQuery("");
+            setPages(1);
+          }}
+        />
 
-      {/* The kind filter is applied by the API, so only the active
-          selection carries a count — an unfiltered page cannot say how
-          many of each kind exist without a request per kind. */}
-      <AdminFilterTabs
-        options={FILTERS.map((option) => ({
-          key: option.key,
-          label: option.label,
-          count: counts[option.key],
-        }))}
-        value={filter}
-        onChange={(next) => {
-          setFilter(next);
-          setSearch("");
-          setQuery("");
-          fetchPage({
-            nextOffset: 0,
-            append: false,
-            filters: { action: next, q: "" },
-          });
-        }}
-      />
+        <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1} />
+      </form>
 
       {loading && <AdminLoading label="Loading activity..." />}
 
@@ -270,75 +284,54 @@ export default function AdminAuditLog() {
               ? "No actions match this filter."
               : "No privileged actions recorded yet."
           }
-          onRetry={() =>
-            fetchPage({
-              nextOffset: 0,
-              append: false,
-              filters: { action: filter, q: search },
-            })
-          }
+          onRetry={refetch}
         />
       )}
 
       {!loading && !error && logs.length > 0 && (
         <>
-          <p className="mt-4 text-[11px] uppercase tracking-[0.2em] text-white/30">
-            Showing {logs.length} of {count}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-console-muted">
+              Showing {shown} of {count}
+            </p>
 
-          <AdminPanel className="mt-3">
-            <ol className="space-y-3">
+            {filters.action && (
+              <AdminChip tone="warn">Filtered by {filters.action}</AdminChip>
+            )}
+          </div>
+
+          <AdminPanel>
+            <ol className="divide-y divide-console-line">
               {logs.map((log) => (
-                <li
-                  key={log.id}
-                  className="flex gap-3 border-b border-white/10 pb-3 last:border-0 last:pb-0"
-                >
-                  <ClipboardList
-                    size={17}
-                    className="mt-0.5 shrink-0 text-[#d6a85f]"
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-white">
-                      {actionLabel(log.action)}
-                    </p>
-
-                    <p className="mt-1 text-xs text-white/45">
-                      {log.actor_name} ·{" "}
-                      {new Date(log.created_at).toLocaleString()}
-                      {log.target_id ? ` · #${log.target_id}` : ""}
-                      {log.ip_address ? ` · ${log.ip_address}` : ""}
-                    </p>
-
-                    <ActionDetails details={log.details} />
-                  </div>
-                </li>
+                <LogRow key={log.id} log={log} />
               ))}
             </ol>
           </AdminPanel>
 
+          {Array.from({ length: Math.max(pages - 1, 0) }, (unused, index) => {
+            const offset = (index + 1) * PAGE_SIZE;
+
+            return (
+              <AdminPanel key={offset}>
+                <AuditPageTail filters={filters} offset={offset} />
+              </AdminPanel>
+            );
+          })}
+
           {hasMore && (
-            <div className="mt-4 flex justify-center">
+            <div className="flex justify-center">
               <AdminButton
                 icon={ChevronRight}
-                disabled={loadingMore}
-                onClick={() =>
-                  fetchPage({
-                    nextOffset: offset + PAGE_SIZE,
-                    append: true,
-                    filters: { action: filter, q: search },
-                  })
-                }
+                block
+                onClick={() => setPages((value) => value + 1)}
               >
-                {loadingMore
-                  ? "Loading..."
-                  : `Load ${Math.min(PAGE_SIZE, count - offset - PAGE_SIZE)} more`}
+                {`Load ${Math.min(PAGE_SIZE, count - shown)} more`}
               </AdminButton>
             </div>
           )}
 
-          {offset > 0 && !hasMore && (
-            <p className="mt-4 flex items-center justify-center gap-2 text-xs text-white/35">
+          {!hasMore && pages > 1 && (
+            <p className="flex items-center justify-center gap-2 text-xs text-console-muted">
               <ChevronLeft size={13} />
               That is the whole trail for this filter.
             </p>

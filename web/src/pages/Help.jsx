@@ -60,7 +60,7 @@ export default function Help() {
   return (
     <div className="min-h-screen overflow-hidden bg-[#090909] px-5 pb-24 pt-28 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1180px]">
-        <section className="relative isolate overflow-hidden border border-white/10 bg-[#111] px-6 py-14 sm:px-10 lg:px-16 lg:py-20">
+        <section className="relative isolate rounded-2xl overflow-hidden border border-white/10 bg-[#111] px-6 py-14 sm:px-10 lg:px-16 lg:py-20">
           <div className="absolute -right-24 -top-24 -z-10 h-72 w-72 rounded-full bg-[#d6a85f]/15 blur-3xl" />
           <div className="absolute bottom-0 left-1/3 -z-10 h-36 w-2/3 bg-gradient-to-t from-[#d6a85f]/10 to-transparent" />
           <h1 className="mt-5 max-w-3xl font-serif text-5xl leading-[.9] tracking-tight sm:text-7xl">Everything you need<br /><span className="italic text-[#d6a85f]">before the chair.</span></h1>
@@ -78,7 +78,7 @@ export default function Help() {
             </div>
           </div>
           <div className="mt-10 grid gap-4 md:grid-cols-3">
-            {steps.map(({ icon: Icon, title, text }, index) => <article key={title} className="relative border border-white/10 bg-white/[.025] p-7">
+            {steps.map(({ icon: Icon, title, text }, index) => <article key={title} className="relative rounded-2xl border border-white/10 bg-white/[.025] p-7">
             <span className="absolute right-6 top-5 font-serif text-5xl text-white/[.06]">0{index + 1}</span>
             <h3 className="mt-7 font-serif text-2xl">{title}</h3><p className="mt-3 text-sm leading-6 text-white/45">{text}</p></article>)}
           </div>

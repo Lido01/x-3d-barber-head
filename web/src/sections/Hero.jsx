@@ -45,7 +45,7 @@ export default function Hero() {
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/60" />
 
       {/* soft ambient glow */}
-      <div className="pointer-events-none absolute right-[-10%] top-[10%] h-[420px] w-[420px]  bg-[#d6a85f]/10 blur-[140px]" />
+      <div className="pointer-events-none absolute right-[-10%] top-[10%] h-[420px] w-[420px] rounded-full bg-[#d6a85f]/10 blur-[140px]" />
 
       <div className="relative z-10 mx-auto w-full max-w-[1440px] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
         <div className="max-w-3xl">

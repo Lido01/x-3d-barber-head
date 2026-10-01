@@ -46,7 +46,7 @@ export default function QuickBook() {
             <Reveal
               key={step.title}
               delay={index * 110}
-              className="group relative overflow-hidden  border border-white/10 bg-black/45 p-7 backdrop-blur-md transition hover:border-[#d6a85f]/40"
+              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/45 p-7 backdrop-blur-md transition hover:border-[#d6a85f]/40"
             >
               <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
                 <Icon
@@ -75,7 +75,7 @@ export default function QuickBook() {
               <Link
                 key={service.id}
                 to={`/booking?service=${service.id}`}
-                className="group flex min-w-[240px] snap-start flex-col overflow-hidden  border border-white/10 bg-black/50 backdrop-blur-md transition hover:border-[#d6a85f]/45"
+                className="group flex min-w-[240px] snap-start flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/50 backdrop-blur-md transition hover:border-[#d6a85f]/45"
               >
                 {service.image ? (
                   <div className="relative h-32 overflow-hidden">
@@ -99,7 +99,7 @@ export default function QuickBook() {
                       {formatPrice(service.price)}
                     </p>
                   </div>
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center  border border-white/10 text-white/50 transition group-hover:bg-[#d6a85f] group-hover:text-black">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-white/50 transition group-hover:bg-[#d6a85f] group-hover:text-black">
                     →
                   </span>
                 </div>
