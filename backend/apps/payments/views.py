@@ -210,6 +210,21 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
         payment = serializer.save()
 
+        # A payment that corrected one the shop had already rejected is a
+        # different event from a first submission, and the activity log is
+        # the only place that difference survives - the row looks the
+        # same either way, apart from its updated_at.
+        if getattr(payment, "replaced_a_rejected_payment", False):
+            log_action(
+                request,
+                "payment.resubmitted",
+                payment,
+                {
+                    "amount": str(payment.amount),
+                    "booking_code": payment.booking.booking_code,
+                },
+            )
+
         output = self.get_serializer(
             payment
         )
