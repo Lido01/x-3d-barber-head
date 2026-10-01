@@ -1,4 +1,4 @@
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from rest_framework import status
@@ -594,6 +594,133 @@ class BookingLookupTests(APITestCase):
             Booking.objects.get(pk=response.data["id"]).user_id,
             customer.pk,
         )
+
+
+
+class BookingMoneyStateTests(APITestCase):
+    """
+    What the console can tell about the money behind a booking.
+
+    Staff confirm a walk-in who will pay at the counter, and a payment can
+    be rejected while the appointment is held. Both leave a live
+    appointment with nothing paid behind it, and a confirmation badge on
+    its own makes that look finished. So the booking row carries the money
+    state with it - and these tests exist because when it did not, the
+    console asked for a field that was never sent and drew every booking as
+    though nothing had been paid, with no error anywhere to say so.
+    """
+
+    def setUp(self):
+        self.booking_date = date.today() + timedelta(days=1)
+        self.service = Service.objects.create(name="Cut", price="350.00", duration=30)
+        self.barber = Barber.objects.create(name="Dawit")
+
+        self.admin = get_user_model().objects.create_user(
+            username="money-admin", password="test-password", is_staff=True,
+        )
+        StaffAccess.objects.create(user=self.admin, role=StaffAccess.Role.ADMIN)
+        self.client.force_authenticate(self.admin)
+
+        self.booking = Booking.objects.create(
+            customer_name="Sam Doe", customer_phone="0911234567",
+            service=self.service, barber=self.barber,
+            booking_date=self.booking_date,
+            start_time=time(10, 0), end_time=time(10, 30),
+        )
+
+    def pay(self, booking, reference="TIN0001"):
+        from apps.payments.models import Payment
+
+        return Payment.objects.create(
+            booking=booking, amount="350.00", method="telebirr",
+            transaction_reference=reference,
+        )
+
+    def test_a_booking_row_says_whether_money_arrived(self):
+        """
+        The console's bookings screen reads the money state off the
+        booking row.
+
+        Before this field existed the console asked for `payment_status`,
+        found it undefined, and drew every booking as though nothing had
+        been paid - with no error anywhere, because an absent field looks
+        exactly like no data.
+        """
+
+        from apps.payments.models import Payment
+
+        response = self.client.get("/api/bookings/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data[0]["payment_status"])
+        self.assertTrue(response.data[0]["payment_due"])
+
+        Payment.objects.create(
+            booking=self.booking,
+            amount="350.00",
+            method="telebirr",
+            transaction_reference="TIN0001",
+        )
+
+        response = self.client.get("/api/bookings/")
+
+        self.assertEqual(response.data[0]["payment_status"], "pending")
+        # Money exists, so nothing is outstanding - the "unpaid" badge must
+        # not claim otherwise.
+        self.assertFalse(response.data[0]["payment_due"])
+
+    def test_a_confirmed_booking_with_no_payment_is_still_due(self):
+        """
+        The case a confirmation badge would otherwise hide: staff confirm a
+        walk-in who will pay at the counter, leaving a live appointment with
+        nothing paid behind it.
+        """
+
+        self.client.post(f"/api/bookings/{self.booking.pk}/confirm/")
+
+        response = self.client.get(f"/api/bookings/{self.booking.pk}/")
+
+        self.assertEqual(response.data["status"], "confirmed")
+        self.assertIsNone(response.data["payment_status"])
+        self.assertTrue(response.data["payment_due"])
+
+    def test_a_cancelled_booking_is_not_flagged_as_due(self):
+        self.client.post(f"/api/bookings/{self.booking.pk}/cancel/")
+
+        response = self.client.get(f"/api/bookings/{self.booking.pk}/")
+
+        # Nothing to pay for, so nothing outstanding.
+        self.assertFalse(response.data["payment_due"])
+
+    def test_the_booking_list_joins_payments_rather_than_querying_per_row(self):
+        """
+        The money state is a join. A per-row lookup would be one extra
+        query for every booking on the console's screen, and the console's
+        screen is the whole shop.
+        """
+
+        from apps.payments.models import Payment
+
+        for index in range(6):
+            start = datetime.combine(self.booking_date, time(9, 0)) + timedelta(
+                minutes=30 * index
+            )
+
+            booking = Booking.objects.create(
+                customer_name=f"Customer {index}", customer_phone="0911111111",
+                service=self.service, barber=self.barber,
+                booking_date=self.booking_date,
+                start_time=start.time(),
+                end_time=(start + timedelta(minutes=30)).time(),
+            )
+
+            Payment.objects.create(
+                booking=booking, amount="350.00", method="telebirr",
+                transaction_reference=f"TIN{index}",
+            )
+
+        with self.assertNumQueries(1):
+            self.client.get("/api/bookings/")
 
 
 class AvailabilityReportTests(APITestCase):
