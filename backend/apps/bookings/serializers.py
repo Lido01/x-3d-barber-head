@@ -21,6 +21,24 @@ class BookingSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    #: The state of the money behind this booking, or None if none has
+    #: been sent.
+    #:
+    #: On the booking row rather than left to the client, because the two
+    #: genuinely disagree: staff confirm a walk-in who will pay at the
+    #: counter, and a payment can be rejected while the appointment is
+    #: held. Both leave a live appointment with a confirmed badge and
+    #: nothing paid behind it, which is exactly the thing worth noticing
+    #: before the customer is in the chair.
+    #:
+    #: A join, not a query per row - which is why the viewset selects the
+    #: payment in. Before this existed the console read `payment_status`,
+    #: found it undefined, and silently showed every booking as though
+    #: nothing had been paid.
+    payment_status = serializers.SerializerMethodField()
+
+    payment_due = serializers.SerializerMethodField()
+
     class Meta:
         model = Booking
 
@@ -37,6 +55,8 @@ class BookingSerializer(serializers.ModelSerializer):
             "start_time",
             "end_time",
             "status",
+            "payment_status",
+            "payment_due",
             "notes",
             "created_at",
             "updated_at",
@@ -50,10 +70,39 @@ class BookingSerializer(serializers.ModelSerializer):
             "booking_code",
             "end_time",
             "status",
+            "payment_status",
+            "payment_due",
             "created_at",
             "updated_at",
             "service_name",
             "barber_name",
+        ]
+
+    def _payment(self, booking):
+        """The joined payment, or None. Never triggers a query."""
+        return getattr(booking, "payment", None)
+
+    def get_payment_status(self, booking):
+        payment = self._payment(booking)
+
+        return payment.status if payment is not None else None
+
+    def get_payment_due(self, booking):
+        """
+        Whether the shop is still waiting on money.
+
+        True for a live appointment with nothing behind it. False once a
+        payment exists at all - including a rejected one, which is not
+        "nothing sent" but is handled by payment_status rather than by
+        pretending money is still outstanding.
+        """
+
+        if self._payment(booking) is not None:
+            return False
+
+        return booking.status in [
+            Booking.Status.PENDING,
+            Booking.Status.CONFIRMED,
         ]
 
     def validate_service(self, service):
