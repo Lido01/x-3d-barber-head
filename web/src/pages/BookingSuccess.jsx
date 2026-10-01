@@ -51,6 +51,19 @@ export default function BookingSuccess() {
 
   const initialPayment = location.state?.payment || null;
 
+  /**
+   * Did the customer just send this, on this page load?
+   *
+   * Worth knowing, because "sent" and "sent again after the shop could not
+   * read the first one" are different events and the second one deserves
+   * to be acknowledged - a customer who has already tried once is not
+   * reassured by the same screen they saw last time. Read from router
+   * state, so it survives exactly one navigation and does not greet
+   * someone who came back a week later as though they had just paid.
+   */
+  const justSubmitted = Boolean(location.state?.justSubmitted);
+  const wasResubmission = Boolean(location.state?.resubmitted);
+
   const { payment, loading, error, refresh } = usePaymentStatus({
     bookingId,
     bookingCode: booking?.booking_code || cached?.booking?.booking_code,
@@ -78,26 +91,57 @@ export default function BookingSuccess() {
 
           <div>
             <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-              Booking confirmed by the shop
+              {justSubmitted
+                ? wasResubmission
+                  ? "Second attempt received"
+                  : "Payment received"
+                : "Booking confirmed by the shop"}
             </p>
 
             <h1 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl">
               {current?.status === "verified"
                 ? "You're confirmed."
-                : "Your chair is held."}
+                : justSubmitted
+                  ? "We've got it."
+                  : "Your chair is held."}
             </h1>
 
             <p className="mt-4 max-w-lg text-sm leading-7 text-white/45">
               {current?.status === "verified"
                 ? "Payment checked and your appointment is locked in."
-                : current?.status === "rejected"
-                  ? "The shop could not match the payment. Your appointment is still held — please call them to sort it out."
-                  : current
-                    ? "Send your payment below and the shop will confirm the appointment."
-                    : "The appointment is held for you. Send your payment to lock it in."}
+                : justSubmitted
+                  ? wasResubmission
+                    ? "Thank you for sending it again — the shop has your payment and will check it against the bank. You do not need to do anything else."
+                    : "Your payment is with the shop and your appointment is held. Nothing else is needed from you — this page updates on its own."
+                  : current?.status === "rejected"
+                    ? "The shop could not match the payment. Your appointment is still held — send a clearer one, or call them to sort it out."
+                    : current
+                      ? "Send your payment below and the shop will confirm the appointment."
+                      : "The appointment is held for you. Send your payment to lock it in."}
             </p>
           </div>
         </div>
+
+        {/* --- what just happened ------------------------------ */}
+        {justSubmitted && (
+          <Alert
+            tone="success"
+            title={
+              wasResubmission
+                ? "Your new payment was sent"
+                : "Your payment was sent"
+            }
+            className="mt-8"
+          >
+            {formatPrice(current?.amount)} recorded for booking{" "}
+            <strong className="font-semibold tracking-[0.08em] text-white/80">
+              {booking?.booking_code || `#${bookingId}`}
+            </strong>
+            . The shop will match it against the bank and confirm your chair
+            — usually within a few hours. You can close this page; we will
+            still have your booking against that code.
+          </Alert>
+        )}
 
         {/* The code, above everything else on the page. */}
         <CopyCodeButton
