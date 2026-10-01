@@ -23,6 +23,8 @@ from .services import (
     reject_payment,
     verify_payment,
 )
+from apps.bookings.models import Booking
+from apps.bookings.services import normalise_booking_code, phone_matches
 from apps.accounts.permissions import capability_permission
 from apps.accounts.audit import log_action
 
@@ -99,6 +101,33 @@ class PaymentViewSet(viewsets.ModelViewSet):
     # PAYMENT FOR A BOOKING
     # =========================================================
 
+    @staticmethod
+    def _customer_booking(request, booking):
+        """Require the code and phone that prove this booking is theirs."""
+
+        code = normalise_booking_code(
+            request.headers.get("X-Booking-Code", "")
+        )
+        phone = request.headers.get("X-Booking-Phone", "")
+
+        if (
+            not code
+            or booking.booking_code != code
+            or not phone_matches(booking.customer_phone, phone)
+        ):
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError(
+                {
+                    "booking": [
+                        "We could not match that booking code and phone "
+                        "number. Check both and try again."
+                    ]
+                }
+            )
+
+        return booking
+
     @extend_schema(
         request=None,
         responses={
@@ -133,13 +162,11 @@ class PaymentViewSet(viewsets.ModelViewSet):
         shop's payments by changing the id.
         """
 
+        booking = generics.get_object_or_404(Booking, pk=booking_id)
+        self._customer_booking(request, booking)
         payment = generics.get_object_or_404(
-            Payment.objects.select_related(
-                "booking",
-                "booking__service",
-                "verified_by",
-            ),
-            booking_id=booking_id,
+            Payment.objects.select_related("booking", "booking__service", "verified_by"),
+            booking=booking,
         )
 
         return Response(

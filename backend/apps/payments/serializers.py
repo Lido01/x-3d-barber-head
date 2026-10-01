@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.bookings.models import Booking
+from apps.bookings.services import normalise_booking_code, phone_matches
 
 from .services import create_payment
 
@@ -44,6 +45,26 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    booking_reference = serializers.CharField(
+        write_only=True,
+        required=True,
+        max_length=32,
+        error_messages={
+            "required": "Please enter the booking code for this payment.",
+            "blank": "Please enter the booking code for this payment.",
+        },
+    )
+
+    booking_phone = serializers.CharField(
+        write_only=True,
+        required=True,
+        max_length=32,
+        error_messages={
+            "required": "Please enter the phone number used for this booking.",
+            "blank": "Please enter the phone number used for this booking.",
+        },
+    )
+
     class Meta:
         model = Payment
 
@@ -51,6 +72,8 @@ class PaymentSerializer(serializers.ModelSerializer):
             "id",
             "booking",
             "booking_code",
+            "booking_reference",
+            "booking_phone",
             "booking_customer",
             "booking_service",
             "amount",
@@ -129,6 +152,25 @@ class PaymentSerializer(serializers.ModelSerializer):
 
         attrs = super().validate(attrs)
 
+        booking = attrs.get("booking")
+        reference = normalise_booking_code(attrs.get("booking_reference"))
+        phone = attrs.get("booking_phone")
+
+        if (
+            booking is None
+            or not reference
+            or booking.booking_code != reference
+            or not phone_matches(booking.customer_phone, phone)
+        ):
+            raise serializers.ValidationError(
+                {
+                    "booking_reference": (
+                        "We could not match that booking code and phone "
+                        "number. Check both and try again."
+                    )
+                }
+            )
+
         receipt = attrs.get("receipt")
         reference = (attrs.get("transaction_reference") or "").strip()
 
@@ -148,6 +190,9 @@ class PaymentSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        validated_data.pop("booking_reference", None)
+        validated_data.pop("booking_phone", None)
+
         return create_payment(
             **validated_data
         )

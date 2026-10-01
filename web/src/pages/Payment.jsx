@@ -87,7 +87,11 @@ export default function Payment() {
 
   // Ask the server whether this booking already has a payment. The
   // backend's booking field is OneToOne, so it accepts exactly one.
-  const existing = usePaymentStatus({ bookingId });
+  const existing = usePaymentStatus({
+    bookingId,
+    bookingCode: booking?.booking_code,
+    bookingPhone: booking?.customer_phone,
+  });
 
   const { services } = useServices();
 
@@ -187,6 +191,8 @@ export default function Payment() {
       const payment = await createPayment(
         {
           bookingId,
+          bookingCode: booking?.booking_code,
+          bookingPhone: booking?.customer_phone,
           amount,
           method,
           transactionReference: reference.trim(),
@@ -257,6 +263,18 @@ export default function Payment() {
 
         {!existing.loading && (
           <>
+            {!booking && (
+              <Alert
+                tone="info"
+                title="Enter your booking code first"
+                className="mt-10"
+              >
+                Open My bookings and enter the booking code plus the phone
+                number you booked with. We need both before we can show or
+                accept payment for an appointment.
+              </Alert>
+            )}
+
             {booking ? (
               <BookingSummary booking={booking} className="mt-10" />
             ) : (
@@ -448,7 +466,7 @@ export default function Payment() {
                 <div>
                   <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={submitting || !booking}
                     className="group flex w-full items-center justify-center gap-3 rounded-full bg-[#d6a85f] px-6 py-4 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {submitting ? (

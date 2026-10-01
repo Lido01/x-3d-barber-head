@@ -53,7 +53,8 @@ export default function BookingSuccess() {
 
   const { payment, loading, error, refresh } = usePaymentStatus({
     bookingId,
-    paymentId: initialPayment?.id || cached?.paymentId,
+    bookingCode: booking?.booking_code || cached?.booking?.booking_code,
+    bookingPhone: booking?.customer_phone || cached?.booking?.customer_phone,
     pollMs: POLL_WHILE_PENDING_MS,
   });
 

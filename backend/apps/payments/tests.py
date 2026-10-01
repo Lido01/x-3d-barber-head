@@ -63,6 +63,13 @@ class PaymentAccessTestCase(APITestCase):
             transaction_reference="TX-001",
         )
 
+    def customer_headers(self, booking=None):
+        booking = booking or self.booking
+        return {
+            "HTTP_X_BOOKING_CODE": booking.booking_code,
+            "HTTP_X_BOOKING_PHONE": booking.customer_phone,
+        }
+
     @staticmethod
     def _staff(role, permissions=(), username="staff", is_staff=True):
         user = User.objects.create_user(
@@ -190,13 +197,24 @@ class PaymentAccessTestCase(APITestCase):
         """
 
         response = self.client.get(
-            reverse("payment-by-booking", args=[self.booking.pk])
+            reverse("payment-by-booking", args=[self.booking.pk]),
+            **self.customer_headers(),
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.payment.id)
         self.assertEqual(response.data["status"], "pending")
         self.assertEqual(response.data["booking"], self.booking.pk)
+
+    def test_a_wrong_booking_proof_cannot_read_the_payment(self):
+        response = self.client.get(
+            reverse("payment-by-booking", args=[self.booking.pk]),
+            HTTP_X_BOOKING_CODE=self.booking.booking_code,
+            HTTP_X_BOOKING_PHONE="0911999999",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn("status", response.data)
 
     def test_a_booking_with_no_payment_returns_404(self):
         from datetime import date, time, timedelta
@@ -212,7 +230,8 @@ class PaymentAccessTestCase(APITestCase):
         )
 
         response = self.client.get(
-            reverse("payment-by-booking", args=[unbooked.pk])
+            reverse("payment-by-booking", args=[unbooked.pk]),
+            **self.customer_headers(unbooked),
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -225,7 +244,8 @@ class PaymentAccessTestCase(APITestCase):
         """
 
         response = self.client.get(
-            reverse("payment-by-booking", args=[self.booking.pk])
+            reverse("payment-by-booking", args=[self.booking.pk]),
+            **self.customer_headers(),
         )
 
         self.assertIsInstance(response.data, dict)
@@ -236,7 +256,8 @@ class PaymentAccessTestCase(APITestCase):
         self.payment.save(update_fields=["status"])
 
         response = self.client.get(
-            reverse("payment-by-booking", args=[self.booking.pk])
+            reverse("payment-by-booking", args=[self.booking.pk]),
+            **self.customer_headers(),
         )
 
         self.assertEqual(response.data["status"], "verified")
@@ -340,7 +361,8 @@ class PaymentAccessTestCase(APITestCase):
         """
 
         response = self.client.get(
-            reverse("payment-by-booking", args=[self.booking.pk])
+            reverse("payment-by-booking", args=[self.booking.pk]),
+            **self.customer_headers(),
         )
 
         self.assertEqual(
@@ -384,6 +406,8 @@ class PaymentEvidenceTests(APITestCase):
     def submit(self, **overrides):
         payload = {
             "booking": self.booking.pk,
+            "booking_reference": self.booking.booking_code,
+            "booking_phone": self.booking.customer_phone,
             "amount": "350.00",
             "method": "telebirr",
         }
@@ -398,6 +422,8 @@ class PaymentEvidenceTests(APITestCase):
             reverse("payment-list"),
             {
                 "booking": self.booking.pk,
+                "booking_reference": self.booking.booking_code,
+                "booking_phone": self.booking.customer_phone,
                 "amount": "350.00",
                 "method": "telebirr",
                 "receipt": receipt,

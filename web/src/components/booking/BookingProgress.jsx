@@ -278,6 +278,7 @@ export function PaymentPrompt({ booking, payment, paymentDue }) {
 
             <Link
               to={`/payment/${booking.id}`}
+              state={{ booking }}
               className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#d6a85f] px-5 py-2.5 text-xs font-semibold text-black transition hover:bg-[#e5bd7a]"
             >
               {confirmed ? "Pay now" : "Pay for this booking"} {code}
