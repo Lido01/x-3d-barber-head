@@ -41,6 +41,7 @@ export default function BookingHistoryCard({
   paymentRejected,
   expanded,
   onToggle,
+  onPaid,
 }) {
   const code = bookingCodeOf(booking);
 
@@ -142,13 +143,16 @@ export default function BookingHistoryCard({
           </div>
 
           {/* The action, or the reason there is none. Not shown when it
-              would only restate the payment panel above. */}
+              would only restate the payment panel above. The pay form
+              opens in this card rather than on another page, so paying
+              for a booking in the history is one screen, not three
+              navigations. */}
           {(paymentDue || paymentRejected) && (
             <div className="mt-4">
               <PaymentPrompt
                 booking={booking}
                 payment={payment}
-                paymentDue={paymentDue}
+                onPaid={onPaid}
               />
             </div>
           )}
