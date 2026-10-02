@@ -1,6 +1,7 @@
 import { useQuery } from "./useQuery";
 
 import { listBarbers } from "../services/bookingApi";
+import { toArray } from "../utils/toArray";
 
 /**
  * Active barbers from GET /api/barbers/ for display pages.
@@ -12,7 +13,7 @@ import { listBarbers } from "../services/bookingApi";
  */
 export function useBarberList() {
   const { data, error, loading, refetch } = useQuery("/barbers/", listBarbers, {
-    select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+    select: toArray,
   });
 
   return { barbers: data || [], loading, error, reload: refetch };

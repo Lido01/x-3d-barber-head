@@ -9,6 +9,7 @@ import {
   Scissors,
   Sparkles,
   CircleHelp,
+  Ticket,
   UserRound,
 } from "lucide-react";
 
@@ -151,6 +152,20 @@ export default function BottomBar() {
           >
             <Sparkles size={18} />
             {t("nav.haircuts")}
+          </NavLink>
+
+          {/* A guest booking has no account to sit under, so the way
+              back to one is a booking code - this is where it is spent.
+              Reachable from the More sheet rather than a tab: the bar is
+              already carrying five items and this is a lookup, not a
+              browse. */}
+          <NavLink
+            to="/bookings"
+            onClick={() => setMoreOpen(false)}
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
+          >
+            <Ticket size={18} />
+            My bookings
           </NavLink>
 
           <NavLink

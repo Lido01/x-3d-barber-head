@@ -19,6 +19,7 @@ import {
 } from "../../components/admin/AdminUi";
 import { useAdminAuth } from "../../context/AdminAuthContext";
 import { mediaUrl } from "../../services/api";
+import { toArray } from "../../utils/toArray";
 import {
   listPayments,
   rejectPayment,
@@ -82,7 +83,7 @@ export default function AdminPayments() {
   } = useQuery("/payments/payments/", listPayments, {
     scope: "staff",
     staleMs: 30 * 1000,
-    select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+    select: toArray,
   });
 
   const payments = data || EMPTY_LIST;

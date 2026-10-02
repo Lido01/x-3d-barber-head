@@ -329,4 +329,9 @@ class ListQueryCountTests(APITestCase):
             # booking figures, 2 for the payment figures, and one each
             # for users, services, gallery and reviews. Before the
             # consolidation this was 22.
+            #
+            # The "awaiting payment" figure was added to this budget
+            # without raising it: it rides along in the existing booking
+            # aggregate as a correlated Exists subquery, so it costs a
+            # COUNT in SQL rather than a round trip.
             self.client.get("/api/accounts/reports/dashboard/")

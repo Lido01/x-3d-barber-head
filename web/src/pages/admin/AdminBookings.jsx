@@ -1,5 +1,13 @@
 import { useMemo, useState } from "react";
-import { Check, CheckCheck, RefreshCw, Trash2, X } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  CircleDollarSign,
+  Copy,
+  RefreshCw,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import Alert from "../../components/ui/Alert";
 import {
@@ -16,6 +24,7 @@ import {
   AdminStatus,
 } from "../../components/admin/AdminUi";
 import { EMPTY_LIST, invalidateQuery, useQuery } from "../../hooks/useQuery";
+import { toArray } from "../../utils/toArray";
 import {
   cancelBooking,
   completeBooking,
@@ -23,15 +32,22 @@ import {
   deleteBooking,
   listBookings,
 } from "../../services/bookingApi";
+import { bookingCodeOf } from "../../utils/bookingCode";
 import { formatDate, formatTimeRange } from "../../utils/format";
 
 /**
  * Bookings management — GET /api/bookings/ (admin).
  *
  * Built for a phone held in one hand between customers: the whole
- * schedule is filterable by status and searchable by name or phone, and
- * the four status transitions staff actually need are on each card
- * rather than behind a menu.
+ * schedule is filterable by status and searchable by name, phone, service
+ * or booking code, and the four status transitions staff actually need are
+ * on each card rather than behind a menu.
+ *
+ * The booking code is the first thing on each card, and searchable,
+ * because it is what a customer reads off their confirmation and what
+ * staff have to recognise when someone rings. It is also the fastest way
+ * to find one booking in a list that is otherwise sorted by date: the
+ * caller already has the number and does not know who it belongs to.
  *
  * Transitions and the statuses that enable them, which the server
  * enforces too:
@@ -57,12 +73,34 @@ const FILTERS = [
   { key: "confirmed", label: "Confirmed" },
   { key: "completed", label: "Completed" },
   { key: "cancelled", label: "Cancelled" },
+  { key: "awaiting_payment", label: "Awaiting payment" },
 ];
+
+/**
+ * Whether money has arrived for this booking.
+ *
+ * Derived from the joined payment the API returns, not from the
+ * booking's status - because the two genuinely disagree. Staff confirm a
+ * walk-in who will pay at the counter, and a payment can be rejected
+ * while the appointment is held. Both leave a live appointment with a
+ * confirmed badge and no money behind it, which is the thing worth
+ * noticing before the customer is in the chair.
+ */
+function paymentState(booking) {
+  if (booking.payment_status) {
+    return booking.payment_status;
+  }
+
+  return booking.status === "pending" || booking.status === "confirmed"
+    ? "none"
+    : "settled";
+}
 
 export default function AdminBookings() {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
   const [actionError, setActionError] = useState(null);
 
   // Short TTL and no client-side cache reuse across a status change:
@@ -77,16 +115,29 @@ export default function AdminBookings() {
   } = useQuery("/bookings/", listBookings, {
     scope: "staff",
     staleMs: 30 * 1000,
-    select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+    select: toArray,
   });
 
   const bookings = data || EMPTY_LIST;
 
+  const awaitingPayment = useMemo(
+    () =>
+      bookings.filter((row) => {
+        const state = paymentState(row);
+
+        return state === "none" || state === "rejected";
+      }).length,
+    [bookings]
+  );
+
   const counts = useMemo(() => {
-    const tally = { all: bookings.length };
+    const tally = {
+      all: bookings.length,
+      awaiting_payment: awaitingPayment,
+    };
 
     for (const option of FILTERS) {
-      if (option.key === "all") {
+      if (option.key === "all" || option.key === "awaiting_payment") {
         continue;
       }
 
@@ -96,13 +147,21 @@ export default function AdminBookings() {
     }
 
     return tally;
-  }, [bookings]);
+  }, [bookings, awaitingPayment]);
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
     return bookings.filter((booking) => {
-      if (filter !== "all" && booking.status !== filter) {
+      // The filter tab for money is not a booking status, so it is
+      // checked separately rather than against `booking.status`.
+      if (filter === "awaiting_payment") {
+        const state = paymentState(booking);
+
+        if (state !== "none" && state !== "rejected") {
+          return false;
+        }
+      } else if (filter !== "all" && booking.status !== filter) {
         return false;
       }
 
@@ -115,6 +174,7 @@ export default function AdminBookings() {
         booking.customer_phone,
         booking.service_name,
         booking.barber_name,
+        booking.booking_code,
         String(booking.id),
       ]
         .filter(Boolean)
@@ -163,6 +223,19 @@ export default function AdminBookings() {
     }
   };
 
+  /** Copy the code to read out on the phone. */
+  const copyCode = async (booking) => {
+    const code = booking.booking_code || `#${booking.id}`;
+
+    try {
+      await navigator.clipboard?.writeText(code);
+      setCopiedId(booking.id);
+      setTimeout(() => setCopiedId(null), 1800);
+    } catch {
+      // Clipboard blocked - the code is on screen to read out anyway.
+    }
+  };
+
   const actionsFor = (status) => {
     if (status === "pending") {
       return {
@@ -188,7 +261,7 @@ export default function AdminBookings() {
       <AdminPageHeader
         eyebrow="Staff · Management"
         title="Bookings"
-        description="Every appointment across the shop, with the transitions staff actually need on each one."
+        description="Every appointment across the shop, with the booking code the customer was given and the transitions staff actually need on each one."
         actions={
           <AdminButton onClick={load} icon={RefreshCw} loading={refreshing}>
             Refresh
@@ -209,7 +282,7 @@ export default function AdminBookings() {
       <AdminSearch
         value={query}
         onChange={setQuery}
-        placeholder="Search by name, phone, service or #"
+        placeholder="Search by booking code, name, phone or service"
       />
 
       {actionError && (
@@ -239,7 +312,9 @@ export default function AdminBookings() {
               ? `No bookings match "${query}".`
               : filter === "all"
                 ? "No bookings yet."
-                : `No ${activeLabel?.toLowerCase()} bookings right now.`
+                : filter === "awaiting_payment"
+                  ? "Every live appointment has a payment behind it."
+                  : `No ${activeLabel?.toLowerCase()} bookings right now.`
           }
           onRetry={load}
         />
@@ -255,6 +330,8 @@ export default function AdminBookings() {
             {shown.map((booking) => {
               const busy = busyId === booking.id;
               const available = actionsFor(booking.status);
+              const money = paymentState(booking);
+              const code = bookingCodeOf(booking);
 
               return (
                 <li key={booking.id}>
@@ -262,10 +339,47 @@ export default function AdminBookings() {
                     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-                          <p className="font-serif text-lg leading-none text-console-ink">
-                            #{booking.id}
+                          <p className="font-serif text-lg leading-none tracking-[0.08em] text-console-ink">
+                            {code}
                           </p>
+
                           <AdminStatus status={booking.status} />
+
+                          {/* The money state, spelled out. A confirmed
+                              booking with nothing paid is the case a
+                              confirmation badge alone would hide. */}
+                          {money === "none" && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#d6a85f]/40 bg-[#d6a85f]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-console-accent">
+                              <CircleDollarSign size={10} />
+                              Unpaid
+                            </span>
+                          )}
+
+                          {money === "rejected" && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#e05a4f]/40 bg-[#e05a4f]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#e0776b]">
+                              <CircleDollarSign size={10} />
+                              Payment rejected
+                            </span>
+                          )}
+
+                          {money === "verified" && (
+                            <span className="inline-flex items-center gap-1 rounded-full border-[#5fb98a]/40 bg-[#5fb98a]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7fcfa4]">
+                              Paid
+                            </span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => copyCode(booking)}
+                            title={`Copy ${code}`}
+                            className="rounded-full border border-console-line p-1 text-console-muted transition hover:border-console-accent hover:text-console-accent"
+                          >
+                            {copiedId === booking.id ? (
+                              <Check size={11} />
+                            ) : (
+                              <Copy size={11} />
+                            )}
+                          </button>
                         </div>
 
                         <p className="mt-1.5 break-words text-sm font-medium text-console-ink">
@@ -344,7 +458,7 @@ export default function AdminBookings() {
                         <AdminConfirmButton
                           icon={X}
                           loading={busy}
-                          message={`Cancel booking #${booking.id} for ${booking.customer_name}? The slot is released and the customer sees it as cancelled.`}
+                          message={`Cancel booking ${code} for ${booking.customer_name}? The slot is released and the customer sees it as cancelled.`}
                           onConfirm={() =>
                             runAction(booking, available.cancel)
                           }
@@ -356,7 +470,7 @@ export default function AdminBookings() {
                       <AdminConfirmButton
                         icon={Trash2}
                         loading={busy}
-                        message={`Permanently delete booking #${booking.id}? This cannot be undone, and the customer's record of it goes with it.`}
+                        message={`Permanently delete booking ${code}? This cannot be undone, and the customer's record of it goes with it.`}
                         onConfirm={() => runAction(booking, "delete")}
                       >
                         Delete

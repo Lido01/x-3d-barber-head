@@ -125,8 +125,24 @@ export function useQuery(url, fetcher, options = {}) {
   return {
     data: snapshot.data,
     error: snapshot.error,
-    /** No data yet. Stays false when the cache already had rows. */
-    loading: enabled && !snapshot.hasData,
+    /**
+     * No answer yet. Stays false when the cache already had rows.
+     *
+     * An error ends it too, and that clause is load-bearing rather than
+     * tidiness. The cache records a failed read as "still no data" plus an
+     * error, so keying this only on `!hasData` made `loading` true for
+     * good whenever the first read of a key failed. Every caller that
+     * renders `loading ? <Spinner/> : error ? <Error/> : rows` was then
+     * unreachable on its error branch and showed the spinner forever.
+     *
+     * The payment page was the visible casualty, and the worst possible
+     * one: "no payment has been sent for this booking yet" is answered by
+     * the backend with a 404, so a customer arriving to pay their bill -
+     * which is every customer, on the first visit - sat on "Checking this
+     * booking..." indefinitely and never reached the form. A request that
+     * has finished is not loading, however it finished.
+     */
+    loading: enabled && !snapshot.hasData && !snapshot.error,
     /** A request is running behind already-rendered data. */
     isFetching: enabled && isFetching,
     refetch,

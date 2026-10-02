@@ -31,6 +31,7 @@ export default function Navbar() {
     { label: t("nav.haircuts"), to: "/haircuts" },
     { label: t("nav.barbers"), to: "/barbers" },
     { label: t("nav.gallery"), to: "/gallery" },
+    { label: "My bookings", to: "/bookings" },
     { label: "Help", to: "/help" },
     { label: t("nav.about"), to: "/#about" },
   ];

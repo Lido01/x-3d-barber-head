@@ -2,7 +2,7 @@ import { useCallback, useEffect } from "react";
 
 import { useQuery } from "./useQuery";
 
-import { findPaymentForBooking, getPayment } from "../services/paymentApi";
+import { findPaymentForBooking } from "../services/paymentApi";
 
 /**
  * Live payment state for a booking, read straight from Django.
@@ -12,25 +12,27 @@ import { findPaymentForBooking, getPayment } from "../services/paymentApi";
  * without logging in. Nothing is inferred locally: if the backend says
  * pending, the UI says pending.
  *
- * Looks the payment up by id when one is known, and otherwise finds it
- * by booking id (useful after a refresh in a fresh tab).
+ * Always reads through the booking-scoped endpoint when a booking id is
+ * available. The payment page and the result page then share one cache key
+ * across their redirect instead of reading the same payment once by id and
+ * once by booking.
  *
  * This is the one hook that must not be cached: a staff member verifying
  * a receipt has to see the status change. `staleMs: 0` means every read
  * is a real request, so the cache only serves to dedupe the mount fetch
  * and to share it with any other component watching the same booking.
  */
-export function usePaymentStatus({ bookingId, paymentId, pollMs = 0 }) {
-  const ready = Boolean(bookingId || paymentId);
+export function usePaymentStatus({ bookingId, bookingCode, bookingPhone, pollMs = 0 }) {
+  const ready = Boolean(bookingId && bookingCode && bookingPhone);
 
   const { data, error, loading, refetch } = useQuery(
-    paymentId
-      ? `/payments/payments/${paymentId}/`
-      : `/payments/payments/by-booking/${bookingId}/`,
+    `/payments/payments/by-booking/${bookingId}/`,
     (signal) =>
-      paymentId
-        ? getPayment(paymentId, { signal })
-        : findPaymentForBooking(bookingId, { signal }),
+      findPaymentForBooking(bookingId, {
+        signal,
+        bookingCode,
+        bookingPhone,
+      }),
     {
       enabled: ready,
       staleMs: 0,
@@ -68,6 +70,17 @@ export function usePaymentStatus({ bookingId, paymentId, pollMs = 0 }) {
     payment: data || null,
     loading: ready && loading,
     error: isMissing ? null : error,
+    /**
+     * The booking genuinely has no payment yet.
+     *
+     * A different thing from "not loaded yet" and from "the read failed",
+     * and the payment form needs all three to be distinguishable: this is
+     * the state where the form should be open and welcoming, not one where
+     * anything should be hidden behind a spinner.
+     */
+    missing: isMissing,
+    /** The request has finished, one way or another. */
+    ready: ready && !loading,
     refresh,
   };
 }

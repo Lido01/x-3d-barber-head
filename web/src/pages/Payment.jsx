@@ -1,53 +1,49 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, KeyRound } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import BookingSummary from "../components/BookingSummary";
-import ReceiptUpload from "../components/ReceiptUpload";
+import PaymentForm from "../components/booking/PaymentForm";
 import Alert from "../components/ui/Alert";
 import FieldError from "../components/ui/FieldError";
 import Spinner from "../components/ui/Spinner";
 import { usePaymentStatus } from "../hooks/usePaymentStatus";
-import { useServices } from "../hooks/useServices";
-import { PAYMENT_METHODS, createPayment } from "../services/paymentApi";
-import { invalidateQuery } from "../hooks/useQuery";
-import {
-  recallBooking,
-  rememberBooking,
-  rememberPaymentId,
-} from "../utils/bookingSession";
-import { formatPrice } from "../utils/format";
+import { lookupBooking } from "../services/bookingApi";
+import { normaliseBookingCode } from "../utils/bookingCode";
+import { recallBooking, rememberBooking } from "../utils/bookingSession";
 
 /**
  * Payment submission for a booking. Still no customer account.
  *
- * The booking recap is the exact object Django returned when the
- * booking was created (passed through router state, cached in
- * sessionStorage so a refresh survives). Whether a payment already
- * exists is answered by the server, not by local state.
+ * The backend matches every payment against the booking it belongs to,
+ * using the booking code and the phone number the booking was made with -
+ * so those two are what this page needs before anything can be sent.
+ *
+ * They normally come for free: the booking was just made, and Django's
+ * response and this tab's session storage both hold them. They do not
+ * come for free when the customer is paying on a different device, in a
+ * tab that has been closed, or from a link somebody sent them. In that
+ * case the page asks for them rather than presenting a form that would
+ * be refused on submit - which is what it used to do, and the reason a
+ * screenshot could reach "waiting" and then go nowhere.
+ *
+ * The form itself is components/booking/PaymentForm, shared with the
+ * confirmation page and the customer's history, so what a customer sends
+ * here is the same form they would find on the booking that needs paying.
+ *
+ * This page does not wait for the "is there already a payment?" check
+ * before rendering the form. That check used to gate the whole screen,
+ * and a booking with no payment yet is answered by the backend with a
+ * 404 - which is the normal case, so the screen sat on "Checking this
+ * booking..." and the customer who came to pay was never shown the form.
+ * The answer now arrives as a line under the heading and a redirect if
+ * there is genuinely nothing left to send.
  */
 
 const LABEL = "text-[10px] uppercase tracking-[0.25em] text-white/35";
 
 const INPUT =
-  "w-full  border border-white/10 bg-[#181818] px-4 py-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50";
-
-function validate({ amount, method }) {
-  const errors = {};
-  const value = Number(amount);
-
-  if (!String(amount).trim()) {
-    errors.amount = "Please enter the amount you paid.";
-  } else if (Number.isNaN(value) || value <= 0) {
-    errors.amount = "Amount must be greater than zero.";
-  }
-
-  if (!method) {
-    errors.method = "Please choose how you paid.";
-  }
-
-  return errors;
-}
+  "w-full min-w-0 border border-white/10 bg-[#181818] px-4 py-4 text-base text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50 sm:text-sm";
 
 export default function Payment() {
   const { bookingId } = useParams();
@@ -69,126 +65,117 @@ export default function Payment() {
 
   // Ask the server whether this booking already has a payment. The
   // backend's booking field is OneToOne, so it accepts exactly one.
-  const existing = usePaymentStatus({ bookingId });
+  const existing = usePaymentStatus({
+    bookingId,
+    bookingCode: booking?.booking_code,
+    bookingPhone: booking?.customer_phone,
+  });
 
-  const { services } = useServices();
+  // The proof of ownership, asked for explicitly when this tab cannot
+  // supply it on its own. See "Confirm this is your booking" below.
+  const [proofCode, setProofCode] = useState("");
+  const [proofPhone, setProofPhone] = useState("");
+  const [proofErrors, setProofErrors] = useState({});
+  const [proofBusy, setProofBusy] = useState(false);
+  const [proofError, setProofError] = useState(null);
 
-  const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState(PAYMENT_METHODS[0].value);
-  const [reference, setReference] = useState("");
-  const [receiptFile, setReceiptFile] = useState(null);
-
-  const [localErrors, setLocalErrors] = useState({});
-  const [apiError, setApiError] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [progress, setProgress] = useState(null);
-
-  const inFlight = useRef(false);
-  const prefilled = useRef(false);
-
-  const bookedService = useMemo(() => {
-    if (!booking?.service) {
-      return null;
-    }
-
-    return (
-      services.find((item) => String(item.id) === String(booking.service)) ||
-      null
-    );
-  }, [services, booking]);
-
-  // Suggest the service's price once. The customer can change it, and
-  // Django validates the final value.
-  useEffect(() => {
-    if (prefilled.current || !bookedService?.price) {
-      return;
-    }
-
-    prefilled.current = true;
-    setAmount(String(Number(bookedService.price)));
-  }, [bookedService]);
+  // True when this tab has no way to prove which booking this is - a
+  // different device, a cleared session, a link shared in a chat. The
+  // backend needs the code and the phone number on every payment call,
+  // so without them the form below would submit and be refused.
+  const needsProof = !booking;
 
   // A payment already on file means this step is done - show the result
   // page instead of letting a second one be attempted.
+  //
+  // Except a *rejected* one. That is the one state where the customer
+  // still has something to do, and bouncing them to the confirmation page
+  // - which then tells them to telephone the shop - is exactly how a
+  // screenshot that was too blurry to read becomes a booking the customer
+  // paid for and can never resolve. The backend now accepts a corrected
+  // resubmission against the same payment, so the form stays reachable.
   useEffect(() => {
-    if (existing.payment?.id) {
-      rememberPaymentId(bookingId, existing.payment.id);
+    const payment = existing.payment;
 
-      navigate(`/booking/success/${bookingId}`, {
-        replace: true,
-        state: { booking, payment: existing.payment },
-      });
-    }
-  }, [existing.payment, bookingId, booking, navigate]);
-
-  const fieldError = (field) =>
-    localErrors[field] || apiError?.fieldErrors?.[field] || null;
-
-  const unmappedErrors = useMemo(() => {
-    if (!apiError?.fieldErrors) {
-      return null;
-    }
-
-    const known = ["amount", "method", "transaction_reference", "receipt"];
-
-    const rest = Object.entries(apiError.fieldErrors).filter(
-      ([key]) => !known.includes(key)
-    );
-
-    return rest.length > 0 ? Object.fromEntries(rest) : null;
-  }, [apiError]);
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    if (inFlight.current) {
+    if (!payment?.id || payment.status === "rejected") {
       return;
     }
 
-    const errors = validate({ amount, method });
+    navigate(`/booking/success/${bookingId}`, {
+      replace: true,
+      state: { booking, payment },
+    });
+  }, [existing.payment, bookingId, booking, navigate]);
 
-    setLocalErrors(errors);
-    setApiError(null);
+  /**
+   * Resolve this booking from the code and phone the customer types.
+   *
+   * Same two fields as "my bookings", doing the same job: the code proves
+   * the number is theirs, and the lookup answers with the whole booking.
+   * Without this, a customer who did not book on this device could not pay
+   * at all.
+   */
+  const handleProveBooking = async (event) => {
+    event.preventDefault();
+
+    const errors = {};
+
+    if (!proofCode.trim()) {
+      errors.code = "Please enter your booking code, e.g. BK-3274.";
+    }
+
+    if (proofPhone.replace(/\D/g, "").length < 9) {
+      errors.phone =
+        "Please enter the phone number you booked with, so we can match it to your booking.";
+    }
+
+    setProofErrors(errors);
+    setProofError(null);
 
     if (Object.keys(errors).length > 0) {
       return;
     }
 
-    inFlight.current = true;
-    setSubmitting(true);
-    setProgress(receiptFile ? 0 : null);
+    setProofBusy(true);
 
     try {
-      const payment = await createPayment(
-        {
-          bookingId,
-          amount,
-          method,
-          transactionReference: reference.trim(),
-          receiptFile,
-        },
-        {
-          onProgress: receiptFile ? setProgress : undefined,
-        }
-      );
-
-      rememberPaymentId(bookingId, payment.id);
-
-      // The result page reads this same payment, and staff see it in
-      // their queue. Both are already cached from earlier reads, so the
-      // new row has to replace them rather than wait out a TTL.
-      invalidateQuery("payments");
-
-      navigate(`/booking/success/${bookingId}`, {
-        replace: true,
-        state: { booking, payment },
+      const history = await lookupBooking({
+        code: proofCode.trim(),
+        phone: proofPhone.trim(),
       });
+
+      // The code may name a different booking in the same history, so
+      // take the row this page is about rather than whichever came first.
+      const match =
+        (history.bookings || []).find(
+          (row) => String(row.booking.id) === String(bookingId)
+        ) || history.bookings?.[0];
+
+      if (!match?.booking) {
+        setProofError(
+          "We could not find a booking with that code and phone number."
+        );
+
+        return;
+      }
+
+      if (String(match.booking.id) !== String(bookingId)) {
+        // The proof identifies the customer, not this particular page.
+        // Carry them to the booking it actually named rather than paying
+        // against the wrong appointment.
+        rememberBooking(match.booking);
+
+        navigate(`/payment/${match.booking.id}`, { replace: true });
+
+        return;
+      }
+
+      rememberBooking(match.booking);
+      setBooking(match.booking);
     } catch (error) {
-      setApiError(error);
-      setProgress(null);
+      setProofError(error.message);
     } finally {
-      inFlight.current = false;
-      setSubmitting(false);
+      setProofBusy(false);
     }
   };
 
@@ -215,186 +202,186 @@ export default function Payment() {
           </h1>
 
           <p className="mt-6 max-w-lg text-sm leading-7 text-white/45">
-            Your chair is reserved as pending. Send the payment, then upload
-            the receipt so the shop can verify it.
+            Your chair is held under booking code{" "}
+            <strong className="font-semibold tracking-[0.1em] text-white/80">
+              {booking?.booking_code || `#${bookingId}`}
+            </strong>
+            . Choose a screenshot of your transfer or the TIN number on it —
+            either one lets the shop verify the payment.
           </p>
+
+          {/* The check is a status line, not a gate. It was a spinner that
+              covered the entire form, on a screen whose whole job is to be
+              filled in. */}
+          <div className="mt-5 min-h-[20px]">
+            {existing.loading && (
+              <Spinner size={13} label="Checking this booking..." />
+            )}
+
+            {existing.ready && existing.missing && !needsProof && (
+              <p className="text-[11px] text-white/30">
+                No payment on this booking yet — you are in the right place.
+              </p>
+            )}
+
+            {existing.error && (
+              <p className="text-[11px] leading-5 text-[#e0776b]">
+                We could not check whether this booking was already paid, so
+                this form may let you send a second payment.{" "}
+                <button
+                  type="button"
+                  onClick={existing.refresh}
+                  className="font-semibold underline underline-offset-2"
+                >
+                  Try again
+                </button>
+              </p>
+            )}
+          </div>
         </div>
 
-        {existing.loading && (
-          <div className="mt-10 flex justify-center rounded-2xl border border-white/10 bg-[#111] py-12">
-            <Spinner label="Checking this booking..." />
-          </div>
-        )}
+        {/* The booking could not be read from this tab. Rather than leaving
+            the customer with a form that would be refused, ask for the two
+            things that identify it. */}
+        {needsProof && (
+          <form
+            onSubmit={handleProveBooking}
+            noValidate
+            className="mt-8 rounded-2xl border border-[#d6a85f]/25 bg-[#d6a85f]/[0.04] p-5 sm:p-6"
+          >
+            <div className="flex gap-3">
+              <KeyRound size={17} className="mt-0.5 shrink-0 text-[#d6a85f]" />
 
-        {!existing.loading && (
-          <>
-            {booking ? (
-              <BookingSummary booking={booking} className="mt-10" />
-            ) : (
-              <Alert
-                tone="info"
-                title={`Booking #${bookingId}`}
-                className="mt-10"
-              >
-                Your booking details are not available in this tab, but you can
-                still submit the payment below. The shop has your appointment
-                on file.
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white">
+                  Confirm this is your booking
+                </p>
+
+                <p className="mt-1 text-xs leading-6 text-white/55">
+                  You are not on the device you booked on, so we do not know
+                  your booking code yet. Enter it with the phone number you
+                  used, and we will check your payment against the right
+                  appointment.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className={LABEL} htmlFor="proof-code">
+                  Booking code
+                </label>
+
+                <input
+                  id="proof-code"
+                  value={proofCode}
+                  onChange={(event) =>
+                    setProofCode(normaliseBookingCode(event.target.value))
+                  }
+                  placeholder="BK-3274"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  disabled={proofBusy}
+                  aria-invalid={Boolean(proofErrors.code)}
+                  className={`${INPUT} mt-2 font-serif tracking-[0.15em]`}
+                />
+
+                <FieldError message={proofErrors.code} />
+              </div>
+
+              <div>
+                <label className={LABEL} htmlFor="proof-phone">
+                  Phone number you booked with
+                </label>
+
+                <input
+                  id="proof-phone"
+                  value={proofPhone}
+                  onChange={(event) => setProofPhone(event.target.value)}
+                  placeholder="0911 234 567"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  disabled={proofBusy}
+                  aria-invalid={Boolean(proofErrors.phone)}
+                  className={`${INPUT} mt-2`}
+                />
+
+                <FieldError message={proofErrors.phone} />
+              </div>
+            </div>
+
+            {proofError && (
+              <Alert tone="error" className="mt-4">
+                {proofError}
               </Alert>
             )}
 
-            <form
-              onSubmit={handleSubmit}
-              noValidate
-              className="mt-6 border border-white/10 bg-[#111] p-6 sm:p-8"
+            <button
+              type="submit"
+              disabled={proofBusy}
+              className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#d6a85f]/40 px-5 py-2.5 text-xs font-semibold text-[#e5bd7a] transition hover:bg-[#d6a85f]/10 disabled:opacity-50"
             >
-              <div className="grid gap-7">
-                {/* amount */}
-                <div>
-                  <label className={LABEL} htmlFor="payment-amount">
-                    01 · Amount paid
-                  </label>
-
-                  <input
-                    id="payment-amount"
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(event) => setAmount(event.target.value)}
-                    placeholder="0.00"
-                    disabled={submitting}
-                    aria-invalid={Boolean(fieldError("amount"))}
-                    className={`${INPUT} mt-4`}
-                  />
-
-                  {bookedService && (
-                    <p className="mt-2 text-[11px] text-white/30">
-                      {bookedService.name} is{" "}
-                      {formatPrice(bookedService.price)}.
-                    </p>
-                  )}
-
-                  <FieldError message={fieldError("amount")} />
-                </div>
-
-                {/* method */}
-                <div>
-                  <label className={LABEL} htmlFor="payment-method">
-                    02 · Payment method
-                  </label>
-
-                  <select
-                    id="payment-method"
-                    value={method}
-                    onChange={(event) => setMethod(event.target.value)}
-                    disabled={submitting}
-                    className={`${INPUT} mt-4 appearance-none`}
-                  >
-                    {PAYMENT_METHODS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <FieldError message={fieldError("method")} />
-                </div>
-
-                {/* reference */}
-                <div>
-                  <label className={LABEL} htmlFor="payment-reference">
-                    03 · Transaction reference
-                  </label>
-
-                  <input
-                    id="payment-reference"
-                    value={reference}
-                    onChange={(event) => setReference(event.target.value)}
-                    placeholder="e.g. TIN0987"
-                    maxLength={255}
-                    disabled={submitting}
-                    className={`${INPUT} mt-4`}
-                  />
-
-                  <p className="mt-2 text-[11px] text-white/30">
-                    The reference from your transfer confirmation. Helps the
-                    shop match your payment faster.
-                  </p>
-
-                  <FieldError message={fieldError("transaction_reference")} />
-                </div>
-
-                {/* receipt */}
-                <div>
-                  <label className={LABEL}>04 · Receipt</label>
-
-                  <div className="mt-4">
-                    <ReceiptUpload
-                      value={receiptFile}
-                      onChange={setReceiptFile}
-                      error={fieldError("receipt")}
-                      progress={progress}
-                      disabled={submitting}
-                    />
-                  </div>
-                </div>
-
-                {apiError && (
-                  <Alert
-                    tone="error"
-                    title={
-                      apiError.isNetwork
-                        ? "Cannot reach the shop"
-                        : "We could not submit your payment"
-                    }
-                    details={unmappedErrors}
-                  >
-                    {apiError.message}
-
-                    {apiError.isServer && (
-                      <span className="mt-2 block text-white/45">
-                        The payment endpoint returned a server error. Nothing
-                        was charged and your booking is still held — please
-                        contact the shop so they can record your payment.
-                      </span>
-                    )}
-                  </Alert>
-                )}
-
-                <div>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="group flex w-full items-center justify-center gap-3 rounded-full bg-[#d6a85f] px-6 py-4 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {submitting ? (
-                      <>
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
-                        {receiptFile && progress !== null && progress < 100
-                          ? `Uploading receipt... ${progress}%`
-                          : "Submitting payment..."}
-                      </>
-                    ) : (
-                      <>
-                        Submit payment
-                        <span className="transition-transform group-hover:translate-x-1">
-                          →
-                        </span>
-                      </>
-                    )}
-                  </button>
-
-                  <p className="mt-4 flex items-center justify-center gap-2 text-center text-[10px] leading-5 text-white/25">
-                    <ShieldCheck size={12} />
-                    Submitted payments start as pending until the shop verifies
-                    them.
-                  </p>
-                </div>
-              </div>
-            </form>
-          </>
+              {proofBusy ? (
+                <>
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#d6a85f]/30 border-t-[#d6a85f]" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  Find my booking
+                  <span>→</span>
+                </>
+              )}
+            </button>
+          </form>
         )}
+
+        {/* The shop could not read what was sent last time. Say so plainly,
+            and make it obvious that sending again is the fix rather than a
+            phone call. */}
+        {existing.payment?.status === "rejected" && (
+          <Alert
+            tone="error"
+            title="The shop could not match the payment you sent"
+            className="mt-8"
+          >
+            {existing.payment.rejection_reason ||
+              "The screenshot or reference did not match anything."}{" "}
+            <strong className="font-semibold text-white/80">
+              Send it again below
+            </strong>{" "}
+            — a clearer screenshot of the transfer confirmation, or the TIN
+            number on its own. Your appointment is still held.
+          </Alert>
+        )}
+
+        {booking && (
+          <BookingSummary booking={booking} className="mt-8" />
+        )}
+
+        <PaymentForm
+          booking={booking}
+          payment={existing.payment}
+          className="mt-6"
+          submitLabel="Send my payment"
+          onSubmitted={(payment, { resubmitting }) =>
+            navigate(`/booking/success/${bookingId}`, {
+              replace: true,
+              state: {
+                booking,
+                payment,
+                // So the confirmation page can say what just happened
+                // rather than leaving the customer to infer it from a
+                // status badge.
+                justSubmitted: true,
+                // A resubmission is worth distinguishing: the customer has
+                // been here before, and this time it worked.
+                resubmitted: resubmitting,
+              },
+            })
+          }
+        />
       </div>
     </div>
   );

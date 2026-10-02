@@ -1,6 +1,7 @@
 import { useQuery } from "./useQuery";
 
 import { listApprovedTestimonials } from "../services/testimonialsApi";
+import { toArray } from "../utils/toArray";
 
 /**
  * Approved testimonials from GET /api/testimonials/testimonials/.
@@ -13,7 +14,7 @@ export function useTestimonials() {
     "/testimonials/testimonials/",
     listApprovedTestimonials,
     {
-      select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+      select: toArray,
     }
   );
 

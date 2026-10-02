@@ -959,8 +959,12 @@ class DashboardView(generics.GenericAPIView):
 
         horizon = today + timedelta(days=self.upcoming_days)
 
+        # `payment` is a join, not a second query: the console shows
+        # whether an appointment has been paid for on the same card as
+        # the appointment, so a per-row lookup would be one request per
+        # row of the day.
         base = (
-            booking_model.objects.select_related("service", "barber")
+            booking_model.objects.select_related("service", "barber", "payment")
             .exclude(status__in=["cancelled", "expired"])
         )
 
@@ -985,9 +989,32 @@ class DashboardView(generics.GenericAPIView):
         )
 
         # And one scan of the table for the all-time and queue figures.
+        #
+        # `awaiting_payment` rides along in the same aggregate rather than
+        # being counted separately: `Exists` is a correlated subquery, so
+        # it costs no join and no extra round trip, and the dashboard
+        # keeps its fixed query budget however many figures it grows.
+        #
+        # The figure matters because two ordinary staff actions leave a
+        # live appointment with no money behind it - confirming a walk-in
+        # by hand, and rejecting a payment - and both are invisible
+        # without it.
+        from django.db.models import Exists, OuterRef
+
+        from apps.payments.models import Payment as PaymentModel
+
         overall = _counts(
-            booking_model.objects,
+            booking_model.objects.annotate(
+                has_payment=Exists(
+                    PaymentModel.objects.filter(booking=OuterRef("pk"))
+                ),
+            ),
             pending=Q(status="pending"),
+            awaiting_payment=Q(
+                status__in=["pending", "confirmed"],
+                booking_date__gte=today,
+                has_payment=False,
+            ),
         )
 
         payload["counts"]["bookings"] = {
@@ -996,14 +1023,31 @@ class DashboardView(generics.GenericAPIView):
             "confirmed_today": today_counts["confirmed"],
             "completed_today": today_counts["completed"],
             "all_time": overall["total"],
+            "awaiting_payment": overall["awaiting_payment"],
         }
 
         payload["queues"]["bookings_to_confirm"] = overall["pending"]
+        payload["queues"]["payments_outstanding"] = overall["awaiting_payment"]
 
     @staticmethod
     def _booking_row(booking):
+        """
+        One schedule row.
+
+        `booking_code` is here because this is what staff read off the
+        screen and say down the phone, so the number the customer was
+        given and the number the shop quotes are the same one.
+
+        `payment_status` is the joined payment's status, or None when no
+        payment exists - which, on a confirmed booking, is the thing worth
+        noticing before the customer walks in.
+        """
+
+        payment = getattr(booking, "payment", None)
+
         return {
             "id": booking.id,
+            "booking_code": booking.booking_code or f"#{booking.pk}",
             "customer_name": booking.customer_name,
             "customer_phone": booking.customer_phone,
             "service_name": booking.service.name if booking.service else "",
@@ -1012,6 +1056,8 @@ class DashboardView(generics.GenericAPIView):
             "start_time": booking.start_time.strftime("%H:%M"),
             "end_time": booking.end_time.strftime("%H:%M") if booking.end_time else None,
             "status": booking.status,
+            "payment_status": payment.status if payment else None,
+            "payment_due": payment is None and booking.status in ("pending", "confirmed"),
             "notes": booking.notes,
         }
 

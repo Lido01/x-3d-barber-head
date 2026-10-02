@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { groupSlotsByPartOfDay } from "../../utils/format";
 import Alert from "../ui/Alert";
 import Spinner from "../ui/Spinner";
+import AvailabilityNotice from "./AvailabilityNotice";
 
 const SELECT =
   "w-full appearance-none rounded-xl border border-white/10 bg-[#181818] px-4 py-4 pr-12 text-sm text-white outline-none transition focus:border-[#d6a85f]/50 disabled:cursor-not-allowed disabled:opacity-60";
@@ -13,6 +14,11 @@ export default function TimeSlots({
   error,
   isEmpty,
   onReload,
+  isRefreshing = false,
+  reason,
+  window,
+  onPickDate,
+  onPickService,
   selectedTime,
   onSelect,
   needsService,
@@ -50,12 +56,20 @@ export default function TimeSlots({
     );
   }
 
+  // The backend said there is nothing here, and said which of the several
+  // reasons it is. That distinction is the whole point of the panel, so
+  // it is rendered instead of "please try another date" - which is wrong
+  // advice for a withdrawn service or a shop with nobody on duty.
   if (isEmpty) {
     return (
-      <Alert tone="info" title="Fully booked" onRetry={onReload}>
-        No times are available for this service on this date. Please try
-        another date.
-      </Alert>
+      <AvailabilityNotice
+        reason={reason}
+        window={window}
+        onPickDate={onPickDate}
+        onPickService={onPickService}
+        onReload={onReload}
+        isRefreshing={isRefreshing}
+      />
     );
   }
 
@@ -89,8 +103,9 @@ export default function TimeSlots({
         />
       </div>
       <p className="text-[10px] leading-5 text-white/25">
-        {availableTimes.length} live slots available. Times refresh with your service,
-        date, or barber selection.
+        {availableTimes.length} live slots available
+        {window ? ` · booked between ${window}` : ""}. Times refresh with
+        your service, date, or barber selection.
       </p>
     </div>
   );

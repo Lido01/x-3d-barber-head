@@ -13,6 +13,7 @@ import { EMPTY_LIST, useQuery } from "../hooks/useQuery";
 import { mediaUrl } from "../services/api";
 import { listMyTestimonials } from "../services/testimonialsApi";
 import { formatDate } from "../utils/format";
+import { toArray } from "../utils/toArray";
 
 /**
  * Customer account — /account
@@ -35,7 +36,7 @@ export default function Account() {
     {
       scope: "customer",
       staleMs: 30 * 1000,
-      select: (payload) => (Array.isArray(payload) ? payload : payload?.results || []),
+      select: toArray,
     }
   );
 

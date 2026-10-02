@@ -21,6 +21,7 @@ import ServiceDetail from "./pages/ServiceDetail";
 import Booking from "./pages/Booking";
 import Payment from "./pages/Payment";
 import BookingSuccess from "./pages/BookingSuccess";
+import MyBookings from "./pages/MyBookings";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Account from "./pages/Account";
@@ -119,6 +120,11 @@ function Shell() {
             path="/booking/success/:bookingId"
             element={<BookingSuccess />}
           />
+          {/* The way back to a booking made without an account: the code
+              from the confirmation plus the phone number it was made
+              with. Sits with the booking flow rather than under /account,
+              because it must work for a guest. */}
+          <Route path="/bookings" element={<MyBookings />} />
 
           {/* Customer account. Needed to leave a review, not to book. */}
           <Route path="/login" element={<Login />} />

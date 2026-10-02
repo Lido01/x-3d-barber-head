@@ -1,11 +1,35 @@
 from rest_framework import serializers
 
+from apps.bookings.models import Booking
+from apps.bookings.services import normalise_booking_code, phone_matches
+
 from .services import create_payment
 
 from .models import Payment
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    # Declared explicitly rather than inherited, because the OneToOne on
+    # `booking` carries a uniqueness check and the message DRF generates
+    # for it - "payment with this booking already exists." - tells a
+    # customer holding a phone what nothing about what to do next. The
+    # check itself is kept: it is the one that stops the second row at
+    # the edge, before a request can begin.
+    booking = serializers.PrimaryKeyRelatedField(
+        queryset=Booking.objects.all(),
+        error_messages={
+            "unique": (
+                "A payment has already been sent for this booking and "
+                "is still waiting to be checked. Please wait for the shop "
+                "to verify it rather than sending another."
+            ),
+            "does_not_exist": (
+                "We could not match that to a booking. Please check the "
+                "booking and try again."
+            ),
+        },
+    )
+
     booking_customer = serializers.CharField(
         source="booking.customer_name",
         read_only=True,
@@ -16,12 +40,40 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    booking_code = serializers.CharField(
+        source="booking.booking_code",
+        read_only=True,
+    )
+
+    booking_reference = serializers.CharField(
+        write_only=True,
+        required=True,
+        max_length=32,
+        error_messages={
+            "required": "Please enter the booking code for this payment.",
+            "blank": "Please enter the booking code for this payment.",
+        },
+    )
+
+    booking_phone = serializers.CharField(
+        write_only=True,
+        required=True,
+        max_length=32,
+        error_messages={
+            "required": "Please enter the phone number used for this booking.",
+            "blank": "Please enter the phone number used for this booking.",
+        },
+    )
+
     class Meta:
         model = Payment
 
         fields = [
             "id",
             "booking",
+            "booking_code",
+            "booking_reference",
+            "booking_phone",
             "booking_customer",
             "booking_service",
             "amount",
@@ -38,6 +90,7 @@ class PaymentSerializer(serializers.ModelSerializer):
 
         read_only_fields = [
             "id",
+            "booking_code",
             "booking_customer",
             "booking_service",
             "status",
@@ -79,7 +132,67 @@ class PaymentSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+    def validate(self, attrs):
+        """
+        Require something the shop can actually check the money against.
+
+        A payment with neither a screenshot nor a transaction reference
+        is an assertion, not evidence: the verifier is asked to trust that
+        money arrived, with nothing to compare it to and no way to tell a
+        genuine slip from a typo. The receipt is optional because a bank
+        transfer has no screenshot, and the reference is optional because
+        someone paying in cash at the counter has no transfer at all.
+
+        One of the two is enough. Both together are better - a
+        reference lets the shop match it to the bank and a picture lets
+        them read the amount - which is what the copy on the payment
+        screen asks for.
+        """
+
+        attrs = super().validate(attrs)
+
+        booking = attrs.get("booking")
+        reference = normalise_booking_code(attrs.get("booking_reference"))
+        phone = attrs.get("booking_phone")
+
+        if (
+            booking is None
+            or not reference
+            or booking.booking_code != reference
+            or not phone_matches(booking.customer_phone, phone)
+        ):
+            raise serializers.ValidationError(
+                {
+                    "booking_reference": (
+                        "We could not match that booking code and phone "
+                        "number. Check both and try again."
+                    )
+                }
+            )
+
+        receipt = attrs.get("receipt")
+        reference = (attrs.get("transaction_reference") or "").strip()
+
+        if receipt is None and not reference:
+            raise serializers.ValidationError(
+                {
+                    "transaction_reference": (
+                        "To pay for this booking, send us either a "
+                        "screenshot of the transfer or the transaction "
+                        "reference (TIN) from it - we cannot verify a "
+                        "payment we have nothing to check it against. "
+                        "Add one of the two below and submit again."
+                    )
+                }
+            )
+
+        return attrs
+
     def create(self, validated_data):
+        validated_data.pop("booking_reference", None)
+        validated_data.pop("booking_phone", None)
+
         return create_payment(
             **validated_data
         )
