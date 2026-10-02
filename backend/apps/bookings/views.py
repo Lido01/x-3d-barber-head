@@ -388,9 +388,21 @@ class BookingViewSet(viewsets.ModelViewSet):
             output.data
         )
 
+        # A booking is unique for the slot it chose. A repeat submit from
+        # the same phone number - a double tap, a retry, a second tab -
+        # gets the booking that already exists back, and answers 200
+        # rather than 201 because nothing was created. 201 would tell the
+        # customer they had just made a second appointment and hand them
+        # a code for it, which is the confusion this is here to prevent.
+        reused = bool(getattr(booking, "already_booked", False))
+
         return Response(
             output.data,
-            status=status.HTTP_201_CREATED,
+            status=(
+                status.HTTP_200_OK
+                if reused
+                else status.HTTP_201_CREATED
+            ),
             headers=headers,
         )
 
