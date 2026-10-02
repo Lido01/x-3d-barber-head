@@ -70,6 +70,17 @@ export function usePaymentStatus({ bookingId, bookingCode, bookingPhone, pollMs 
     payment: data || null,
     loading: ready && loading,
     error: isMissing ? null : error,
+    /**
+     * The booking genuinely has no payment yet.
+     *
+     * A different thing from "not loaded yet" and from "the read failed",
+     * and the payment form needs all three to be distinguishable: this is
+     * the state where the form should be open and welcoming, not one where
+     * anything should be hidden behind a spinner.
+     */
+    missing: isMissing,
+    /** The request has finished, one way or another. */
+    ready: ready && !loading,
     refresh,
   };
 }
