@@ -75,6 +75,21 @@ export default function BookingSuccess() {
   const settled =
     current?.status === "verified" || current?.status === "rejected";
 
+  // A booking the shop confirmed with no payment behind it. Worth its own
+  // headline: the booking genuinely is confirmed, so the generic "your
+  // chair is held" reads as finished when the one thing still outstanding
+  // is the money.
+  const confirmedUnpaid =
+    booking?.status === "confirmed" && !current;
+
+  const headline = current?.status === "verified"
+    ? "You're confirmed."
+    : confirmedUnpaid
+      ? "You're confirmed. Not paid yet."
+      : justSubmitted
+        ? "We've got it."
+        : "Your chair is held.";
+
   return (
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[900px]">
@@ -99,25 +114,23 @@ export default function BookingSuccess() {
             </p>
 
             <h1 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl">
-              {current?.status === "verified"
-                ? "You're confirmed."
-                : justSubmitted
-                  ? "We've got it."
-                  : "Your chair is held."}
+              {headline}
             </h1>
 
             <p className="mt-4 max-w-lg text-sm leading-7 text-white/45">
               {current?.status === "verified"
                 ? "Payment checked and your appointment is locked in."
-                : justSubmitted
-                  ? wasResubmission
-                    ? "Thank you for sending it again — the shop has your payment and will check it against the bank. You do not need to do anything else."
-                    : "Your payment is with the shop and your appointment is held. Nothing else is needed from you — this page updates on its own."
-                  : current?.status === "rejected"
-                    ? "The shop could not match the payment. Your appointment is still held — send a clearer one, or call them to sort it out."
-                    : current
-                      ? "Send your payment below and the shop will confirm the appointment."
-                      : "The appointment is held for you. Send your payment to lock it in."}
+                : confirmedUnpaid
+                  ? "The shop has confirmed your appointment, so the chair is yours. Send the payment below to settle it — either a screenshot of your transfer or the TIN number on it is enough."
+                  : justSubmitted
+                    ? wasResubmission
+                      ? "Thank you for sending it again — the shop has your payment and will check it against the bank. You do not need to do anything else."
+                      : "Your payment is with the shop and your appointment is held. Nothing else is needed from you — this page updates on its own."
+                    : current?.status === "rejected"
+                      ? "The shop could not match the payment. Your appointment is still held — send a clearer one, or call them to sort it out."
+                      : current
+                        ? "Your payment is with the shop. Nothing else is needed from you — this page updates on its own."
+                        : "The appointment is held for you. Send your payment below to lock it in."}
             </p>
           </div>
         </div>
@@ -177,7 +190,7 @@ export default function BookingSuccess() {
               <button
                 type="button"
                 onClick={refresh}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white"
               >
                 <RefreshCw size={11} />
                 Refresh
@@ -198,9 +211,9 @@ export default function BookingSuccess() {
 
           {!error && !loading && !current && (
             <p className="mt-4 text-xs leading-6 text-white/45">
-              Nothing has been sent yet. The shop needs either a screenshot
-              of your transfer or the transaction reference (TIN) from it
-              before it can confirm the appointment.
+              Nothing has been sent yet. The form below takes either a
+              screenshot of your transfer or the TIN number on it — one of
+              the two is enough for the shop to check the payment.
             </p>
           )}
 
@@ -278,17 +291,17 @@ export default function BookingSuccess() {
           </p>
         )}
 
-        <div className="mt-10 flex flex-wrap gap-3">
+        <div className="mt-10 grid gap-3 sm:flex sm:flex-wrap">
           <Link
             to="/bookings"
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
+            className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
           >
             My bookings
           </Link>
 
           <Link
             to="/services"
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
+            className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
           >
             Book another service
           </Link>
