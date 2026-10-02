@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   CalendarClock,
@@ -22,6 +22,7 @@ import {
   isCompleteBookingCode,
   normaliseBookingCode,
 } from "../utils/bookingCode";
+import { prefersReducedMotion } from "../utils/scroll";
 import { rememberedBookings } from "../utils/bookingSession";
 import { formatDate, formatTime } from "../utils/format";
 
@@ -57,8 +58,13 @@ import { formatDate, formatTime } from "../utils/format";
 
 const LABEL = "text-[10px] uppercase tracking-[0.25em] text-white/35";
 
+/*
+ * `text-base` below `sm` on purpose: iOS Safari zooms the viewport on
+ * focus for any control under 16px, and a form that jumps to 150% while
+ * someone types a phone number into it is unusable one-handed.
+ */
 const INPUT =
-  "w-full border border-white/10 bg-[#181818] px-4 py-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50";
+  "w-full min-w-0 border border-white/10 bg-[#181818] px-4 py-4 text-base text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50 sm:text-sm";
 
 function validate({ code, phone }) {
   const errors = {};
@@ -103,6 +109,11 @@ export default function MyBookings() {
   // this is session storage, and re-reading it on every render would
   // churn identity on the list for no benefit.
   const [known] = useState(() => rememberedBookings());
+
+  // Where the history list is, so the outstanding-payment banner can put
+  // the customer in front of it in one tap instead of leaving them to
+  // scroll a list of thirty bookings to find the two that need them.
+  const listRef = useRef(null);
 
   useEffect(() => {
     if (!matchedCode) {
@@ -168,6 +179,13 @@ export default function MyBookings() {
   ];
 
   const hasHistory = bookings.length > 0;
+  const dueCount = totals?.awaiting_payment ?? 0;
+
+  const jumpToOutstanding = () =>
+    listRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
 
   return (
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
@@ -240,7 +258,7 @@ export default function MyBookings() {
               <button
                 type="submit"
                 disabled={loading}
-                className="group inline-flex items-center gap-2 rounded-full bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
+                className="group inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
                 {loading ? (
                   <>
@@ -342,7 +360,7 @@ export default function MyBookings() {
                 type="button"
                 onClick={() => void refresh()}
                 disabled={loading}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white disabled:opacity-50"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white disabled:opacity-50"
               >
                 <RefreshCw
                   size={11}
@@ -386,7 +404,45 @@ export default function MyBookings() {
               })}
             </dl>
 
-            <ul className="mt-6 grid gap-3">
+            {/* Outstanding money, said once at the top and put within one
+                tap of the booking it belongs to. Someone opening this page
+                on a phone is most often here to settle a bill, and a
+                "to pay" figure with the booking forty rows down is a fact
+                they have to go and find rather than a thing they can do. */}
+            {dueCount > 0 && (
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#d6a85f]/30 bg-[#d6a85f]/[0.06] px-5 py-4">
+                <div className="flex min-w-0 gap-3">
+                  <CircleDollarSign
+                    size={18}
+                    className="mt-0.5 shrink-0 text-[#d6a85f]"
+                  />
+
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">
+                      {dueCount === 1
+                        ? "1 booking is waiting to be paid"
+                        : `${dueCount} bookings are waiting to be paid`}
+                    </p>
+
+                    <p className="mt-0.5 text-[11px] leading-5 text-white/45">
+                      Each one opens its own payment form — a screenshot of
+                      your transfer or the TIN number is enough.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={jumpToOutstanding}
+                  className="inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-full bg-[#d6a85f] px-5 py-2.5 text-xs font-semibold text-black transition hover:bg-[#e5bd7a]"
+                >
+                  Pay now
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            )}
+
+            <ul ref={listRef} className="mt-6 grid scroll-mt-28 gap-3">
               {bookings.map((row) => (
                 <BookingHistoryCard
                   key={row.booking.id}
@@ -396,6 +452,12 @@ export default function MyBookings() {
                   paymentRejected={row.payment_rejected}
                   expanded={isExpanded(row.booking.id)}
                   onToggle={() => toggle(row.booking.id)}
+                  // A payment sent from inside the card has to be reflected
+                  // in the row behind it: the tile above still reads "to
+                  // pay" and the card would keep offering the form until
+                  // the next poll. The lookup is deliberately not on the
+                  // GET cache, so it is asked again here.
+                  onPaid={() => void refresh()}
                 />
               ))}
             </ul>
