@@ -39,8 +39,40 @@ class BookingSerializer(serializers.ModelSerializer):
 
     payment_due = serializers.SerializerMethodField()
 
+    #: True when this request did not create anything, because the same
+    #: phone number already held this slot. Set on the instance by
+    #: `create_booking` and read back here, so the customer can be told
+    #: they have not just booked a second appointment rather than being
+    #: handed a new code and left to wonder why the shop has two.
+    #:
+    #: False on every row that came from anywhere else - a list, a detail
+    #: read, the lookup - because nothing sets it there. It describes one
+    #: response, not a property of the booking.
+    already_booked = serializers.SerializerMethodField()
+
     class Meta:
         model = Booking
+
+        # Declaring `validators` at all opts this serializer out of the
+        # uniqueness validator DRF would otherwise generate from the model's
+        # unique_live_booking_per_barber_slot constraint.
+        #
+        # Declining it is deliberate, for two reasons that both come down to
+        # what the customer is told:
+        #
+        #   1. The generated validator's message names database columns -
+        #      "The fields barber, booking_date, start_time must make a
+        #      unique set" - to someone booking a haircut. bookings.services
+        #      already refuses a taken slot in words a customer can act on,
+        #      including the free times either side of it.
+        #   2. Giving the covered fields `default=None` makes DRF run
+        #      validate_barber(None) on every booking that left the barber
+        #      unselected, which is most of them.
+        #
+        # The constraint itself still applies. It is the database refusing
+        # the insert, caught in create_booking and answered with the same
+        # words as the check above it.
+        validators = []
 
         fields = [
             "id",
@@ -57,6 +89,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "status",
             "payment_status",
             "payment_due",
+            "already_booked",
             "notes",
             "created_at",
             "updated_at",
@@ -72,6 +105,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "status",
             "payment_status",
             "payment_due",
+            "already_booked",
             "created_at",
             "updated_at",
             "service_name",
@@ -105,6 +139,11 @@ class BookingSerializer(serializers.ModelSerializer):
             Booking.Status.CONFIRMED,
         ]
 
+    def get_already_booked(self, booking):
+        """Whether this response handed back a booking that already existed."""
+
+        return bool(getattr(booking, "already_booked", False))
+
     def validate_service(self, service):
         if not service.is_active:
             raise serializers.ValidationError(
@@ -115,6 +154,19 @@ class BookingSerializer(serializers.ModelSerializer):
         return service
 
     def validate_barber(self, barber):
+        # None is a real input, not a mistake. Leaving the barber unselected
+        # is how most bookings are made, and it is the shop's job to pick
+        # whoever is free.
+        #
+        # It also arrives here legitimately on its own: DRF turns the
+        # model's unique_live_booking_per_barber_slot constraint into a
+        # UniqueTogetherValidator, which puts `default=None` on every
+        # field the constraint covers. A field with a default is one DRF
+        # validates even when the request left it out, so this runs with
+        # None for a booking that never mentioned a barber at all.
+        if barber is None:
+            return barber
+
         if not barber.is_active:
             raise serializers.ValidationError(
                 f"{barber.name} is not taking bookings right now. "
