@@ -18,7 +18,7 @@ from datetime import datetime, time, timedelta
 import re
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils.timezone import localdate
 
 from rest_framework.exceptions import ValidationError
@@ -777,6 +777,73 @@ def _active_barbers():
     )
 
 
+def find_duplicate_booking(
+    *,
+    customer_phone,
+    booking_date,
+    start_time,
+    service=None,
+):
+    """
+    A booking this same phone number already holds for this same slot.
+
+    Distinct from `check_booking_conflict`, which asks whether *the slot*
+    is free. This asks whether *this customer* is already in it, and the
+    two answers have opposite consequences:
+
+      slot taken by someone else  refuse, and offer another time
+      slot already held by them   hand back the booking they already have
+
+    The second case is a customer who submitted twice - a double tap, a
+    retry after the connection dropped, a second tab, or simply someone
+    who pressed the button again because the page looked like it had not
+    worked. Refusing that the way a genuine clash is refused sends someone
+    who has just booked an appointment to a "this time is taken" screen
+    that is not true, and it is the reason a booking could look
+    impossible to make.
+
+    So it is answered by returning the existing row. Same phone, same
+    start time, same date: whatever else they typed, they are asking for
+    the appointment they already hold.
+
+    Only live bookings count. A cancelled one is not something they are
+    holding, and `service` is deliberately not part of the match - two
+    people on one phone number booking the same fifteen minutes is one
+    person booking twice, and the second attempt should land on the first
+    booking rather than beside it.
+
+    @returns {Booking | None}
+    """
+
+    signature = phone_signature(customer_phone)
+
+    if not signature:
+        return None
+
+    candidates = (
+        Booking.objects
+        .filter(
+            phone_normalised__endswith=signature,
+            booking_date=booking_date,
+            start_time=start_time,
+            status__in=BLOCKING_STATUSES,
+        )
+        .order_by("-created_at")
+    )
+
+    if service is not None:
+        # Prefer the identical service. Only when there is no such row do
+        # we fall back to "any booking at this time", because a repeat of
+        # the same slot is a repeat booking, not a second different
+        # service booked back to back on one number.
+        exact = candidates.filter(service=service).first()
+
+        if exact is not None:
+            return exact
+
+    return candidates.first()
+
+
 @transaction.atomic
 def create_booking(
     *,
@@ -801,6 +868,17 @@ def create_booking(
     A signed-in customer is attached to the row so "my bookings" can list
     it without asking for a code. `user` stays None for the guest flow,
     which is how most bookings are still made.
+
+    The booking is unique for the slot it chooses. Two requests for the
+    same barber and the same start time cannot both become rows - see
+    `unique_live_booking_per_barber_slot` on the model - and a repeat
+    submit from the same phone number returns the booking that already
+    exists rather than creating a second one or refusing the customer
+    outright.
+
+    A booking that already exists is flagged with `already_booked=True`
+    so the view can answer 200 rather than 201 and the customer can be
+    told they did not just make a second appointment.
     """
 
     if service is None or not service.is_active:
@@ -831,6 +909,21 @@ def create_booking(
         start_time,
         end_time,
     )
+
+    # Before the diary is consulted, and before anything is written: has
+    # this customer already booked this slot? A repeat submit is answered
+    # with the booking that exists rather than with a refusal.
+    duplicate = find_duplicate_booking(
+        customer_phone=customer_phone,
+        booking_date=booking_date,
+        start_time=start_time,
+        service=service,
+    )
+
+    if duplicate is not None:
+        duplicate.already_booked = True
+
+        return duplicate
 
     # ---------------------------------------------------------
     # CUSTOMER SELECTED A BARBER
@@ -921,17 +1014,63 @@ def create_booking(
                 )
             )
 
-    return Booking.objects.create(
-        customer_name=customer_name,
-        customer_phone=customer_phone,
-        service=service,
-        barber=barber,
-        booking_date=booking_date,
-        start_time=start_time,
-        end_time=end_time,
-        notes=notes,
-        user=user,
-    )
+    # The last write, and the only one the database itself refuses.
+    #
+    # Everything above this line is a read: it checks the diary and then
+    # writes, with the check's own query and this insert separated by
+    # whatever the two requests happened to be doing to each other. The
+    # unique constraint is what turns a lost race into an error rather
+    # than a double booking, so it has to be caught and turned back into
+    # something a customer can act on.
+    #
+    # The inner atomic() is not decoration: catching IntegrityError
+    # inside a broken transaction leaves the connection unusable, and
+    # every following query on it would fail with "database is locked"
+    # instead. The savepoint is what makes this catchable.
+    try:
+        with transaction.atomic():
+            booking = Booking.objects.create(
+                customer_name=customer_name,
+                customer_phone=customer_phone,
+                service=service,
+                barber=barber,
+                booking_date=booking_date,
+                start_time=start_time,
+                end_time=end_time,
+                notes=notes,
+                user=user,
+            )
+    except IntegrityError:
+        # Someone else took this exact slot between the check and the
+        # insert. If it was this same phone number, they have just booked
+        # twice and want the booking, not an apology for a slot that is
+        # really theirs.
+        raced = find_duplicate_booking(
+            customer_phone=customer_phone,
+            booking_date=booking_date,
+            start_time=start_time,
+            service=service,
+        )
+
+        if raced is not None:
+            raced.already_booked = True
+
+            return raced
+
+        name = barber.name if barber is not None else "That barber"
+
+        raise ValidationError(
+            _slot_refusal(
+                booking_date=booking_date,
+                start_time=start_time,
+                service=service,
+                candidates=[barber] if barber is not None else _active_barbers(),
+                status=Availability.SLOT_TAKEN,
+                prefix=f"{name} is",
+            )
+        )
+
+    return booking
 
 
 @transaction.atomic
