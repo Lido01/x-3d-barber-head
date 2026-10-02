@@ -530,6 +530,107 @@ class PaymentEvidenceTests(APITestCase):
         self.assertIn("already been sent", response.data["booking"][0])
 
 
+class ConfirmedBookingPaymentTests(APITestCase):
+    """
+    A confirmed booking with no payment behind it can still be paid.
+
+    "Confirmed" and "paid" are separate things here, and the case where
+    they disagree is the ordinary one rather than an edge: staff confirm
+    walk-ins who will pay at the counter, and a payment can be rejected
+    while the appointment is still held. Both leave a live appointment with
+    nothing paid behind it, so the customer has to be able to send the
+    money after the confirmation, not only before it.
+
+    These tests exist because the frontend has to be able to open a payment
+    form on a confirmed booking and trust that submitting it works. If this
+    ever refuses, the customer is left owing money on an appointment the
+    shop has already said is theirs, with nothing to send.
+    """
+
+    def setUp(self):
+        from datetime import date, time, timedelta
+
+        self.service = Service.objects.create(
+            name="Signature Cut",
+            price=Decimal("350.00"),
+            duration=45,
+        )
+
+        self.barber = Barber.objects.create(name="Alex")
+
+        self.booking = Booking.objects.create(
+            customer_name="Sam Doe",
+            customer_phone="0911234567",
+            service=self.service,
+            barber=self.barber,
+            booking_date=date.today() + timedelta(days=1),
+            start_time=time(10, 0),
+            end_time=time(10, 45),
+            status=Booking.Status.CONFIRMED,
+        )
+
+    def submit(self, **overrides):
+        payload = {
+            "booking": self.booking.pk,
+            "booking_reference": self.booking.booking_code,
+            "booking_phone": self.booking.customer_phone,
+            "amount": "350.00",
+            "method": "telebirr",
+            "transaction_reference": "TIN0987",
+        }
+        payload.update(overrides)
+
+        return self.client.post(
+            reverse("payment-list"), payload, format="json"
+        )
+
+    def test_a_confirmed_booking_accepts_a_payment(self):
+        response = self.submit()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], "pending")
+
+    def test_the_evidence_rule_still_applies_to_a_confirmed_booking(self):
+        """
+        "The chair is yours" is not a reason to accept a payment the shop
+        cannot check. Being owed money and being able to prove it are two
+        separate requirements, and the second one does not relax.
+        """
+
+        payload = {
+            "booking": self.booking.pk,
+            "booking_reference": self.booking.booking_code,
+            "booking_phone": self.booking.customer_phone,
+            "amount": "350.00",
+            "method": "telebirr",
+        }
+
+        response = self.client.post(
+            reverse("payment-list"), payload, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transaction_reference", response.data)
+
+    def test_the_confirmed_booking_is_still_confirmed_after_payment(self):
+        self.submit()
+
+        self.booking.refresh_from_db()
+
+        # Paying does not move the appointment anywhere. It is already
+        # confirmed and stays confirmed; the payment is what waits.
+        self.assertEqual(self.booking.status, Booking.Status.CONFIRMED)
+
+    def test_a_cancelled_booking_still_refuses_a_payment(self):
+        self.booking.status = Booking.Status.CANCELLED
+        self.booking.save(update_fields=["status", "updated_at"])
+
+        response = self.submit()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("cancelled", response.data["booking"][0])
+
+
 class DuplicatePaymentGuardTests(APITestCase):
     """
     What happens when the same booking is paid for twice.
