@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   BadgeCheck,
   CalendarX,
@@ -12,6 +13,7 @@ import {
 import { Link } from "react-router-dom";
 
 import StatusBadge from "../StatusBadge";
+import PaymentForm from "./PaymentForm";
 import { formatDate, formatPrice, formatTime } from "../../utils/format";
 
 /**
@@ -175,8 +177,19 @@ export function BookingTimeline({ booking, payment }) {
  * miss - the badge says confirmed and it looks finished. So the prompt is
  * driven by whether money has actually arrived, not by the booking's
  * status.
+ *
+ * When money is owed, the payment form opens here rather than on another
+ * page. A link out was the wrong shape for this: the person who most needs
+ * to pay is often looking at their own history on a phone, where the
+ * outstanding booking is already in front of them, and being sent to a
+ * second screen to re-establish which appointment the money is for is a
+ * step where people give up. The dedicated payment page still exists and
+ * is still linked, for anyone who wants it - but it is now the alternate
+ * route rather than the only one.
  */
-export function PaymentPrompt({ booking, payment, paymentDue }) {
+export function PaymentPrompt({ booking, payment, onPaid }) {
+  const [paying, setPaying] = useState(false);
+
   const code = booking.booking_code || `#${booking.id}`;
 
   if (booking.status === "completed") {
@@ -222,102 +235,98 @@ export function PaymentPrompt({ booking, payment, paymentDue }) {
     );
   }
 
-  // Nothing sent yet.
-  if (!payment) {
-    // A confirmed booking with no payment is the case worth naming out
-    // loud. Staff confirm walk-ins who will pay at the counter, so
-    // "confirmed" and "paid" are genuinely different states here - and a
-    // green confirmed badge with nothing paid behind it reads as finished
-    // when it is not. The copy says what is outstanding and why it still
-    // matters.
-    const confirmed = booking.status === "confirmed";
+  // Nothing sent, or the shop could not match what was sent. Both are
+  // "money is still owed and here is how to send it".
+  const rejected = payment?.status === "rejected";
 
+  if (!payment || rejected) {
     return (
       <div
         className={`rounded-2xl p-5 ${
-          confirmed
-            ? "border border-[#d6a85f]/35 bg-[#d6a85f]/[0.08]"
-            : "border border-[#d6a85f]/25 bg-[#d6a85f]/[0.06]"
+          rejected
+            ? "border border-[#e05a4f]/30 bg-[#e05a4f]/[0.05]"
+            : booking.status === "confirmed"
+              ? "border border-[#d6a85f]/35 bg-[#d6a85f]/[0.08]"
+              : "border border-[#d6a85f]/25 bg-[#d6a85f]/[0.06]"
         }`}
       >
         <div className="flex gap-3">
-          <CreditCard
-            size={17}
-            className="mt-0.5 shrink-0 text-[#d6a85f]"
-          />
+          {rejected ? (
+            <X size={17} className="mt-0.5 shrink-0 text-[#e0776b]" />
+          ) : (
+            <CreditCard size={17} className="mt-0.5 shrink-0 text-[#d6a85f]" />
+          )}
 
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-white">
-              {confirmed
-                ? "Confirmed, but not paid yet"
-                : "Payment needed to keep this booking"}
+              {rejected
+                ? "The shop could not match this payment"
+                : booking.status === "confirmed"
+                  ? "Confirmed, but not paid yet"
+                  : "Payment needed to keep this booking"}
             </p>
 
             <p className="mt-1 text-xs leading-6 text-white/55">
-              {confirmed && (
-                <>
-                  Your appointment is confirmed, so the chair is yours. The
-                  shop is still waiting on the money behind it. Send either a{" "}
-                </>
-              )}
-
-              {!confirmed && (
-                <>Send either a </>
-              )}
-
+              {rejected
+                ? `${payment.rejection_reason || "The screenshot or reference did not match anything."} Your appointment is still held — a clearer screenshot, or the TIN number on its own, is usually all it takes.`
+                : booking.status === "confirmed"
+                  ? "Your appointment is confirmed, so the chair is yours. The shop is still waiting on the money behind it."
+                  : "Your chair is held for now. The shop is waiting on the payment behind it."}{" "}
+              Send a{" "}
               <strong className="font-semibold text-white/75">
-                screenshot of the transfer
+                screenshot of your transfer
               </strong>{" "}
               or the{" "}
               <strong className="font-semibold text-white/75">
-                transaction reference (TIN)
+                TIN number
               </strong>{" "}
-              from it - the shop needs one of the two to match your payment
+              on it — either one is enough for the shop to check your payment
               against the bank.
             </p>
 
-            <Link
-              to={`/payment/${booking.id}`}
-              state={{ booking }}
-              className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#d6a85f] px-5 py-2.5 text-xs font-semibold text-black transition hover:bg-[#e5bd7a]"
-            >
-              {confirmed ? "Pay now" : "Pay for this booking"} {code}
-              <span>→</span>
-            </Link>
+            {!paying && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPaying(true)}
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-[#d6a85f] px-5 py-2.5 text-xs font-semibold text-black transition hover:bg-[#e5bd7a]"
+                >
+                  {rejected ? "Send a clearer payment" : "Pay now"}
+                  <span>→</span>
+                </button>
+
+                <Link
+                  to={`/payment/${booking.id}`}
+                  state={{ booking }}
+                  className="inline-flex min-h-[44px] items-center px-1 text-[11px] text-white/35 underline underline-offset-4 transition hover:text-white/70"
+                >
+                  Open the full payment page
+                </Link>
+              </div>
+            )}
           </div>
         </div>
-      </div>
-    );
-  }
 
-  if (payment.status === "rejected") {
-    return (
-      <div className="rounded-2xl border border-[#e05a4f]/25 bg-[#e05a4f]/[0.06] p-5">
-        <div className="flex gap-3">
-          <X size={17} className="mt-0.5 shrink-0 text-[#e0776b]" />
+        {paying && (
+          <div className="mt-5 border-t border-white/10 pt-5">
+            <PaymentForm
+              booking={booking}
+              payment={payment}
+              onSubmitted={(created) => {
+                setPaying(false);
+                onPaid?.(created);
+              }}
+            />
 
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">
-              The shop could not match this payment
-            </p>
-
-            <p className="mt-1 text-xs leading-6 text-white/55">
-              {payment.rejection_reason ||
-                "The receipt or reference did not match anything."}{" "}
-              Your appointment is still being held — sending a clearer
-              screenshot, or the transaction reference (TIN) on its own,
-              is usually all it takes.
-            </p>
-
-            <Link
-              to={`/payment/${booking.id}`}
-              className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#e05a4f]/40 px-5 py-2.5 text-xs font-semibold text-[#e0776b] transition hover:bg-[#e05a4f]/10"
+            <button
+              type="button"
+              onClick={() => setPaying(false)}
+              className="mt-3 inline-flex min-h-[40px] items-center text-[11px] text-white/35 transition hover:text-white/70"
             >
-              Send a clearer payment
-              <span>→</span>
-            </Link>
+              Cancel
+            </button>
           </div>
-        </div>
+        )}
       </div>
     );
   }
