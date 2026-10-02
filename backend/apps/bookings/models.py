@@ -255,6 +255,42 @@ class Booking(models.Model):
                 ),
                 name="booking_end_time_after_start_time",
             ),
+            # One live booking per barber per slot.
+            #
+            # `check_booking_conflict` already refuses a second booking
+            # that overlaps this barber's diary, and this constraint
+            # cannot be looser than that: two bookings for the same
+            # barber starting at the same minute always overlap, so
+            # nothing legitimate is forbidden here.
+            #
+            # What it adds is the guarantee that survives the check not
+            # running, or not running in time. The check is
+            # read-then-write with nothing in between, so two requests
+            # arriving together - a double tap on a phone, a customer
+            # and their partner booking the same slot from two tabs, a
+            # retried POST after a dropped connection - can both read
+            # "free" and both write. `select_for_update` on the barber
+            # row is what is supposed to serialise them, and it does
+            # exactly nothing on SQLite, which is what this project
+            # runs on. The database is the only place that cannot be
+            # raced this way.
+            #
+            # Restricted to the statuses that occupy a chair, so a
+            # cancelled or completed booking does not block the slot
+            # being rebooked later. A booking with no barber (only staff
+            # can create one) is outside the constraint entirely, which
+            # SQLite is happy with: NULLs never collide in a unique
+            # index.
+            models.UniqueConstraint(
+                fields=["barber", "booking_date", "start_time"],
+                condition=models.Q(
+                    status__in=[
+                        "pending",
+                        "confirmed",
+                    ]
+                ),
+                name="unique_live_booking_per_barber_slot",
+            ),
         ]
 
     def save(self, *args, **kwargs):
