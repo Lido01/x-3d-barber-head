@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -250,7 +251,16 @@ class BookingCodeTests(APITestCase):
         self.assertTrue(booking.booking_code)
 
     def test_codes_are_unique(self):
-        codes = {self.make().booking_code for _ in range(5)}
+        # Five bookings on one barber, so five different slots. A booking
+        # is unique for its slot (unique_live_booking_per_barber_slot), and
+        # what is under test here is the code, not the diary.
+        codes = {
+            self.make(
+                start_time=time(10 + index, 0),
+                end_time=time(10 + index, 30),
+            ).booking_code
+            for index in range(5)
+        }
 
         self.assertEqual(len(codes), 5)
 
@@ -701,8 +711,12 @@ class BookingMoneyStateTests(APITestCase):
 
         from apps.payments.models import Payment
 
+        # From 10:30, so the six rows do not land on the 10:00 slot
+        # self.booking already holds. The loop is here to make the list
+        # long enough to be worth counting queries against, not to fill
+        # the diary.
         for index in range(6):
-            start = datetime.combine(self.booking_date, time(9, 0)) + timedelta(
+            start = datetime.combine(self.booking_date, time(10, 30)) + timedelta(
                 minutes=30 * index
             )
 
@@ -1027,3 +1041,166 @@ class BookingStatusTransitionTests(APITestCase):
                 status.HTTP_403_FORBIDDEN,
                 msg=f"{action} should be admin only",
             )
+
+
+class SlotUniquenessTests(APITestCase):
+    """
+    A booking is unique for the slot it chooses.
+
+    Two separate guarantees, and they are tested separately because they
+    fail differently.
+
+    `check_booking_conflict` is the one that does the work in practice: it
+    refuses an overlapping booking and says what else is free. But it is a
+    read followed by a write with nothing in between, and
+    `select_for_update` does nothing on SQLite, so two requests arriving
+    together can both read "free". `unique_live_booking_per_barber_slot` is
+    what makes that race a refusal rather than a double booking.
+
+    And a customer who submits the same slot twice is neither of those
+    things. It is one person booking twice - a double tap, a retry, a
+    second tab - and refusing it the way a genuine clash is refused would
+    tell someone who has just booked an appointment that the slot they
+    hold is unavailable. So the repeat submit gets the booking back.
+    """
+
+    def setUp(self):
+        self.booking_date = date.today() + timedelta(days=1)
+        self.service = Service.objects.create(name="Cut", price="350.00", duration=30)
+        self.barber = Barber.objects.create(name="Dawit")
+
+        # Cancelling is a staff action, and one of the cases below needs a
+        # cancelled booking to look at.
+        self.admin = get_user_model().objects.create_user(
+            username="slot-admin", password="test-password", is_staff=True,
+        )
+        StaffAccess.objects.create(
+            user=self.admin, role=StaffAccess.Role.ADMIN
+        )
+
+    def payload(self, phone="0911234567", start_time="10:00", service=None):
+        return {
+            "customer_name": "Sam Doe",
+            "customer_phone": phone,
+            "service": (service or self.service).id,
+            "booking_date": str(self.booking_date),
+            "start_time": start_time,
+        }
+
+    def test_a_second_booking_for_the_same_slot_is_refused(self):
+        first = self.client.post(
+            "/api/bookings/", self.payload(phone="0911000000"), format="json"
+        )
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+
+        # A different person, same barber, same minute. The overlap check
+        # catches this one before the database is asked.
+        second = self.client.post(
+            "/api/bookings/", self.payload(phone="0922000000"), format="json"
+        )
+
+        self.assertEqual(second.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("start_time", second.data)
+        self.assertEqual(Booking.objects.count(), 1)
+
+    def test_the_same_phone_submitting_twice_gets_the_same_booking_back(self):
+        first = self.client.post("/api/bookings/", self.payload(), format="json")
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(first.data["already_booked"])
+
+        again = self.client.post("/api/bookings/", self.payload(), format="json")
+
+        # 200, not 201: nothing was created. 201 would tell the customer
+        # they had just made a second appointment and hand them a code
+        # for it.
+        self.assertEqual(again.status_code, status.HTTP_200_OK)
+        self.assertTrue(again.data["already_booked"])
+        self.assertEqual(again.data["id"], first.data["id"])
+        self.assertEqual(again.data["booking_code"], first.data["booking_code"])
+        self.assertEqual(Booking.objects.count(), 1)
+
+    def test_the_same_phone_may_book_a_different_slot(self):
+        first = self.client.post(
+            "/api/bookings/", self.payload(start_time="10:00"), format="json"
+        )
+        second = self.client.post(
+            "/api/bookings/", self.payload(start_time="14:00"), format="json"
+        )
+
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+        self.assertNotEqual(first.data["id"], second.data["id"])
+
+    def test_a_cancelled_booking_does_not_make_a_repeat_look_duplicate(self):
+        created = self.client.post("/api/bookings/", self.payload(), format="json")
+
+        self.client.force_authenticate(self.admin)
+        cancelled = self.client.post(
+            f"/api/bookings/{created.data['id']}/cancel/"
+        )
+        self.assertEqual(cancelled.status_code, status.HTTP_200_OK)
+
+        self.client.force_authenticate(None)
+
+        # Same phone, same slot, but the first booking is gone from the
+        # diary - so this is a fresh booking, not a repeat submit.
+        again = self.client.post("/api/bookings/", self.payload(), format="json")
+
+        self.assertEqual(again.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(again.data["already_booked"])
+        self.assertNotEqual(again.data["id"], created.data["id"])
+
+    def test_the_database_refuses_two_live_bookings_for_one_slot(self):
+        """
+        The guarantee itself, below the service layer.
+
+        `create_booking` translates a collision into a readable refusal, so
+        nothing above the database can tell whether that refusal came from
+        the overlap check or from the constraint. Creating the rows
+        directly is the only way to prove the constraint is there at all -
+        and it is the constraint, not the check, that survives two requests
+        arriving together on SQLite.
+        """
+
+        shared = {
+            "customer_name": "One",
+            "customer_phone": "0911000000",
+            "service": self.service,
+            "barber": self.barber,
+            "booking_date": self.booking_date,
+            "start_time": time(10, 0),
+            "end_time": time(10, 30),
+        }
+
+        Booking.objects.create(**shared)
+
+        with self.assertRaises(IntegrityError):
+            Booking.objects.create(
+                **{
+                    **shared,
+                    "customer_name": "Two",
+                    "customer_phone": "0922000000",
+                }
+            )
+
+    def test_a_cancelled_booking_frees_the_constraint(self):
+        shared = {
+            "customer_name": "One",
+            "customer_phone": "0911000000",
+            "service": self.service,
+            "barber": self.barber,
+            "booking_date": self.booking_date,
+            "start_time": time(10, 0),
+            "end_time": time(10, 30),
+            "status": Booking.Status.CANCELLED,
+        }
+
+        Booking.objects.create(**shared)
+
+        # Same slot, no longer a live booking, so the unique index does not
+        # apply and this succeeds.
+        Booking.objects.create(
+            **{**shared, "customer_name": "Two", "status": Booking.Status.PENDING}
+        )
+
+        self.assertEqual(Booking.objects.count(), 2)
