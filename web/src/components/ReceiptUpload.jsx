@@ -99,7 +99,7 @@ export default function ReceiptUpload({
   const uploading = progress !== null && progress < 100;
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       <input
         ref={inputRef}
         type="file"
@@ -115,7 +115,7 @@ export default function ReceiptUpload({
           type="button"
           onClick={openPicker}
           disabled={disabled}
-          className="flex w-full flex-col items-center gap-3 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-8 text-center transition hover:border-[#d6a85f]/50 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex w-full min-w-0 flex-col items-center gap-3 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-8 text-center transition hover:border-[#d6a85f]/50 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[#181818]">
             <ImageUp size={19} className="text-[#d6a85f]" />
@@ -126,6 +126,8 @@ export default function ReceiptUpload({
           </span>
 
           <span className="text-[11px] leading-5 text-white/35">
+            Tap to choose a photo of your transfer confirmation
+            <br />
             JPG, PNG or WebP · up to 5 MB
           </span>
         </button>
@@ -143,7 +145,7 @@ export default function ReceiptUpload({
             )}
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-white">
+              <p className="break-all text-xs font-medium text-white">
                 {value.name}
               </p>
 
@@ -151,12 +153,15 @@ export default function ReceiptUpload({
                 {describeSize(value.size)}
               </p>
 
+              {/* min-h keeps both buttons at the 44px floor the layout
+                  rules ask for; without it these are the two smallest
+                  tap targets on the payment screen. */}
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={openPicker}
                   disabled={disabled}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-medium text-white/75 transition hover:border-[#d6a85f]/50 hover:text-white disabled:opacity-50"
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-[11px] font-medium text-white/75 transition hover:border-[#d6a85f]/50 hover:text-white disabled:opacity-50"
                 >
                   <RefreshCw size={11} />
                   Replace
@@ -166,7 +171,7 @@ export default function ReceiptUpload({
                   type="button"
                   onClick={handleRemove}
                   disabled={disabled}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-medium text-white/55 transition hover:border-[#e05a4f]/50 hover:text-[#e0776b] disabled:opacity-50"
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-[11px] font-medium text-white/55 transition hover:border-[#e05a4f]/50 hover:text-[#e0776b] disabled:opacity-50"
                 >
                   <Trash2 size={11} />
                   Remove
