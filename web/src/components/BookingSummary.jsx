@@ -2,17 +2,29 @@ import { CalendarDays, Clock3, Scissors, User } from "lucide-react";
 
 import StatusBadge from "./StatusBadge";
 import { bookingCodeOf } from "../utils/bookingCode";
-import { formatDate, formatTimeRange } from "../utils/format";
+import {
+  formatEthiopianDate,
+  formatEthiopianTime,
+  formatEthiopianWeekday,
+} from "../utils/ethiopianDate";
 
 /**
  * Booking recap card.
  *
- * Renders only what Django returned on the booking - including the
- * barber it assigned when the customer had no preference.
+ * Renders only what Django returned on the booking - including the barber it
+ * assigned when the customer had no preference.
  *
- * The heading is the booking code rather than the row id, because that is
- * the number the customer has to quote. `bookingCodeOf` falls back to the
- * id only for a booking made before codes existed.
+ * The heading is the booking ID rather than the row id, because that is the
+ * number the customer has to quote. `bookingCodeOf` falls back to the id
+ * only for a booking made before codes existed.
+ *
+ * The date and time are in the Ethiopian calendar, because that is the
+ * calendar the customer chose the day in and the one they will read it back
+ * in. Showing them a Gregorian date they have to convert is how someone
+ * arrives on the wrong day; the Gregorian equivalent is kept out of the
+ * recap rather than sat beside it, so there is only one date on screen to
+ * be wrong. Staff read the Gregorian from the booking card and the admin
+ * console.
  */
 export default function BookingSummary({ booking, children, className = "" }) {
   if (!booking) {
@@ -33,12 +45,16 @@ export default function BookingSummary({ booking, children, className = "" }) {
     {
       icon: CalendarDays,
       label: "Date",
-      value: formatDate(booking.booking_date),
+      value: booking.booking_date
+        ? `${formatEthiopianDate(booking.booking_date)} · ${formatEthiopianWeekday(
+            booking.booking_date
+          )}`
+        : "—",
     },
     {
       icon: Clock3,
       label: "Time",
-      value: formatTimeRange(booking.start_time, booking.end_time),
+      value: formatEthiopianTime(booking.start_time),
     },
   ];
 
