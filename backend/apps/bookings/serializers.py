@@ -5,7 +5,7 @@ from apps.services.models import Service
 from .models import Barber, Booking
 from .services import (
     create_booking,
-    find_bookings_by_code,
+    find_booking_by_code,
     update_booking,
 )
 
@@ -38,6 +38,23 @@ class BookingSerializer(serializers.ModelSerializer):
     payment_status = serializers.SerializerMethodField()
 
     payment_due = serializers.SerializerMethodField()
+
+    #: Whether the pay form may be opened for this booking *right now*.
+    #:
+    #: Deliberately a separate flag from `payment_due`, because the two
+    #: answer different questions and conflating them is what produced the
+    #: bug this fixes:
+    #:
+    #:   payment_due   money is still owed on a live appointment
+    #:   payment_open  money may be sent this minute
+    #:
+    #: A booking awaiting confirmation owes money but cannot be paid yet -
+    #: reception confirms the chair first, then payment opens. The console
+    #: wants the first (whose bill is unsettled); the customer interface
+    #: wants the second (whether to show a form or a waiting notice).
+    #: Reading one where the other was meant produced a pay button for an
+    #: appointment the shop had not yet agreed to.
+    payment_open = serializers.SerializerMethodField()
 
     #: True when this request did not create anything, because the same
     #: phone number already held this slot. Set on the instance by
@@ -89,6 +106,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "status",
             "payment_status",
             "payment_due",
+            "payment_open",
             "already_booked",
             "notes",
             "created_at",
@@ -105,6 +123,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "status",
             "payment_status",
             "payment_due",
+            "payment_open",
             "already_booked",
             "created_at",
             "updated_at",
@@ -138,6 +157,20 @@ class BookingSerializer(serializers.ModelSerializer):
             Booking.Status.PENDING,
             Booking.Status.CONFIRMED,
         ]
+
+    def get_payment_open(self, booking):
+        """
+        Whether this booking can be paid this minute.
+
+        Read from payments.services so the field the customer interface
+        renders and the rule the endpoint enforces are literally the same
+        code. A frontend that re-derived this would be one status change
+        away from offering a form the server refuses.
+        """
+
+        from apps.payments.services import payment_is_open
+
+        return payment_is_open(booking, self._payment(booking))
 
     def get_already_booked(self, booking):
         """Whether this response handed back a booking that already existed."""
@@ -311,11 +344,15 @@ class AvailabilitySerializer(serializers.Serializer):
 
 class BookingLookupSerializer(serializers.Serializer):
     """
-    A customer proving a booking is theirs, and asking for their history.
+    A customer proving a booking is theirs, and asking for it.
 
     Both fields are checked here only for presence and shape; the match
-    itself, and the deliberate refusal to say which half was wrong, is
-    bookings.services.find_bookings_by_code.
+    itself, the deliberate refusal to say which half was wrong, and the
+    single-booking rule are all
+    bookings.services.find_booking_by_code.
+
+    The code is not a way to look a customer up - it names one booking.
+    Someone who has booked twice on the same number has a code for each.
     """
 
     code = serializers.CharField(
@@ -341,13 +378,10 @@ class BookingLookupSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs):
-        bookings, anchor = find_bookings_by_code(
+        attrs["booking"] = find_booking_by_code(
             code=attrs["code"],
             phone=attrs["phone"],
         )
-
-        attrs["bookings"] = bookings
-        attrs["matched_code"] = anchor.booking_code
 
         return attrs
 
@@ -375,3 +409,50 @@ class BarberSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+class AdminBookingSerializer(BookingSerializer):
+    """
+    A booking with its payment attached, for the staff console.
+
+    The console's job is to answer "what is the state of this
+    appointment", and that is one question with two halves: the chair and
+    the money. It used to take two screens and two requests to answer it -
+    the bookings list carried only a status word, so deciding a payment
+    meant leaving the booking, opening the payment queue, and matching rows
+    by eye on a booking id nobody had asked for.
+
+    Here the whole record arrives on the booking: amount, method, the
+    transaction reference, the receipt image, who verified it and when, or
+    the reason it was rejected. Verify and reject are therefore decisions
+    made on the booking, where the appointment they affect is on screen,
+    rather than on a separate queue that has lost the context.
+
+    Used only for `list` and `retrieve`, both of which already require
+    `bookings.view`. The payment is joined by the viewset's
+    `select_related("payment")`, so a screen full of bookings costs the
+    same one query it did when the payment was a single word - the
+    difference is the detail now travels with it.
+    """
+
+    payment = serializers.SerializerMethodField()
+
+    class Meta(BookingSerializer.Meta):
+        fields = BookingSerializer.Meta.fields + ["payment"]
+
+        read_only_fields = BookingSerializer.Meta.read_only_fields + [
+            "payment",
+        ]
+
+    def get_payment(self, booking):
+        payment = self._payment(booking)
+
+        if payment is None:
+            return None
+
+        # Deferred for the same reason booking_payload defers it: the
+        # payments app imports bookings.services, so a module-level import
+        # here would make the two apps depend on each other's import order.
+        from apps.payments.serializers import PaymentSerializer
+
+        return PaymentSerializer(payment).data
