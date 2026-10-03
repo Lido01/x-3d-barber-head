@@ -1,43 +1,59 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, KeyRound } from "lucide-react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
+import BookingLookupPanel from "../components/booking/BookingLookupPanel";
+import BookingSheet from "../components/booking/BookingSheet";
 import BookingSummary from "../components/BookingSummary";
-import PaymentForm from "../components/booking/PaymentForm";
 import Alert from "../components/ui/Alert";
 import FieldError from "../components/ui/FieldError";
-import Spinner from "../components/ui/Spinner";
-import { usePaymentStatus } from "../hooks/usePaymentStatus";
-import { lookupBooking } from "../services/bookingApi";
+import { PaymentPrompt } from "../components/booking/BookingProgress";
+import { useBookingLookup } from "../hooks/useBookingLookup";
+import {
+  POLL_WHILE_UNSETTLED_MS,
+  useBookingStatus,
+} from "../hooks/useBookingStatus";
 import { normaliseBookingCode } from "../utils/bookingCode";
 import { recallBooking, rememberBooking } from "../utils/bookingSession";
 
 /**
- * Payment submission for a booking. Still no customer account.
+ * Payment for one booking. Still no customer account.
  *
- * The backend matches every payment against the booking it belongs to,
- * using the booking code and the phone number the booking was made with -
- * so those two are what this page needs before anything can be sent.
+ * ## The order this page exists to enforce
  *
- * They normally come for free: the booking was just made, and Django's
- * response and this tab's session storage both hold them. They do not
- * come for free when the customer is paying on a different device, in a
- * tab that has been closed, or from a link somebody sent them. In that
- * case the page asks for them rather than presenting a form that would
- * be refused on submit - which is what it used to do, and the reason a
- * screenshot could reach "waiting" and then go nowhere.
+ *     requested -> confirmed -> paid -> checked
  *
- * The form itself is components/booking/PaymentForm, shared with the
- * confirmation page and the customer's history, so what a customer sends
- * here is the same form they would find on the booking that needs paying.
+ * Reception confirms the appointment first. Payment opens second, and only
+ * then - which is why this page has a real job before it has a form: it asks
+ * the server whether the booking is payable yet, and when it is not it says
+ * so and offers no form at all. A disabled button on the one screen whose
+ * purpose is taking money reads as broken; an honest waiting notice reads as
+ * "not yet", which is what it is.
  *
- * This page does not wait for the "is there already a payment?" check
- * before rendering the form. That check used to gate the whole screen,
- * and a booking with no payment yet is answered by the backend with a
- * 404 - which is the normal case, so the screen sat on "Checking this
- * booking..." and the customer who came to pay was never shown the form.
- * The answer now arrives as a line under the heading and a redirect if
- * there is genuinely nothing left to send.
+ * `PaymentPrompt` owns that decision and reads `paymentOpen` from the server
+ * rather than working it out from the booking status, so the rule on this
+ * screen and the rule the endpoint enforces are the same answer.
+ *
+ * ## Why the booking arrives in a sheet
+ *
+ * The customer gets here from a link, a shared booking, or a tab that has
+ * been closed - so this device may hold no proof of which booking this is.
+ * The booking ID and phone prompt below resolves it, and the answer opens in
+ * a sheet over the form rather than replacing the page: the two things they
+ * just typed stay visible behind it, and there is nothing to navigate back
+ * to.
+ *
+ * What it opens is *that* booking - their ID, their appointment. One record
+ * and nothing beside it, because a list here would mean the wrong
+ * appointment being as plausible as the right one.
+ *
+ * The sheet stays open until the customer closes it. Once closed the page
+ * takes over and shows this booking with its own pay form, so the sheet is
+ * the arrival moment and the page is where they stay.
+ *
+ * When this tab *does* hold the booking - the normal case, straight after
+ * booking it - there is no proof to ask for, no sheet, and the pay form is
+ * simply on the page. The sheet is the fallback shape, not the default one.
  */
 
 const LABEL = "text-[10px] uppercase tracking-[0.25em] text-white/35";
@@ -48,72 +64,83 @@ const INPUT =
 export default function Payment() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  // Booking details: fresh from the previous step, or from this tab's
-  // cache after a refresh.
+  // Booking details: this tab's cache from the step before, if there was one.
   const [booking, setBooking] = useState(
-    () => location.state?.booking || recallBooking(bookingId)?.booking || null
+    () => recallBooking(bookingId)?.booking || null
   );
 
-  useEffect(() => {
-    if (location.state?.booking) {
-      rememberBooking(location.state.booking);
-      setBooking(location.state.booking);
-    }
-  }, [location.state]);
-
-  // Ask the server whether this booking already has a payment. The
-  // backend's booking field is OneToOne, so it accepts exactly one.
-  const existing = usePaymentStatus({
+  /**
+   * The live answer to "can this be paid yet", polled while it can still
+   * move. This is the same request the confirmation page makes, so a
+   * customer who lands here from a link and a customer who booked here get
+   * the same read - and a shop that confirms at 11:00 shows up on both
+   * without anyone pressing anything.
+   */
+  const live = useBookingStatus({
     bookingId,
     bookingCode: booking?.booking_code,
     bookingPhone: booking?.customer_phone,
+    pollMs: POLL_WHILE_UNSETTLED_MS,
   });
 
-  // The proof of ownership, asked for explicitly when this tab cannot
-  // supply it on its own. See "Confirm this is your booking" below.
+  // The server's row wins as soon as it lands. The cached recap is only
+  // what this tab happens to know, and a stale "pending" here is exactly
+  // what would keep a pay form closed after reception had confirmed it.
+  const current = live.booking || booking;
+
+  // True when this tab cannot prove which booking this is - a different
+  // device, a cleared session, a link shared in a chat. Every customer read
+  // needs the code and the phone number, so without them the form below
+  // would submit and be refused.
+  const needsProof = !current;
+
+  // The proof of ownership, asked for explicitly only in that case.
   const [proofCode, setProofCode] = useState("");
   const [proofPhone, setProofPhone] = useState("");
   const [proofErrors, setProofErrors] = useState({});
   const [proofBusy, setProofBusy] = useState(false);
   const [proofError, setProofError] = useState(null);
 
-  // True when this tab has no way to prove which booking this is - a
-  // different device, a cleared session, a link shared in a chat. The
-  // backend needs the code and the phone number on every payment call,
-  // so without them the form below would submit and be refused.
-  const needsProof = !booking;
-
-  // A payment already on file means this step is done - show the result
-  // page instead of letting a second one be attempted.
-  //
-  // Except a *rejected* one. That is the one state where the customer
-  // still has something to do, and bouncing them to the confirmation page
-  // - which then tells them to telephone the shop - is exactly how a
-  // screenshot that was too blurry to read becomes a booking the customer
-  // paid for and can never resolve. The backend now accepts a corrected
-  // resubmission against the same payment, so the form stays reachable.
-  useEffect(() => {
-    const payment = existing.payment;
-
-    if (!payment?.id || payment.status === "rejected") {
-      return;
-    }
-
-    navigate(`/booking/success/${bookingId}`, {
-      replace: true,
-      state: { booking, payment },
-    });
-  }, [existing.payment, bookingId, booking, navigate]);
+  const {
+    booking: lookedUp,
+    payment: lookedUpPayment,
+    paymentDue,
+    paymentOpen,
+    paymentRejected,
+    matchedCode,
+    loading,
+    find: lookup,
+    refresh: refreshLookup,
+  } = useBookingLookup();
 
   /**
-   * Resolve this booking from the code and phone the customer types.
+   * The sheet opens once the proof has been accepted, and closes on the
+   * matched booking ID so a later lookup for a different one reopens it.
    *
-   * Same two fields as "my bookings", doing the same job: the code proves
-   * the number is theirs, and the lookup answers with the whole booking.
-   * Without this, a customer who did not book on this device could not pay
-   * at all.
+   * Deliberately not derived from `needsProof`: the booking is adopted as
+   * soon as the lookup resolves, which would close the sheet in the same
+   * render that opened it.
+   */
+  const [proofAccepted, setProofAccepted] = useState(false);
+  const [dismissedCode, setDismissedCode] = useState(null);
+
+  const sheetOpen =
+    Boolean(lookedUp) && proofAccepted && matchedCode !== dismissedCode;
+
+  /**
+   * Resolve this booking from the booking ID and phone the customer types.
+   *
+   * The same two fields as "my booking", doing the same job: the booking ID
+   * names the appointment, the phone number proves the person asking owns
+   * it. Without this, a customer who did not book on this device could not
+   * pay at all.
+   *
+   * A booking ID for a *different* booking is not an error - the person has
+   * proved who they are, they have simply quoted the wrong reference. So
+   * they are carried to the booking their own ID named, with a plain note
+   * saying so, rather than being left on a page for an appointment that is
+   * not theirs.
    */
   const handleProveBooking = async (event) => {
     event.preventDefault();
@@ -121,7 +148,7 @@ export default function Payment() {
     const errors = {};
 
     if (!proofCode.trim()) {
-      errors.code = "Please enter your booking code, e.g. BK-3274.";
+      errors.code = "Please enter your booking ID, e.g. BK-3274.";
     }
 
     if (proofPhone.replace(/\D/g, "").length < 9) {
@@ -139,39 +166,36 @@ export default function Payment() {
     setProofBusy(true);
 
     try {
-      const history = await lookupBooking({
+      const found = await lookup({
         code: proofCode.trim(),
         phone: proofPhone.trim(),
       });
 
-      // The code may name a different booking in the same history, so
-      // take the row this page is about rather than whichever came first.
-      const match =
-        (history.bookings || []).find(
-          (row) => String(row.booking.id) === String(bookingId)
-        ) || history.bookings?.[0];
-
-      if (!match?.booking) {
+      if (!found?.booking) {
         setProofError(
-          "We could not find a booking with that code and phone number."
+          "We could not find a booking with that booking ID and phone number."
         );
 
         return;
       }
 
-      if (String(match.booking.id) !== String(bookingId)) {
-        // The proof identifies the customer, not this particular page.
-        // Carry them to the booking it actually named rather than paying
-        // against the wrong appointment.
-        rememberBooking(match.booking);
+      setProofAccepted(true);
+      setDismissedCode(null);
 
-        navigate(`/payment/${match.booking.id}`, { replace: true });
+      // This page is about one booking. If the ID they quoted names a
+      // different one, take them to it rather than paying against the
+      // appointment in the URL - which may not be theirs at all.
+      if (String(found.booking.id) !== String(bookingId)) {
+        rememberBooking(found.booking);
+
+        navigate(`/payment/${found.booking.id}`, { replace: true });
 
         return;
       }
 
-      rememberBooking(match.booking);
-      setBooking(match.booking);
+      // Adopt it, so the page can take over once the sheet is closed.
+      rememberBooking(found.booking);
+      setBooking(found.booking);
     } catch (error) {
       setProofError(error.message);
     } finally {
@@ -179,65 +203,59 @@ export default function Payment() {
     }
   };
 
+  /**
+   * A payment already on file means this step is done - show the result page
+   * instead of letting a second one be attempted.
+   *
+   * Except a *rejected* one, which is the one state where the customer
+   * still has something to do. The backend accepts a corrected
+   * resubmission against the same payment, so the form stays reachable.
+   */
+  useEffect(() => {
+    const payment = live.payment;
+
+    if (!payment?.id || payment.status === "rejected") {
+      return;
+    }
+
+    navigate(`/booking/success/${bookingId}`, {
+      replace: true,
+      state: { booking: live.booking || booking, payment },
+    });
+  }, [live.payment, live.booking, bookingId, booking, navigate]);
+
   return (
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[900px]">
-        <Link
-          to="/booking"
-          className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-white/40 hover:text-white"
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="inline-flex min-h-[44px] items-center gap-2 text-xs uppercase tracking-[0.2em] text-white/40 transition hover:text-white"
         >
           <ArrowLeft size={14} />
-          Booking
-        </Link>
+          Back
+        </button>
 
-        <div className="mt-10">
+        <div className="mt-6">
           <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-            Step 2 of 2
+            Payment
           </p>
 
           <h1 className="mt-5 font-serif text-5xl leading-[0.9] sm:text-6xl">
-            Confirm your
+            Pay for your
             <br />
-            <span className="italic text-[#d6a85f]">payment.</span>
+            <span className="italic text-[#d6a85f]">appointment.</span>
           </h1>
 
           <p className="mt-6 max-w-lg text-sm leading-7 text-white/45">
-            Your chair is held under booking code{" "}
+            Booking{" "}
             <strong className="font-semibold tracking-[0.1em] text-white/80">
-              {booking?.booking_code || `#${bookingId}`}
+              {current?.booking_code || `#${bookingId}`}
             </strong>
-            . Choose a screenshot of your transfer or the TIN number on it —
-            either one lets the shop verify the payment.
+            . Payment opens once the shop has confirmed this appointment —
+            then a screenshot of your transfer or the TIN number on it is
+            enough for them to check it.
           </p>
-
-          {/* The check is a status line, not a gate. It was a spinner that
-              covered the entire form, on a screen whose whole job is to be
-              filled in. */}
-          <div className="mt-5 min-h-[20px]">
-            {existing.loading && (
-              <Spinner size={13} label="Checking this booking..." />
-            )}
-
-            {existing.ready && existing.missing && !needsProof && (
-              <p className="text-[11px] text-white/30">
-                No payment on this booking yet — you are in the right place.
-              </p>
-            )}
-
-            {existing.error && (
-              <p className="text-[11px] leading-5 text-[#e0776b]">
-                We could not check whether this booking was already paid, so
-                this form may let you send a second payment.{" "}
-                <button
-                  type="button"
-                  onClick={existing.refresh}
-                  className="font-semibold underline underline-offset-2"
-                >
-                  Try again
-                </button>
-              </p>
-            )}
-          </div>
         </div>
 
         {/* The booking could not be read from this tab. Rather than leaving
@@ -260,8 +278,8 @@ export default function Payment() {
                 <p className="mt-1 text-xs leading-6 text-white/55">
                   You are not on the device you booked on, so we do not know
                   your booking code yet. Enter it with the phone number you
-                  used, and we will check your payment against the right
-                  appointment.
+                  used and we will open your bookings — the payment form for
+                  this appointment is inside.
                 </p>
               </div>
             </div>
@@ -337,51 +355,69 @@ export default function Payment() {
           </form>
         )}
 
-        {/* The shop could not read what was sent last time. Say so plainly,
-            and make it obvious that sending again is the fix rather than a
-            phone call. */}
-        {existing.payment?.status === "rejected" && (
-          <Alert
-            tone="error"
-            title="The shop could not match the payment you sent"
-            className="mt-8"
-          >
-            {existing.payment.rejection_reason ||
-              "The screenshot or reference did not match anything."}{" "}
-            <strong className="font-semibold text-white/80">
-              Send it again below
-            </strong>{" "}
-            — a clearer screenshot of the transfer confirmation, or the TIN
-            number on its own. Your appointment is still held.
-          </Alert>
-        )}
+        {live.booking && (
+              <>
+                {live.booking.status === "pending" && !live.error && (
+                  <Alert
+                    tone="info"
+                    title="Waiting for the shop to confirm"
+                    className="mt-8"
+                  >
+                    Reception has your request and will confirm it shortly.
+                    Payment opens as soon as they have — this page checks on
+                    its own, so there is nothing to do until then.
+                  </Alert>
+                )}
 
-        {booking && (
-          <BookingSummary booking={booking} className="mt-8" />
-        )}
+                <BookingSummary
+                  booking={live.booking}
+                  className="mt-8 border"
+                />
 
-        <PaymentForm
-          booking={booking}
-          payment={existing.payment}
-          className="mt-6"
-          submitLabel="Send my payment"
-          onSubmitted={(payment, { resubmitting }) =>
-            navigate(`/booking/success/${bookingId}`, {
-              replace: true,
-              state: {
-                booking,
-                payment,
-                // So the confirmation page can say what just happened
-                // rather than leaving the customer to infer it from a
-                // status badge.
-                justSubmitted: true,
-                // A resubmission is worth distinguishing: the customer has
-                // been here before, and this time it worked.
-                resubmitted: resubmitting,
-              },
-            })
-          }
-        />
+                <div className="mt-6">
+                  <PaymentPrompt
+                    booking={live.booking}
+                    payment={live.payment}
+                    paymentOpen={live.paymentOpen}
+                    autoOpen
+                    // Go to the result page the moment the payment lands,
+                    // rather than waiting for the status read behind it to
+                    // catch up. The customer handed over money and should be
+                    // told what happened to it in the same tap.
+                    onPaid={(created) =>
+                      navigate(`/booking/success/${bookingId}`, {
+                        replace: true,
+                        state: {
+                          booking: live.booking,
+                          payment: created,
+                          justSubmitted: true,
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </>
+            )}
+
+        {/* The proof, and the one booking it named. */}
+        <BookingSheet
+          open={sheetOpen}
+          onClose={() => setDismissedCode(matchedCode)}
+          eyebrow="Your booking"
+          title={matchedCode}
+          description="The appointment this booking ID names."
+        >
+          <BookingLookupPanel
+            booking={lookedUp}
+            payment={lookedUpPayment}
+            paymentDue={paymentDue}
+            paymentOpen={paymentOpen}
+            paymentRejected={paymentRejected}
+            loading={loading}
+            onRefresh={refreshLookup}
+            onPaid={refreshLookup}
+          />
+        </BookingSheet>
       </div>
     </div>
   );

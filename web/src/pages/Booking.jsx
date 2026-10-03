@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Globe } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import BarberPicker from "../components/booking/BarberPicker";
+import EthiopianCalendar from "../components/booking/EthiopianCalendar";
 import ServicePicker from "../components/booking/ServicePicker";
 import TimeSlots from "../components/booking/TimeSlots";
 import Alert from "../components/ui/Alert";
@@ -15,10 +16,13 @@ import { useServices } from "../hooks/useServices";
 import { createBooking } from "../services/bookingApi";
 import { rememberBooking } from "../utils/bookingSession";
 import {
-  formatDate,
+  formatEthiopianDate,
+  formatEthiopianTime,
+  formatEthiopianWeekday,
+} from "../utils/ethiopianDate";
+import {
   formatDuration,
   formatPrice,
-  formatTime,
   todayIsoDate,
 } from "../utils/format";
 
@@ -344,11 +348,18 @@ const inFlight = useRef(false);
       rememberBooking(booking);
 
       // The slot just taken is no longer bookable. Dropping the cached
-      // availability means going back to this date shows the truth
-      // rather than a slot that has already gone.
+      // availability means going back to this date shows the truth rather
+      // than a slot that has already gone.
       invalidateQuery("availability");
 
-      navigate(`/payment/${booking.id}`, {
+      // The confirmation page, not the payment form.
+      //
+      // Payment opens once reception confirms, so at this moment there is
+      // nothing to pay for and a form would be asking for money against a
+      // chair nobody has agreed to. The confirmation page says so, polls,
+      // and opens the form itself the moment the shop confirms - so the
+      // customer can leave the tab open and watch it happen.
+      navigate(`/booking/success/${booking.id}`, {
         replace: true,
         state: { booking },
       });
@@ -467,25 +478,37 @@ const inFlight = useRef(false);
                       {availability.loading && <Spinner size={13} />}
                     </div>
 
-                    <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                    <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
                       <div id="booking-field-booking_date">
-                        <div className="relative">
-                          <CalendarDays
-                            size={17}
-                            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#d6a85f]"
-                          />
+                        <EthiopianCalendar
+                          value={bookingDate}
+                          onChange={handleSelectDate}
+                        />
+
+                        {/*
+                          The Gregorian input stays, folded away, for anyone
+                          keeping the other calendar. It is the same value
+                          either way - the Ethiopian calendar is a different
+                          view of one date, not a second date.
+                        */}
+                        <details className="group mt-2">
+                          <summary className="flex cursor-pointer list-none items-center gap-1.5 py-1 text-[11px] text-white/30 marker:hidden">
+                            <Globe size={11} />
+                            Use the Gregorian date instead
+                          </summary>
+
                           <input
-                            id="booking-date"
-                            aria-label="Booking date"
                             type="date"
                             value={bookingDate}
                             min={todayIsoDate()}
                             onChange={handleSelectDate}
                             onBlur={() => markTouched("booking_date")}
                             disabled={submitting}
-                            className={`${INPUT} px-12`}
+                            aria-label="Booking date (Gregorian)"
+                            className={`${INPUT} mt-2 text-sm`}
                           />
-                        </div>
+                        </details>
+
                         <FieldError message={fieldError("booking_date")} />
                       </div>
 
@@ -641,7 +664,7 @@ const inFlight = useRef(false);
                     </>
                   ) : ready ? (
                     <>
-                      Reserve and continue
+                      Reserve the chair
                       <span className="transition-transform group-hover:translate-x-1">→</span>
                     </>
                   ) : (
@@ -656,12 +679,20 @@ const inFlight = useRef(false);
                   <p className="mt-4 flex items-center justify-center gap-2 text-center text-[10px] leading-5 text-white/25">
                     <Check size={11} />
                     Everything is filled in. You will get a booking code to
-                    keep, then pay.
+                    keep straight away.
                   </p>
                 )}
 
+                {/*
+                  The order, stated before anyone commits to it. Payment
+                  comes after confirmation, so "reserve" really does mean
+                  reserve - nobody is asked for money on this screen.
+                */}
                 <p className="mt-4 text-center text-[10px] leading-5 text-white/25">
-                  Your appointment stays pending until the shop verifies payment.
+                  Reception confirms every booking by hand. You will get a code
+                  to keep, and payment opens once they have confirmed — the
+                  next page checks on its own, so there is nothing to do until
+                  then.
                 </p>
               </div>
             </div>
@@ -670,10 +701,15 @@ const inFlight = useRef(false);
 
         {selectedService && (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#d6a85f]/20 bg-[#d6a85f]/[0.05] px-5 py-4 text-xs text-white/50">
-            <span>{selectedService.name} · {formatPrice(selectedService.price)} · {formatDuration(selectedService.duration)}</span>
             <span>
-              {bookingDate ? formatDate(bookingDate) : "Choose a date"}
-              {startTime ? ` · ${formatTime(startTime)}` : ""}
+              {selectedService.name} · {formatPrice(selectedService.price)} ·{" "}
+              {formatDuration(selectedService.duration)}
+            </span>
+
+            <span>
+              {bookingDate ? formatEthiopianDate(bookingDate) : "Choose a date"}
+              {bookingDate ? ` · ${formatEthiopianWeekday(bookingDate)}` : ""}
+              {startTime ? ` · ${formatEthiopianTime(startTime)}` : ""}
               {barberId && selectedBarber ? ` · ${selectedBarber.name}` : " · Any available barber"}
             </span>
           </div>

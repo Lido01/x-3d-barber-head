@@ -149,13 +149,18 @@ export default function AdminOverview() {
       to: "/admin/payments",
       icon: CreditCard,
     },
-    // Not the same question as "payments to verify". That one is
-    // receipts sitting in the inbox waiting to be checked; this one is
-    // live appointments with no money behind them at all - a walk-in
-    // confirmed by hand, or a payment rejected while the slot was held.
-    // Both need chasing, and neither is visible from the other.
+    // Not the same question as "payments to verify". That one is receipts
+    // sitting in the inbox waiting to be checked; this one is *confirmed*
+    // appointments with no money behind them at all - a walk-in confirmed
+    // by hand, or a payment rejected while the slot was held. Both need
+    // chasing, and neither is visible from the other.
+    //
+    // Confirmed only, because payment opens after confirmation. A booking
+    // nobody has confirmed yet is not money to chase - the customer cannot
+    // send any - so it is counted by the queue above instead, where it
+    // belongs.
     data?.queues?.payments_outstanding != null && {
-      label: "Awaiting payment",
+      label: "Confirmed, unpaid",
       count: data.queues.payments_outstanding,
       to: "/admin/bookings",
       icon: CircleDollarSign,
