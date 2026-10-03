@@ -4,14 +4,19 @@ import {
   CheckCheck,
   CircleDollarSign,
   Copy,
+  ExternalLink,
+  FileImage,
+  Receipt,
   RefreshCw,
   Trash2,
   X,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import Alert from "../../components/ui/Alert";
 import {
   AdminButton,
+  AdminChip,
   AdminConfirmButton,
   AdminDetails,
   AdminDetail,
@@ -21,7 +26,9 @@ import {
   AdminPageHeader,
   AdminPanel,
   AdminSearch,
+  AdminSheet,
   AdminStatus,
+  AdminTextarea,
 } from "../../components/admin/AdminUi";
 import { EMPTY_LIST, invalidateQuery, useQuery } from "../../hooks/useQuery";
 import { toArray } from "../../utils/toArray";
@@ -32,58 +39,91 @@ import {
   deleteBooking,
   listBookings,
 } from "../../services/bookingApi";
+import {
+  rejectPayment,
+  verifyPayment,
+} from "../../services/paymentApi";
+import { useAdminAuth } from "../../context/AdminAuthContext";
+import { hasCapability } from "../../utils/staffRole";
+import { mediaUrl } from "../../services/api";
 import { bookingCodeOf } from "../../utils/bookingCode";
-import { formatDate, formatTimeRange } from "../../utils/format";
+import { formatDate, formatPrice, formatTimeRange } from "../../utils/format";
 
 /**
- * Bookings management — GET /api/bookings/ (admin).
+ * Bookings management — GET /api/bookings/ (staff).
  *
- * Built for a phone held in one hand between customers: the whole
- * schedule is filterable by status and searchable by name, phone, service
- * or booking code, and the four status transitions staff actually need are
- * on each card rather than behind a menu.
+ * ## A booking and its money, on one card
  *
- * The booking code is the first thing on each card, and searchable,
- * because it is what a customer reads off their confirmation and what
- * staff have to recognise when someone rings. It is also the fastest way
- * to find one booking in a list that is otherwise sorted by date: the
- * caller already has the number and does not know who it belongs to.
+ * This is the screen the whole booking/payment rule is enforced from, so it
+ * has to show both halves at once. The API now sends the attached payment
+ * with every row - amount, method, reference, receipt image, who verified
+ * it and when, or the reason it was rejected - which is what removes the
+ * two-screen routine this used to need: open the booking, note the id, leave,
+ * open the payment queue, find the row, then work out whether the two
+ * described the same appointment. They now cannot disagree, because there is
+ * only one of them.
  *
- * Transitions and the statuses that enable them, which the server
- * enforces too:
+ * It also means **verify** and **reject** live here, on the card, where the
+ * appointment the money is for is on screen. Before, a decision about money
+ * was made on a queue that had lost that context.
  *
- *   pending   -> Confirm · Cancel
- *   confirmed -> Complete · Cancel
- *   completed -> (read only)
- *   cancelled -> (read only)
+ * ## The order on screen
  *
- * The two irreversible actions are the two in the danger tone, and both
- * ask first, so the one thing that cannot be undone is never the
- * easiest thing to hit on a screen full of buttons.
+ *     Confirm -> Payment sent -> Checked -> Complete
  *
- * A write invalidates the cached list *and* the cached availability, so
- * the slots the booking form is offering drop the slot just taken
- * without anyone pressing refresh.
+ * Reception confirms the chair first and payment opens second, so the
+ * Confirm button is the first thing on a pending booking and the payment
+ * panel says "not payable until confirmed" while it is still pending. A
+ * verified payment no longer confirms the booking on the server (it did
+ * already need to be confirmed to pay), so nothing on this screen assumes
+ * the two happen in the other order.
+ *
+ * ## Money is only shown to an account entitled to see it
+ *
+ * The API attaches the payment to a booking row only when the caller holds
+ * `payments.view`, and this screen reads the same two capabilities from the
+ * session to decide what to render. A receptionist who can work the diary
+ * but not the money still sees whether an appointment is unpaid - that is
+ * what the diary is for - without being handed the amount, the transaction
+ * reference or the receipt image, and without Verify and Reject buttons
+ * that would only ever answer 403.
+ *
+ * The booking code leads and is searchable, because it is what a customer
+ * reads off their confirmation and what staff have to recognise when someone
+ * rings. It is also the fastest way to find one booking in a list sorted by
+ * date: the caller already has the number and does not know who it belongs
+ * to.
+ *
+ * A write invalidates the cached bookings list *and* the cached availability,
+ * so the slots the booking form is offering drop the slot just taken without
+ * anyone pressing refresh.
  */
 
 /** Human labels. The raw status keys are for the API, not for a person. */
 const FILTERS = [
   { key: "all", label: "All" },
-  { key: "pending", label: "Pending" },
+  { key: "pending", label: "To confirm" },
   { key: "confirmed", label: "Confirmed" },
   { key: "completed", label: "Completed" },
   { key: "cancelled", label: "Cancelled" },
-  { key: "awaiting_payment", label: "Awaiting payment" },
+  { key: "unpaid", label: "Awaiting payment" },
+  { key: "to_verify", label: "Payments to check" },
 ];
 
 /**
- * Whether money has arrived for this booking.
+ * Where the money stands on this booking.
  *
- * Derived from the joined payment the API returns, not from the
- * booking's status - because the two genuinely disagree. Staff confirm a
- * walk-in who will pay at the counter, and a payment can be rejected
- * while the appointment is held. Both leave a live appointment with a
- * confirmed badge and no money behind it, which is the thing worth
+ * Read from `payment_status` - the state word, which every staff account
+ * gets - rather than from the attached payment, which only arrives for an
+ * account holding `payments.view`. Falling back to the booking's status
+ * instead would draw a confirmed, already-paid booking as "to pay" for any
+ * account that cannot see money, which sends reception chasing money that
+ * has already arrived.
+ *
+ * The two genuinely disagree, which is why this is not `booking.status`:
+ * staff confirm a walk-in who will pay at the counter, and a payment can be
+ * rejected while the appointment is held. Both leave a live appointment
+ * with a confirmed badge and no money behind it, which is the thing worth
  * noticing before the customer is in the chair.
  */
 function paymentState(booking) {
@@ -96,16 +136,43 @@ function paymentState(booking) {
     : "settled";
 }
 
+/**
+ * Whether this booking can be paid for right now.
+ *
+ * The server's own `payment_open`, not a re-derivation. A console that
+ * worked it out from `booking.status` would offer a "waiting on the shop"
+ * badge for a booking the customer can in fact pay for, and the badge is the
+ * thing staff trust when deciding what to chase.
+ */
+function isPayable(booking) {
+  return Boolean(booking.payment_open);
+}
+
 export default function AdminBookings() {
+  const { account } = useAdminAuth();
+
+  /**
+   * Whether this account may be shown the money, and whether it may decide
+   * it. Read from the session rather than inferred from what the API
+   * returned, so the screen does not render a panel the server will not
+   * fill or a button the server will refuse.
+   */
+  const canSeePayments = hasCapability(account, "payments.view");
+  const canVerifyPayments = hasCapability(account, "payments.verify");
+
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
   const [actionError, setActionError] = useState(null);
 
-  // Short TTL and no client-side cache reuse across a status change:
-  // this is the screen staff act on, so a stale row is the one bug that
-  // matters. Filtering and searching stay local over the fetched page.
+  /** payment id whose reject sheet is open */
+  const [rejectingId, setRejectingId] = useState(null);
+  const [reason, setReason] = useState("");
+
+  // Short TTL and no client-side cache reuse across a status change: this
+  // is the screen staff act on, so a stale row is the one bug that matters.
+  // Filtering and searching stay local over the fetched page.
   const {
     data,
     loading,
@@ -120,24 +187,20 @@ export default function AdminBookings() {
 
   const bookings = data || EMPTY_LIST;
 
-  const awaitingPayment = useMemo(
-    () =>
-      bookings.filter((row) => {
-        const state = paymentState(row);
-
-        return state === "none" || state === "rejected";
-      }).length,
-    [bookings]
-  );
-
   const counts = useMemo(() => {
     const tally = {
       all: bookings.length,
-      awaiting_payment: awaitingPayment,
+      unpaid: bookings.filter((row) => isPayable(row)).length,
+      to_verify: bookings.filter((row) => row.payment_status === "pending")
+        .length,
     };
 
     for (const option of FILTERS) {
-      if (option.key === "all" || option.key === "awaiting_payment") {
+      if (
+        option.key === "all" ||
+        option.key === "unpaid" ||
+        option.key === "to_verify"
+      ) {
         continue;
       }
 
@@ -147,18 +210,20 @@ export default function AdminBookings() {
     }
 
     return tally;
-  }, [bookings, awaitingPayment]);
+  }, [bookings]);
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
     return bookings.filter((booking) => {
-      // The filter tab for money is not a booking status, so it is
-      // checked separately rather than against `booking.status`.
-      if (filter === "awaiting_payment") {
-        const state = paymentState(booking);
-
-        if (state !== "none" && state !== "rejected") {
+      // The money tabs are not booking statuses, so they are checked
+      // separately rather than against `booking.status`.
+      if (filter === "unpaid") {
+        if (!isPayable(booking)) {
+          return false;
+        }
+      } else if (filter === "to_verify") {
+        if (booking.payment_status !== "pending") {
           return false;
         }
       } else if (filter !== "all" && booking.status !== filter) {
@@ -175,6 +240,7 @@ export default function AdminBookings() {
         booking.service_name,
         booking.barber_name,
         booking.booking_code,
+        booking.payment?.transaction_reference,
         String(booking.id),
       ]
         .filter(Boolean)
@@ -186,10 +252,14 @@ export default function AdminBookings() {
 
   /**
    * A booking change also empties slots, so the availability lists behind
-   * the booking form are now wrong and must be dropped with it.
+   * the booking form are now wrong and must be dropped with it. A payment
+   * decision changes the booking too - confirming is what opens payment -
+   * so both are invalidated together rather than one screen noticing later.
    */
   const refreshAffected = () => {
     invalidateQuery("bookings");
+    invalidateQuery("payments");
+    invalidateQuery("reports/dashboard");
     invalidateQuery("availability");
   };
 
@@ -197,8 +267,7 @@ export default function AdminBookings() {
    * Run one status transition, or a delete.
    *
    * `confirmFn` is a native confirm so a destructive action is never a
-   * single stray tap on a phone, where the target is often under a
-   * thumb.
+   * single stray tap on a phone, where the target is often under a thumb.
    */
   const runAction = async (booking, action, { confirmFn } = {}) => {
     if (confirmFn && !confirmFn()) {
@@ -236,6 +305,53 @@ export default function AdminBookings() {
     }
   };
 
+  /**
+   * Accept a payment from the booking it belongs to.
+   *
+   * Same endpoint the payment queue uses, so the audit trail and the rules
+   * are identical - only the context is better, because the appointment is
+   * right here next to the receipt.
+   */
+  const handleVerifyPayment = async (booking) => {
+    setBusyId(booking.id);
+    setActionError(null);
+
+    try {
+      await verifyPayment(booking.payment.id);
+      refreshAffected();
+    } catch (apiError) {
+      setActionError(apiError);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRejectPayment = async (booking) => {
+    if (!reason.trim()) {
+      setActionError({
+        message: "A rejection reason is required.",
+        fieldErrors: { reason: "Say what the customer needs to change." },
+      });
+
+      return;
+    }
+
+    setBusyId(booking.id);
+    setActionError(null);
+
+    try {
+      await rejectPayment(booking.payment.id, reason.trim());
+
+      setRejectingId(null);
+      setReason("");
+      refreshAffected();
+    } catch (apiError) {
+      setActionError(apiError);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const actionsFor = (status) => {
     if (status === "pending") {
       return {
@@ -254,6 +370,10 @@ export default function AdminBookings() {
     return {};
   };
 
+  const rejectingBooking = bookings.find(
+    (row) => row.payment?.id === rejectingId
+  );
+
   const activeLabel = FILTERS.find((option) => option.key === filter)?.label;
 
   return (
@@ -261,7 +381,7 @@ export default function AdminBookings() {
       <AdminPageHeader
         eyebrow="Staff · Management"
         title="Bookings"
-        description="Every appointment across the shop, with the booking code the customer was given and the transitions staff actually need on each one."
+        description="Every appointment with the payment attached to it, so a booking and its money are checked in one place. Confirm the chair first — payment opens after that."
         actions={
           <AdminButton onClick={load} icon={RefreshCw} loading={refreshing}>
             Refresh
@@ -282,7 +402,7 @@ export default function AdminBookings() {
       <AdminSearch
         value={query}
         onChange={setQuery}
-        placeholder="Search by booking code, name, phone or service"
+        placeholder="Search by booking code, name, phone, service or TIN"
       />
 
       {actionError && (
@@ -312,9 +432,11 @@ export default function AdminBookings() {
               ? `No bookings match "${query}".`
               : filter === "all"
                 ? "No bookings yet."
-                : filter === "awaiting_payment"
-                  ? "Every live appointment has a payment behind it."
-                  : `No ${activeLabel?.toLowerCase()} bookings right now.`
+                : filter === "unpaid"
+                  ? "Every confirmed appointment has a payment behind it."
+                  : filter === "to_verify"
+                    ? "No payments are waiting to be checked."
+                    : `No ${activeLabel?.toLowerCase()} bookings right now.`
           }
           onRetry={load}
         />
@@ -331,7 +453,9 @@ export default function AdminBookings() {
               const busy = busyId === booking.id;
               const available = actionsFor(booking.status);
               const money = paymentState(booking);
+              const payable = isPayable(booking);
               const code = bookingCodeOf(booking);
+              const payment = booking.payment;
 
               return (
                 <li key={booking.id}>
@@ -348,23 +472,35 @@ export default function AdminBookings() {
                           {/* The money state, spelled out. A confirmed
                               booking with nothing paid is the case a
                               confirmation badge alone would hide. */}
-                          {money === "none" && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-[#d6a85f]/40 bg-[#d6a85f]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-console-accent">
-                              <CircleDollarSign size={10} />
-                              Unpaid
-                            </span>
-                          )}
+                          {money === "none" &&
+                            (payable ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-console-warn/30 bg-console-warn-soft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-console-warn">
+                                <CircleDollarSign size={10} />
+                                To pay
+                              </span>
+                            ) : (
+                              <AdminChip tone="neutral">
+                                Not payable yet
+                              </AdminChip>
+                            ))}
 
                           {money === "rejected" && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-[#e05a4f]/40 bg-[#e05a4f]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#e0776b]">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-console-bad/40 bg-console-bad-soft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-console-bad">
                               <CircleDollarSign size={10} />
                               Payment rejected
                             </span>
                           )}
 
                           {money === "verified" && (
-                            <span className="inline-flex items-center gap-1 rounded-full border-[#5fb98a]/40 bg-[#5fb98a]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7fcfa4]">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-console-good/40 bg-console-good-soft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-console-good">
                               Paid
+                            </span>
+                          )}
+
+                          {money === "pending" && (
+                            <span className="inline-flex items-center gap-1 rounded-full border-console-warn px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-console-warn">
+                              <Receipt size={10} />
+                              To check
                             </span>
                           )}
 
@@ -427,6 +563,138 @@ export default function AdminBookings() {
                       </AdminDetail>
                     </AdminDetails>
 
+                    {/* --- the payment attached to this booking -------- */}
+                    <div className="mt-4 border-t border-console-line pt-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-console-muted">
+                          Payment
+                        </p>
+
+                        {payment && canSeePayments && (
+                          <Link
+                            to="/admin/payments"
+                            className="inline-flex items-center gap-1 text-[11px] text-console-muted transition hover:text-console-accent"
+                          >
+                            Open the payment queue
+                            <ExternalLink size={10} />
+                          </Link>
+                        )}
+                      </div>
+
+                      {/* No `payments.view`, so the API did not send the
+                          payment and there is nothing to render. The unpaid
+                          badge above is still there on purpose: whether an
+                          appointment owes money is what the diary is for. */}
+                      {!canSeePayments && (
+                        <p className="mt-2 text-sm text-console-muted">
+                          Payment details are not shown to your account. The
+                          paid / unpaid state above is still accurate.
+                        </p>
+                      )}
+
+                      {canSeePayments && !payment && (
+                        <p className="mt-2 text-sm text-console-muted">
+                          {payable
+                            ? "Nothing sent yet. This booking is confirmed, so the customer can pay now."
+                            : booking.status === "pending"
+                              ? "Nothing sent yet, and nothing can be — this booking has not been confirmed, so payment is closed until it is."
+                              : "No payment for this booking."}
+                        </p>
+                      )}
+
+                      {canSeePayments && payment && (
+                        <div className="mt-3 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                          <AdminDetails columns={2}>
+                            <AdminDetail label="Amount">
+                              <span className="font-serif text-lg tabular-nums text-console-accent-strong">
+                                {formatPrice(payment.amount)}
+                              </span>
+                            </AdminDetail>
+
+                            <AdminDetail label="Method">
+                              {String(payment.method || "").replace(
+                                /_/g,
+                                " "
+                              ) || "—"}
+                            </AdminDetail>
+
+                            <AdminDetail label="Reference" mono>
+                              {payment.transaction_reference || "—"}
+                            </AdminDetail>
+
+                            <AdminDetail label="Sent">
+                              {new Date(payment.created_at).toLocaleString(
+                                "en-GB",
+                                {
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )}
+                            </AdminDetail>
+
+                            {payment.verified_at && (
+                              <AdminDetail label="Checked">
+                                {new Date(
+                                  payment.verified_at
+                                ).toLocaleString("en-GB", {
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </AdminDetail>
+                            )}
+
+                            {payment.rejection_reason && (
+                              <AdminDetail
+                                label="Rejected because"
+                                className="sm:col-span-2"
+                              >
+                                <span className="text-console-bad">
+                                  {payment.rejection_reason}
+                                </span>
+                              </AdminDetail>
+                            )}
+                          </AdminDetails>
+
+                          {/* The receipt first and full width on a phone:
+                              deciding a payment means looking at it, and a
+                              96px thumbnail beside a two-column grid left
+                              it unreadable. */}
+                          <div className="sm:w-56">
+                            {mediaUrl(payment.receipt) ? (
+                              <a
+                                href={mediaUrl(payment.receipt)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block"
+                              >
+                                <img
+                                  src={mediaUrl(payment.receipt)}
+                                  alt={`Receipt sent for booking ${code}`}
+                                  loading="lazy"
+                                  className="h-40 w-full rounded-xl border border-console-line object-cover transition hover:border-console-accent sm:h-44 sm:object-contain"
+                                />
+
+                                <span className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-console-muted">
+                                  <ExternalLink size={11} />
+                                  Tap the receipt to open it full size
+                                </span>
+                              </a>
+                            ) : (
+                              <div className="flex h-24 items-center justify-center gap-2 rounded-xl border border-dashed border-console-line-strong text-center text-xs text-console-faint">
+                                <FileImage size={14} />
+                                No receipt attached
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* --- actions ---------------------------------- */}
                     <div className="mt-4 flex flex-wrap gap-2 border-t border-console-line pt-4">
                       {available.confirm && (
                         <AdminButton
@@ -437,7 +705,7 @@ export default function AdminBookings() {
                             runAction(booking, available.confirm)
                           }
                         >
-                          Confirm
+                          Confirm booking
                         </AdminButton>
                       )}
 
@@ -453,6 +721,44 @@ export default function AdminBookings() {
                           Mark completed
                         </AdminButton>
                       )}
+
+                      {payment?.status === "pending" && canVerifyPayments && (
+                        <>
+                          <AdminButton
+                            tone="good"
+                            icon={Check}
+                            loading={busy}
+                            onClick={() => handleVerifyPayment(booking)}
+                          >
+                            Verify payment
+                          </AdminButton>
+
+                          <AdminButton
+                            icon={X}
+                            loading={busy}
+                            onClick={() => {
+                              setRejectingId(payment.id);
+                              setReason("");
+                              setActionError(null);
+                            }}
+                          >
+                            Reject payment
+                          </AdminButton>
+                        </>
+                      )}
+
+                      {/*
+                        A pending payment this account can see but not
+                        decide. Shown rather than silent, because the booking
+                        is sitting in someone's queue waiting for someone
+                        else and the screen should say so.
+                      */}
+                      {payment?.status === "pending" &&
+                        !canVerifyPayments && (
+                          <span className="inline-flex min-h-11 items-center text-[11px] leading-5 text-console-muted">
+                            Someone with payments.verify has to check this one.
+                          </span>
+                        )}
 
                       {available.cancel && (
                         <AdminConfirmButton
@@ -481,8 +787,105 @@ export default function AdminBookings() {
               );
             })}
           </ul>
+
+          <p className="text-[11px] leading-5 text-console-muted">
+            Confirm the booking first — payment opens after that. Verifying a
+            payment records who checked it; it no longer confirms the booking
+            as a side effect.
+          </p>
         </>
       )}
+
+      <AdminSheet
+        open={Boolean(rejectingId)}
+        onClose={() => {
+          setRejectingId(null);
+          setReason("");
+          setActionError(null);
+        }}
+        title="Reject this payment"
+        description={
+          rejectingBooking
+            ? `${formatPrice(
+                rejectingBooking.payment?.amount
+              )} sent for booking ${bookingCodeOf(rejectingBooking)}. The customer reads this reason and can send a clearer one.`
+            : ""
+        }
+        footer={
+          <>
+            <AdminButton
+              onClick={() => {
+                setRejectingId(null);
+                setReason("");
+                setActionError(null);
+              }}
+              disabled={busyId === rejectingId}
+            >
+              Cancel
+            </AdminButton>
+
+            <AdminButton
+              tone="danger"
+              loading={busyId === rejectingId}
+              onClick={() =>
+                rejectingBooking && handleRejectPayment(rejectingBooking)
+              }
+            >
+              Confirm rejection
+            </AdminButton>
+          </>
+        }
+      >
+        {rejectingBooking && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleRejectPayment(rejectingBooking);
+            }}
+            className="space-y-4"
+          >
+            {actionError && (
+              <Alert
+                tone="error"
+                title="Could not reject"
+                details={actionError.fieldErrors}
+              >
+                {actionError.message}
+              </Alert>
+            )}
+
+            <label
+              htmlFor="reject-reason"
+              className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-console-muted"
+            >
+              Reason <span className="text-console-bad">*</span>
+            </label>
+
+            <AdminTextarea
+              id="reject-reason"
+              rows={4}
+              value={reason}
+              placeholder="Why is this payment being rejected?"
+              onChange={(event) => setReason(event.target.value)}
+              invalid={Boolean(actionError?.fieldErrors?.reason)}
+            />
+
+            <p className="text-[11px] leading-5 text-console-muted">
+              Say what they need to change — a legible screenshot of the
+              transfer confirmation, or the TIN number on its own. The booking
+              stays confirmed, so they can send a corrected payment straight
+              away.
+            </p>
+
+            <button
+              type="submit"
+              className="sr-only"
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+          </form>
+        )}
+      </AdminSheet>
     </div>
   );
 }
