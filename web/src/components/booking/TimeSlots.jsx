@@ -1,6 +1,9 @@
 import { ChevronDown } from "lucide-react";
 
-import { groupSlotsByPartOfDay } from "../../utils/format";
+import {
+  formatEthiopianTime,
+  groupSlotsByEthiopianPartOfDay,
+} from "../../utils/ethiopianDate";
 import Alert from "../ui/Alert";
 import Spinner from "../ui/Spinner";
 import AvailabilityNotice from "./AvailabilityNotice";
@@ -8,6 +11,26 @@ import AvailabilityNotice from "./AvailabilityNotice";
 const SELECT =
   "w-full appearance-none rounded-xl border border-white/10 bg-[#181818] px-4 py-4 pr-12 text-sm text-white outline-none transition focus:border-[#d6a85f]/50 disabled:cursor-not-allowed disabled:opacity-60";
 
+/**
+ * The time picker.
+ *
+ * Grouped by the Amharic part of the day - ጠዋት, ቀን, ማታ, ማክሸነት - because
+ * that is how the shop already talks about when it is open, and reading
+ * "ማታ" for a 9pm slot says more to the person choosing it than "Evening"
+ * does. Every slot Django returned is still rendered; nothing here is
+ * filtered or invented.
+ *
+ * The digits stay Western. This is a time the customer compares against a
+ * booking confirmation and against what staff read out on the phone, and a
+ * clock they would have to learn a second numeral system to read is worse
+ * than the one they already read it in.
+ *
+ * Rendering is a native `<select>` rather than a grid of buttons on purpose:
+ * it is the control that already works one-handed on a phone, opens a
+ * scrollable list rather than a grid that has to fit 30 minutes into a
+ * screen, and is announced correctly. A prettier grid here would cost
+ * scrolling and accessibility for nothing.
+ */
 export default function TimeSlots({
   times,
   loading,
@@ -74,7 +97,7 @@ export default function TimeSlots({
   }
 
   const availableTimes = Array.isArray(times) ? times : [];
-  const groups = groupSlotsByPartOfDay(availableTimes);
+  const groups = groupSlotsByEthiopianPartOfDay(availableTimes);
 
   return (
     <div className="space-y-2">
@@ -86,12 +109,12 @@ export default function TimeSlots({
           aria-label="Choose an available time"
           className={SELECT}
         >
-          <option value="">Choose a time...</option>
+          <option value="">ጊዜ ይምረጡ — choose a time</option>
           {groups.map((group) => (
-            <optgroup key={group.key} label={group.label}>
+            <optgroup key={group.label} label={group.label}>
               {group.slots.map((slot) => (
                 <option key={slot} value={slot}>
-                  {slot}
+                  {formatEthiopianTime(slot)}
                 </option>
               ))}
             </optgroup>
@@ -104,8 +127,8 @@ export default function TimeSlots({
       </div>
       <p className="text-[10px] leading-5 text-white/25">
         {availableTimes.length} live slots available
-        {window ? ` · booked between ${window}` : ""}. Times refresh with
-        your service, date, or barber selection.
+        {window ? ` · ${window}` : ""}. Times refresh with your service, date,
+        or barber selection.
       </p>
     </div>
   );

@@ -155,12 +155,6 @@ export function AdminPageHeader({ eyebrow, title, description, actions, meta }) 
           {title}
         </h1>
 
-        {description && (
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-console-muted">
-            {description}
-          </p>
-        )}
-
         {meta}
       </div>
 
