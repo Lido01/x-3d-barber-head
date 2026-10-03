@@ -423,6 +423,10 @@ class PaymentEvidenceTests(APITestCase):
     With neither a screenshot nor a transaction reference there is nothing
     to match, and the only thing left is the customer's word - which is
     indistinguishable from a typo. So one of the two is required.
+
+    The booking here is CONFIRMED because that is the only state in which
+    payment is open at all - see PaymentGateTests for the rule that decides
+    it.
     """
 
     def setUp(self):
@@ -446,6 +450,7 @@ class PaymentEvidenceTests(APITestCase):
             booking_date=self.booking_date,
             start_time=time(10, 0),
             end_time=time(10, 45),
+            status=Booking.Status.CONFIRMED,
         )
 
     def submit(self, **overrides):
@@ -638,6 +643,11 @@ class DuplicatePaymentGuardTests(APITestCase):
     `booking` is a OneToOneField, so the database will refuse the second
     row - but it refuses it by raising, which the customer sees as a
     server fault on a screen where they are trying to hand over money.
+
+    The booking is CONFIRMED throughout, because that is the only state
+    payment is open in. Every refusal below is about the *second* payment
+    rather than about the booking, which is the distinction that matters
+    once the confirmation gate is in place.
     """
 
     def setUp(self):
@@ -656,6 +666,7 @@ class DuplicatePaymentGuardTests(APITestCase):
             booking_date=date.today() + timedelta(days=1),
             start_time=time(10, 0),
             end_time=time(10, 45),
+            status=Booking.Status.CONFIRMED,
         )
         self.payment = self._pay()
 
@@ -798,3 +809,583 @@ class DuplicatePaymentGuardTests(APITestCase):
             )
 
         self.assertIn("already been paid", str(caught.exception))
+
+
+class PaymentGateTests(APITestCase):
+    """
+    Reception confirms the appointment, and only then can money be taken.
+
+    The order is the point. Before it was enforced, a customer could book
+    a slot, be handed a pay form immediately, transfer the money, and be
+    sitting on a receipt for an appointment no one had looked at. The shop
+    then held a payment queue full of claims against chairs it had never
+    agreed to, and the customer had no way to know the difference.
+
+    So `create_payment` refuses anything that is not CONFIRMED. These
+    tests pin that refusal, and pin that it is refused in words the
+    customer can act on - a bare 400 on a screen whose whole purpose is
+    taking their money is indistinguishable from the payment having
+    failed.
+    """
+
+    def setUp(self):
+        from datetime import date, time, timedelta
+
+        self.service = Service.objects.create(
+            name="Signature Cut",
+            price=Decimal("350.00"),
+            duration=45,
+        )
+
+        self.barber = Barber.objects.create(name="Alex")
+
+        self.booking = Booking.objects.create(
+            customer_name="Sam Doe",
+            customer_phone="0911234567",
+            service=self.service,
+            barber=self.barber,
+            booking_date=date.today() + timedelta(days=1),
+            start_time=time(10, 0),
+            end_time=time(10, 45),
+        )
+
+    def submit(self, **overrides):
+        payload = {
+            "booking": self.booking.pk,
+            "booking_reference": self.booking.booking_code,
+            "booking_phone": self.booking.customer_phone,
+            "amount": "350.00",
+            "method": "telebirr",
+            "transaction_reference": "TIN0987",
+        }
+        payload.update(overrides)
+
+        return self.client.post(
+            reverse("payment-list"), payload, format="json"
+        )
+
+    def set_status(self, value):
+        self.booking.status = value
+        self.booking.save(update_fields=["status", "updated_at"])
+
+    # THE GATE
+
+    def test_a_booking_awaiting_confirmation_takes_no_payment(self):
+        """
+        The whole reason this gate exists.
+
+        A newly created booking is PENDING, so this is the state the very
+        first customer is in on the very first attempt. If it accepted
+        payment, the rule would be decorative.
+        """
+
+        self.assertEqual(self.booking.status, Booking.Status.PENDING)
+
+        response = self.submit()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_the_refusal_says_wait_for_reception_not_something_broken(self):
+        response = self.submit()
+
+        message = response.data["booking"][0]
+
+        # Names the thing that has to happen and who does it, so a
+        # customer reads it as "not yet" rather than "that did not work".
+        self.assertIn("not confirmed", message)
+        self.assertIn("Reception", message)
+
+    def test_the_evidence_rule_is_not_reached_before_the_gate(self):
+        """
+        A pending booking with no receipt is refused for the booking, not
+        for the missing evidence.
+
+        The order matters for what the customer reads: being told to add a
+        screenshot, and then being refused again after they had, is a worse
+        experience than being told to wait - and the second message would
+        name the wrong problem entirely.
+        """
+
+        response = self.submit(transaction_reference="")
+
+        self.assertNotIn("transaction_reference", response.data)
+        self.assertIn("booking", response.data)
+
+    def test_payment_opens_the_moment_reception_confirms(self):
+        self.set_status(Booking.Status.CONFIRMED)
+
+        response = self.submit()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], "pending")
+
+        # And the appointment did not move: confirming is what opened
+        # payment, paying is not what confirmed it.
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, Booking.Status.CONFIRMED)
+
+    def test_an_expired_booking_is_not_payable(self):
+        self.set_status(Booking.Status.EXPIRED)
+
+        response = self.submit()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("expired", response.data["booking"][0])
+
+    def test_a_cancelled_booking_says_cancelled(self):
+        self.set_status(Booking.Status.CANCELLED)
+
+        response = self.submit()
+
+        self.assertIn("cancelled", response.data["booking"][0])
+
+    def test_a_rejected_payment_can_be_corrected_after_confirmation(self):
+        """
+        The gate must not close on the one booking that still needs the
+        customer. A rejected payment means money was sent and could not be
+        matched - the booking is confirmed, so the correction is allowed
+        through exactly as the first submission was.
+        """
+
+        self.set_status(Booking.Status.CONFIRMED)
+
+        self.submit(transaction_reference="TIN0987")
+
+        Payment.objects.update(status=Payment.Status.REJECTED)
+
+        response = self.submit(transaction_reference="TIN0988")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["transaction_reference"], "TIN0988")
+
+    # WHAT THE INTERFACE READS
+
+    def test_the_booking_row_reports_that_payment_is_not_open_yet(self):
+        """
+        The customer screens decide whether to show a pay form by reading
+        `payment_open` off the booking. A pending booking has to say no,
+        or the form is offered for a chair nobody has agreed to.
+        """
+
+        response = self.client.post(
+            "/api/bookings/lookup/",
+            {
+                "code": self.booking.booking_code,
+                "phone": self.booking.customer_phone,
+            },
+            format="json",
+        )
+
+        self.assertFalse(response.data["payment_open"])
+        # Money is still owed, though - which is the distinction the whole
+        # change rests on. `payment_due` asks "does the shop want this
+        # money", `payment_open` asks "can I send it now".
+        self.assertTrue(response.data["payment_due"])
+
+    def test_confirming_flips_payment_open_on_the_booking_row(self):
+        from apps.bookings.services import confirm_booking
+
+        confirm_booking(
+            Booking.objects.get(pk=self.booking.pk)
+        )
+
+        response = self.client.post(
+            "/api/bookings/lookup/",
+            {
+                "code": self.booking.booking_code,
+                "phone": self.booking.customer_phone,
+            },
+            format="json",
+        )
+
+        self.assertTrue(response.data["payment_open"])
+
+    def test_a_pending_payment_closes_payment_open_again(self):
+        """
+        Open, then closed: having sent the money is not the same as
+        offering to send more, and the form has to disappear the moment the
+        first submit lands.
+        """
+
+        self.set_status(Booking.Status.CONFIRMED)
+        self.submit(transaction_reference="TIN0987")
+
+        response = self.client.post(
+            "/api/bookings/lookup/",
+            {
+                "code": self.booking.booking_code,
+                "phone": self.booking.customer_phone,
+            },
+            format="json",
+        )
+
+        self.assertFalse(response.data["payment_open"])
+        self.assertEqual(response.data["payment"]["status"], "pending")
+
+
+class BookingPaymentFlowTests(APITestCase):
+    """
+    The whole thing, in the order the shop runs it.
+
+    Every other test in this file checks one rule in isolation. This one
+    walks a single customer's booking from the moment they press Reserve to
+    the moment the money is recorded, over HTTP, using only what the
+    interface can do - because a set of individually correct rules can still
+    describe an impossible order, and the only thing that catches that is a
+    test that performs the steps in sequence.
+
+    The order under test:
+
+        requested -> confirmed -> paid -> checked
+
+    Each step asserts what the *next* screen will read, because that is the
+    contract between them. The customer's result page polls the status
+    endpoint and renders a pay form from `payment_open`; the console reads
+    the same flags off the booking row. If any of them drifts, this fails.
+    """
+
+    def setUp(self):
+        from datetime import date, timedelta
+
+        self.service = Service.objects.create(
+            name="Signature Cut",
+            price=Decimal("350.00"),
+            duration=45,
+        )
+
+        self.barber = Barber.objects.create(name="Alex")
+
+        self.date = date.today() + timedelta(days=1)
+
+        self.admin = get_user_model().objects.create_user(
+            username="flow-admin",
+            password="StrongPassword123!",
+            is_staff=True,
+        )
+
+        StaffAccess.objects.create(
+            user=self.admin,
+            role=StaffAccess.Role.ADMIN,
+        )
+
+    def headers(self, booking):
+        return {
+            "HTTP_X_BOOKING_CODE": booking.booking_code,
+            "HTTP_X_BOOKING_PHONE": booking.customer_phone,
+        }
+
+    def status(self, booking):
+        """What the customer's page reads while they wait."""
+
+        return self.client.get(
+            f"/api/bookings/{booking.pk}/status/",
+            **self.headers(booking),
+        )
+
+    def reserve(self):
+        response = self.client.post(
+            "/api/bookings/",
+            {
+                "customer_name": "Sam Doe",
+                "customer_phone": "0911234567",
+                "service": self.service.pk,
+                "booking_date": str(self.date),
+                "start_time": "10:00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        return Booking.objects.get(pk=response.data["id"])
+
+    def pay(self, booking, **overrides):
+        payload = {
+            "booking": booking.pk,
+            "booking_reference": booking.booking_code,
+            "booking_phone": booking.customer_phone,
+            "amount": "350.00",
+            "method": "telebirr",
+            "transaction_reference": "TIN0987",
+        }
+        payload.update(overrides)
+
+        return self.client.post(
+            reverse("payment-list"), payload, format="json"
+        )
+
+    # --- the sequence --------------------------------------------
+
+    def lookup(self, code, phone="0911234567"):
+        """What the customer sees when they quote a code."""
+
+        return self.client.post(
+            "/api/bookings/lookup/",
+            {"code": code, "phone": phone},
+            format="json",
+        )
+
+    def test_the_full_sequence_is_only_reachable_in_order(self):
+        booking = self.reserve()
+
+        # 1. Requested. Pending, not payable, and no money wanted yet.
+        self.assertEqual(booking.status, Booking.Status.PENDING)
+
+        step = self.status(booking)
+
+        self.assertEqual(step.data["booking"]["status"], "pending")
+        self.assertIsNone(step.data["payment"])
+        self.assertFalse(step.data["payment_open"])
+
+        # 2. The customer cannot pay. This is the step the whole rule
+        #    exists for, asserted over the real endpoint rather than by
+        #    calling the service directly.
+        self.assertEqual(self.pay(booking).status_code, 400)
+        self.assertEqual(Payment.objects.count(), 0)
+
+        # 3. Reception confirms. Payment opens in the same moment.
+        self.client.force_authenticate(self.admin)
+
+        confirmed = self.client.post(f"/api/bookings/{booking.pk}/confirm/")
+
+        self.assertEqual(confirmed.status_code, status.HTTP_200_OK)
+
+        self.client.force_authenticate(user=None)
+
+        step = self.status(booking)
+
+        self.assertEqual(step.data["booking"]["status"], "confirmed")
+        self.assertTrue(step.data["payment_open"])
+
+        # 4. The customer pays.
+        paid = self.pay(booking)
+
+        self.assertEqual(paid.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(paid.data["status"], Payment.Status.PENDING)
+
+        step = self.status(booking)
+
+        self.assertEqual(step.data["payment"]["status"], "pending")
+        self.assertFalse(step.data["payment_open"])
+        # Paying closed the form behind it: sending twice is refused.
+        self.assertEqual(self.pay(booking).status_code, 400)
+
+        # 5. The shop checks the money.
+        self.client.force_authenticate(self.admin)
+
+        checked = self.client.post(
+            reverse("payment-verify", args=[paid.data["id"]])
+        )
+
+        self.assertEqual(checked.status_code, status.HTTP_200_OK)
+        self.assertEqual(checked.data["status"], "verified")
+        self.assertIsNotNone(checked.data["verified_at"])
+
+        self.client.force_authenticate(user=None)
+
+        # 6. Both halves agree, and the appointment never moved.
+        step = self.status(booking)
+
+        self.assertEqual(step.data["payment"]["status"], "verified")
+        self.assertEqual(step.data["booking"]["status"], "confirmed")
+        self.assertEqual(step.data["booking"]["booking_code"], booking.booking_code)
+
+    def test_the_code_the_customer_was_given_opens_that_booking_only(self):
+        """
+        The reference handed over at the end of step 1 is the reference that
+        has to work at the end of step 6 - and it has to open *this*
+        appointment even after a second booking exists on the same number.
+        """
+
+        from datetime import timedelta
+
+        first = self.reserve()
+
+        # The same person books again on the same number, as they would.
+        second = Booking.objects.create(
+            customer_name="Sam Doe",
+            customer_phone="0911234567",
+            service=self.service,
+            barber=self.barber,
+            booking_date=self.date + timedelta(days=3),
+            start_time="15:00",
+            end_time="15:45",
+            status=Booking.Status.CONFIRMED,
+        )
+
+        self.assertNotEqual(first.booking_code, second.booking_code)
+
+        # The first code opens the first booking - and only that. No list, no
+        # second record: the response is the booking the customer named, so
+        # there is nothing on the screen for the wrong appointment to hide
+        # among.
+        found = self.lookup(first.booking_code)
+
+        self.assertEqual(found.data["booking"]["id"], first.pk)
+        self.assertNotIn("other_bookings", found.data)
+        self.assertNotIn("bookings", found.data)
+
+        # And the second code opens the second booking.
+        other = self.lookup(second.booking_code)
+
+        self.assertEqual(other.data["booking"]["id"], second.pk)
+        self.assertNotIn("other_bookings", other.data)
+
+    def test_a_second_booking_on_one_number_does_not_disturb_the_first(self):
+        """
+        The two are independent appointments with independent money. Adding a
+        booking must not move the first one's status, and must not make its
+        payment readable through the other one's code.
+        """
+
+        from datetime import timedelta
+
+        first = self.reserve()
+
+        self.client.force_authenticate(self.admin)
+        self.client.post(f"/api/bookings/{first.pk}/confirm/")
+        self.client.force_authenticate(user=None)
+
+        paid = self.pay(first)
+
+        self.client.force_authenticate(self.admin)
+        self.client.post(f"/api/bookings/{first.pk}/confirm/")
+        self.client.post(
+            reverse("payment-verify", args=[paid.data["id"]])
+        )
+        self.client.force_authenticate(user=None)
+
+        second = Booking.objects.create(
+            customer_name="Sam Doe",
+            customer_phone="0911234567",
+            service=self.service,
+            barber=self.barber,
+            booking_date=self.date + timedelta(days=3),
+            start_time="15:00",
+            end_time="15:45",
+            status=Booking.Status.CONFIRMED,
+        )
+
+        first_found = self.lookup(first.booking_code)
+
+        self.assertEqual(first_found.data["booking"]["status"], "confirmed")
+        self.assertEqual(first_found.data["payment"]["status"], "verified")
+        self.assertFalse(first_found.data["payment_open"])
+
+        second_found = self.lookup(second.booking_code)
+
+        self.assertIsNone(second_found.data["payment"])
+        self.assertTrue(second_found.data["payment_open"])
+
+    def test_the_console_sees_the_same_thing_at_every_step(self):
+        """
+        The bookings screen reads the money off the booking row rather than
+        off a second request, so the two views of a booking are only equal
+        if they were computed from the same state. Checked at the two
+        moments it matters: before the customer can pay, and after.
+        """
+
+        booking = self.reserve()
+
+        def console_row():
+            self.client.force_authenticate(self.admin)
+
+            try:
+                return self.client.get("/api/bookings/").data[0]
+            finally:
+                self.client.force_authenticate(user=None)
+
+        pending = console_row()
+
+        self.assertIsNone(pending["payment"])
+        self.assertFalse(pending["payment_open"])
+
+        # Money is intended but not yet payable. The console reads
+        # `payment_open` to decide whether to tell staff a customer owes
+        # money today, and showing "unpaid" on a booking nobody has confirmed
+        # is what sends reception chasing a payment the customer is not able
+        # to make.
+        self.assertTrue(pending["payment_due"])
+        self.assertFalse(pending["payment_open"])
+
+        self.client.force_authenticate(self.admin)
+        self.client.post(f"/api/bookings/{booking.pk}/confirm/")
+        self.client.force_authenticate(user=None)
+
+        confirmed = console_row()
+
+        self.assertTrue(confirmed["payment_due"])
+        self.assertTrue(confirmed["payment_open"])
+        self.assertIsNone(confirmed["payment"])
+
+        paid = self.pay(booking)
+
+        self.client.force_authenticate(self.admin)
+        self.client.post(reverse("payment-verify", args=[paid.data["id"]]))
+        self.client.force_authenticate(user=None)
+
+        settled = console_row()
+
+        self.assertEqual(settled["payment"]["status"], "verified")
+        self.assertFalse(settled["payment_due"])
+        self.assertFalse(settled["payment_open"])
+
+    def test_a_rejected_payment_settles_without_leaving_the_chair(self):
+        """
+        The one branch where the customer comes back. Money was sent and
+        could not be matched; the booking stays confirmed, payment reopens,
+        and the corrected submission lands on the same payment row - so the
+        appointment is paid and the customer is never left owing on a chair
+        the shop promised.
+        """
+
+        booking = self.reserve()
+
+        self.client.force_authenticate(self.admin)
+        self.client.post(f"/api/bookings/{booking.pk}/confirm/")
+        self.client.force_authenticate(user=None)
+
+        first = self.pay(booking)
+        payment_id = first.data["id"]
+
+        self.client.force_authenticate(self.admin)
+
+        rejected = self.client.post(
+            reverse("payment-reject", args=[payment_id]),
+            {"reason": "The TIN does not match any transfer."},
+            format="json",
+        )
+
+        self.assertEqual(rejected.status_code, status.HTTP_200_OK)
+        self.client.force_authenticate(user=None)
+
+        # Open again, with the reason attached to the booking.
+        step = self.status(booking)
+
+        self.assertTrue(step.data["payment_open"])
+        self.assertTrue(step.data["payment_rejected"])
+        self.assertFalse(step.data["payment_due"])
+        self.assertIn(
+            "does not match",
+            step.data["payment"]["rejection_reason"],
+        )
+
+        second = self.pay(booking, transaction_reference="TIN9001")
+
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+
+        # Same row, so every link to that payment id still works.
+        self.assertEqual(second.data["id"], payment_id)
+        self.assertEqual(Payment.objects.count(), 1)
+
+        self.client.force_authenticate(self.admin)
+        self.client.post(reverse("payment-verify", args=[payment_id]))
+        self.client.force_authenticate(user=None)
+
+        booking.refresh_from_db()
+
+        self.assertEqual(booking.status, Booking.Status.CONFIRMED)
+        self.assertEqual(
+            self.status(booking).data["payment"]["status"], "verified"
+        )
