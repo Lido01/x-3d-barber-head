@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Check, ExternalLink, RefreshCw, X } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import Alert from "../../components/ui/Alert";
 import {
@@ -26,28 +27,41 @@ import {
   verifyPayment,
 } from "../../services/paymentApi";
 import { invalidateQuery, useQuery, EMPTY_LIST } from "../../hooks/useQuery";
-import { formatPrice } from "../../utils/format";
+import { formatDate, formatPrice, formatTime } from "../../utils/format";
 
 /**
  * Staff payment verification.
  *
- * Verifying calls POST /api/payments/payments/{id}/verify/, which is
- * also what confirms the booking on the backend (verify_payment ->
- * confirm_booking). Both cached views are invalidated afterwards, so the
- * bookings list and the customer's own status page move with this one
- * rather than waiting out a TTL.
+ * The queue. Its job is to answer one question per row - is this the right
+ * money for this appointment - and that is why every row now carries the
+ * booking's code, status, date and time rather than only the money: the
+ * answer is impossible to give from an amount, a method and a reference
+ * alone, and getting it wrong means accepting a transfer against the wrong
+ * chair.
  *
- * The default filter is `pending` because that is the queue staff
- * actually work.
+ * Verifying calls POST /api/payments/payments/{id}/verify/. It no longer
+ * confirms the booking as a side effect - reception confirms first and
+ * payment opens second - so the booking status on a row is information
+ * rather than something this screen quietly fixes. Both cached views are
+ * invalidated afterwards, so the bookings screen moves with this one rather
+ * than waiting out a TTL: deciding a payment is deciding the booking's money
+ * state, and the two screens must never disagree about it.
  *
- * On a phone the receipt is the first thing shown, full width and
- * tappable, since deciding a payment means looking at it. From `lg` it
- * moves beside the details instead, because by then there is room for
- * both and a 256px image under a full-width column is wasted space.
+ * The same decision can be made on the bookings screen, where the
+ * appointment and its receipt are on one card. This queue is the other way
+ * in: everything still waiting, in one list, ordered by what needs doing.
+ *
+ * The default filter is `pending` because that is the queue staff actually
+ * work.
+ *
+ * On a phone the receipt is the first thing shown, full width and tappable,
+ * since deciding a payment means looking at it. From `lg` it moves beside the
+ * details instead, because by then there is room for both and a 256px image
+ * under a full-width column is wasted space.
  *
  * Rejecting asks for a reason in a sheet rather than expanding a field
- * inline: a rejection is a decision with a consequence for a customer,
- * and it should not be one tap away from the row above it.
+ * inline: a rejection is a decision with a consequence for a customer, and
+ * it should not be one tap away from the row above it.
  */
 
 const FILTERS = [
@@ -112,9 +126,11 @@ export default function AdminPayments() {
         return true;
       }
 
-      return [
+return [
         payment.booking_customer,
         payment.booking_service,
+        payment.booking_code,
+        payment.booking_barber,
         payment.transaction_reference,
         String(payment.id),
         String(payment.booking),
@@ -126,14 +142,18 @@ export default function AdminPayments() {
     });
   }, [payments, filter, query]);
 
-  /**
-   * Verifying a payment also confirms its booking, so both cached views
-   * are now out of date - including the customer's live status page,
-   * which reads the same key through usePaymentStatus.
+/**
+   * A decision here changes the booking's money state, so the bookings
+   * screen is now out of date too - it carries the same payment attached.
+   * It also has to reach the customer's live page, which reads the booking
+   * status endpoint; both keys contain "bookings", so one invalidation
+   * covers them and neither screen is left showing a payment the other has
+   * already settled.
    */
   const refreshAffected = () => {
     invalidateQuery("payments");
     invalidateQuery("bookings");
+    invalidateQuery("reports/dashboard");
   };
 
   const handleVerify = async (payment) => {
@@ -252,14 +272,24 @@ export default function AdminPayments() {
 
             return (
               <li key={payment.id}>
-                <AdminPanel>
+<AdminPanel>
                   <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                         <p className="font-serif text-lg leading-none text-console-ink">
-                          #{payment.id}
+                          {payment.booking_code || `#${payment.booking}`}
                         </p>
+
                         <AdminStatus status={payment.status} />
+
+                        {/* The booking's own state, so "is this money for a
+                            chair the shop agreed to" is answerable from this
+                            row. A pending booking on a payment is a booking
+                            that should never have been payable. */}
+                        <AdminStatus
+                          status={payment.booking_status}
+                          className="opacity-80"
+                        />
                       </div>
 
                       <p className="mt-1.5 break-words text-sm font-medium text-console-ink">
@@ -268,8 +298,12 @@ export default function AdminPayments() {
 
                       <p className="mt-0.5 text-xs text-console-muted">
                         {[
-                          `Booking #${payment.booking}`,
                           payment.booking_service,
+                          payment.booking_barber,
+                          payment.booking_date &&
+                            `${formatDate(payment.booking_date)} · ${formatTime(
+                              payment.booking_start_time
+                            )}`,
                         ]
                           .filter(Boolean)
                           .join(" · ")}
@@ -311,7 +345,7 @@ export default function AdminPayments() {
                     )}
                   </div>
 
-                  <AdminDetails
+<AdminDetails
                     columns={2}
                     className="mt-4 border-t border-console-line pt-4"
                   >
@@ -336,9 +370,9 @@ export default function AdminPayments() {
                   </AdminDetails>
 
                   {isPending && (
-                    <div className="mt-4 flex flex-wrap gap-2 border-t border-console-line pt-4">
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-console-line pt-4">
                       <AdminButton
-                        tone="primary"
+                        tone="good"
                         icon={Check}
                         loading={busy}
                         onClick={() => handleVerify(payment)}
@@ -357,6 +391,19 @@ export default function AdminPayments() {
                       >
                         Reject
                       </AdminButton>
+
+                      {/* The same decision is available on the booking,
+                          where the appointment and its receipt sit on one
+                          card. Linked rather than repeated, so there is one
+                          place that decides money and one that decides the
+                          chair. */}
+                      <Link
+                        to="/admin/bookings"
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-[11px] text-console-muted transition hover:text-console-accent"
+                      >
+                        Open the booking
+                        <ExternalLink size={11} />
+                      </Link>
                     </div>
                   )}
                 </AdminPanel>
@@ -366,9 +413,11 @@ export default function AdminPayments() {
         </ul>
       )}
 
-      {shown.length > 0 && (
+{shown.length > 0 && (
         <p className="text-[11px] leading-5 text-console-muted">
-          Verifying a payment also confirms its booking.
+          Bookings are confirmed by reception before payment opens, so
+          everything here should sit on a confirmed booking. Verifying
+          records who checked the money; it does not confirm the chair.
         </p>
       )}
 
