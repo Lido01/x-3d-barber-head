@@ -1,5 +1,4 @@
 from rest_framework import status, viewsets
-from django.utils.timezone import localdate
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import (
@@ -18,6 +17,7 @@ from drf_spectacular.utils import (
 
 from .models import Booking, Barber
 from .serializers import (
+    AdminBookingSerializer,
     AvailabilitySerializer,
     BarberSerializer,
     BookingLookupSerializer,
@@ -29,8 +29,11 @@ from .services import (
     confirm_booking,
     get_availability_report,
     list_bookings_for_user,
+    normalise_booking_code,
+    require_customer_booking,
 )
-from apps.accounts.permissions import capability_permission
+from apps.payments.services import booking_money_state
+from apps.accounts.permissions import can, capability_permission
 from apps.accounts.audit import log_action
 
 
@@ -52,11 +55,15 @@ def booking_payload(booking, payment=None):
     """
     One booking as the customer is allowed to see it, plus its money state.
 
-    One shape for the lookup, the history list and the success page, so
+    One shape for the lookup, the live status read and the success page, so
     the three cannot disagree about what a customer's own booking looks
-    like. `payment_state` is spelled out as its own field rather than left
-    for the client to infer from a nested object, because "do I still owe
-    money" is the question the whole screen exists to answer.
+    like.
+
+    The money flags are computed by payments.services and named here rather
+    than left for the client to infer from a nested object, because "do I
+    still owe money" and "may I pay right now" are the two questions the
+    whole screen exists to answer - and they are not the same question any
+    more now that reception confirms before payment opens.
 
     The payments serializer is imported here rather than at the top of the
     module: apps.payments.services already imports bookings.services, so a
@@ -69,72 +76,48 @@ def booking_payload(booking, payment=None):
     if payment is None:
         payment = payment_state(booking)
 
+    money = booking_money_state(booking)
+
     return {
         "booking": BookingSerializer(booking).data,
         "payment": (
             PaymentSerializer(payment).data if payment is not None else None
         ),
-        # Whether the shop is still waiting on money for this appointment.
-        # Drives the pay call to action on the customer's own screens and
-        # the outstanding figure on the staff ones.
-        "payment_due": (
-            payment is None
-            and booking.status
-            in [
-                Booking.Status.PENDING,
-                Booking.Status.CONFIRMED,
-            ]
-        ),
-        # A rejected payment is not "nothing sent" - money was sent and
-        # the shop could not match it. A booking with one of these needs a
-        # phone call, not a fresh upload, and the customer is told so.
-        "payment_rejected": (
-            payment is not None
-            and payment.status == "rejected"
-        ),
+        # Money still owed on a live appointment. Drives the "to pay"
+        # figure on the customer's history and the outstanding figure on
+        # the shop's dashboard.
+        "payment_due": money["payment_due"],
+        # Payment may be sent this minute. False while reception has yet to
+        # confirm, which is what closes the pay form.
+        "payment_open": money["payment_open"],
+        # Money was sent and the shop could not match it. Not "nothing
+        # sent": this booking needs a corrected screenshot or a phone call.
+        "payment_rejected": money["payment_rejected"],
     }
 
 
-def booking_history_payload(bookings, matched_code):
+def booking_lookup_payload(booking):
     """
-    Everything one customer has booked, newest first, with a summary.
+    The one booking a customer asked for.
 
-    The summary is here rather than counted in the browser: the interface
-    needs to say "3 bookings, 1 still to pay", and counting rows the
-    browser already has is the kind of figure that quietly disagrees with
-    a filter the customer applied.
+    `booking` is the row whose own code the customer quoted, and it is the
+    whole response. It is not the customer's history, and it is not a row
+    inside a list.
+
+    That is the entire point of the endpoint. Every booking has its own code,
+    so the code identifies the *booking* and not the customer - and the
+    screen it opens has exactly one thing on it, which means there is
+    nothing to pick from and therefore nothing to pick wrong. Someone who
+    booked three times holds three codes and any of them opens its own
+    appointment.
+
+    The earlier behaviour - return everything on the phone number - made the
+    code decorative: it named the customer, so a customer checking whether
+    one appointment was paid opened a list of however many they had and
+    read whichever row they recognised. The code identified nothing.
     """
 
-    today = localdate()
-
-    rows = [booking_payload(booking) for booking in bookings]
-
-    return {
-        "bookings": rows,
-        "matched_code": matched_code,
-        "totals": {
-            "all": len(rows),
-            "upcoming": sum(
-                1
-                for row in rows
-                if row["booking"]["booking_date"] >= today.isoformat()
-                and row["booking"]["status"]
-                not in [
-                    Booking.Status.CANCELLED,
-                    Booking.Status.COMPLETED,
-                ]
-            ),
-            "awaiting_payment": sum(
-                1 for row in rows if row["payment_due"]
-            ),
-            "awaiting_response": sum(
-                1
-                for row in rows
-                if row["payment"] is not None
-                and row["payment"]["status"] == "pending"
-            ),
-        },
-    }
+    return booking_payload(booking)
 
 
 class BookingViewSet(viewsets.ModelViewSet):
@@ -183,6 +166,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             GET availability
             POST booking
             POST lookup
+            GET one booking's status, proved by code + phone
 
         Signed in, customer scope:
 
@@ -200,6 +184,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             "create",
             "availability",
             "lookup",
+            "status",
         ]:
             return [
                 AllowAny(),
@@ -213,6 +198,41 @@ class BookingViewSet(viewsets.ModelViewSet):
         capability = "bookings.view" if self.action in ["list", "retrieve"] else "bookings.manage"
         return [IsAuthenticated(), capability_permission(capability)()]
 
+    def get_serializer_class(self):
+        """
+        Staff reads get the payment attached to the booking - but only if
+        the account is allowed to see money at all.
+
+        `list` and `retrieve` are the two actions behind `bookings.view`,
+        and both are staff-only. The customer-facing actions keep the plain
+        serializer, so a guest response never carries a receipt image or a
+        verifier's name: the customer gets that from the lookup and the
+        status read instead, scoped to the one booking whose code and phone
+        they supplied.
+
+        The capability check is the important part. Attaching the payment to
+        every booking row hands amount, transaction reference and receipt
+        image to anyone who can view the diary, which is a different and
+        larger grant than `bookings.view` has ever meant - before this, the
+        only place those fields appeared was the payment screen, behind
+        `payments.view`. So an account without it gets the plain serializer
+        and no `payment` key at all.
+
+        That makes the key's *presence* the signal, and the console reads it
+        as such: a booking with no `payment` key is one whose money this
+        account may not see, which is a different thing from a booking with
+        `payment: null`, which is a booking nobody has paid for. Both are
+        present-or-null rather than ever missing, so neither is confused
+        with the other.
+        """
+
+        if self.action in ["list", "retrieve"] and can(
+            "payments.view", self.request.user
+        ):
+            return AdminBookingSerializer
+
+        return BookingSerializer
+
     # ---------------------------------------------------------
     # LOOK A BOOKING UP BY ITS CODE
     # ---------------------------------------------------------
@@ -222,10 +242,9 @@ class BookingViewSet(viewsets.ModelViewSet):
         responses={
             200: OpenApiResponse(
                 description=(
-                    "Every booking made with that phone number, newest "
-                    "first, each with its payment if one was submitted, "
-                    "whether payment is still outstanding, and a summary "
-                    "of the totals."
+                    "The one booking that code names, with its payment if "
+                    "one was submitted, and whether payment is open right "
+                    "now."
                 ),
             ),
             400: OpenApiResponse(
@@ -237,11 +256,18 @@ class BookingViewSet(viewsets.ModelViewSet):
         description=(
             "Public booking lookup. The customer quotes the code from "
             "their confirmation together with the phone number the "
-            "booking was made with, and gets back their whole history - "
-            "so they can check whether the shop has verified a payment "
-            "without needing an account. The code proves who is asking; "
-            "the phone number is then the key to everything else they "
-            "have booked."
+            "booking was made with, and gets back **that** booking - the "
+            "appointment, its payment, and whether it can be paid for "
+            "now.\n\n"
+            "Every booking gets its own code, so someone who has booked "
+            "three times holds three references and each one leads to its "
+            "own appointment. This endpoint returns the one they quoted "
+            "and nothing else - no list of the rest, no history. The "
+            "screen it opens has one record on it, so there is no list "
+            "for the wrong appointment to be lost in.\n\n"
+            "The code proves who is asking; the phone number is the second "
+            "half. An unknown code is answered exactly like a wrong phone "
+            "number, so this cannot be used to discover which codes exist."
         ),
     )
     @action(
@@ -251,7 +277,7 @@ class BookingViewSet(viewsets.ModelViewSet):
     )
     def lookup(self, request):
         """
-        Return one customer's booking history, to that customer.
+        Return the one booking this customer quoted a code for.
 
         POST rather than GET, and deliberately: the phone number belongs
         in a request body, not in a URL that ends up in an access log, a
@@ -264,11 +290,93 @@ class BookingViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         return Response(
-            booking_history_payload(
-                serializer.validated_data["bookings"],
-                serializer.validated_data["matched_code"],
-            )
+            booking_lookup_payload(serializer.validated_data["booking"])
         )
+
+    # ---------------------------------------------------------
+    # ONE BOOKING, LIVE, FOR THE CUSTOMER
+    # ---------------------------------------------------------
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="X-Booking-Code",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.HEADER,
+                required=True,
+                description="The booking code, e.g. BK-0025.",
+            ),
+            OpenApiParameter(
+                name="X-Booking-Phone",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.HEADER,
+                required=True,
+                description=(
+                    "The phone number the booking was made with."
+                ),
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                description=(
+                    "The booking, the payment attached to it if there is "
+                    "one, whether money is still owed, and whether "
+                    "payment is open right now."
+                ),
+            ),
+            400: OpenApiResponse(
+                description=(
+                    "The code and phone number do not match this booking."
+                ),
+            ),
+            404: OpenApiResponse(
+                description="No such booking.",
+            ),
+        },
+        description=(
+            "One booking, live, for the customer who owns it.\n\n"
+            "This is the endpoint the booking result page polls. It "
+            "answers two questions at once - has reception confirmed the "
+            "appointment yet, and has the shop checked the payment - so a "
+            "customer waiting on either only waits on one request.\n\n"
+            "The code and phone travel in headers rather than the query "
+            "string: this is a GET, and a GET carrying a credential must "
+            "not end up in an access log, a browser history or a "
+            "Referer header."
+        ),
+    )
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="status",
+    )
+    def status(self, request, pk=None):
+        """
+        The live state of one booking, for the customer who booked it.
+
+        Refuses on the same terms as every other customer read here: the
+        booking code plus the phone number it was made with. An unknown
+        code and a wrong phone are answered identically, so this cannot be
+        used to find out which codes exist.
+
+        Always a 200 once the proof passes, including when there is no
+        payment yet. "No payment has been sent" is a state the interface
+        has to render, not a failure - and answering it with a 404 is what
+        once left the payment page on a spinner for the customers who came
+        to pay.
+        """
+
+        booking = self.get_object()
+
+        require_customer_booking(
+            booking,
+            code=normalise_booking_code(
+                request.headers.get("X-Booking-Code", "")
+            ),
+            phone=request.headers.get("X-Booking-Phone", ""),
+        )
+
+        return Response(booking_payload(booking))
 
     # ---------------------------------------------------------
     # A CUSTOMER'S OWN BOOKINGS
