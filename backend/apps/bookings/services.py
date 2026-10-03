@@ -19,6 +19,7 @@ import re
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.utils.timezone import localdate
 
 from rest_framework.exceptions import ValidationError
@@ -167,6 +168,56 @@ def phone_matches(stored, offered):
         return True
 
     return phone_signature(left) == phone_signature(right)
+
+
+#: The one refusal every customer-proof check gives.
+#:
+#: Deliberately identical whatever went wrong. "No such booking code" and
+#: "that is not your phone number" are told the same way, because a
+#: booking code is derived from a row id and therefore guessable: an
+#: endpoint that said which half was wrong would be confirming which codes
+#: exist, and the phone number would stop being a second factor.
+CUSTOMER_PROOF_ERROR = {
+    "booking": [
+        "We could not match that booking code and phone"
+    ]
+}
+
+
+def require_customer_booking(booking, *, code, phone):
+    """
+    Prove this booking belongs to whoever is asking, or refuse.
+
+    The customer's whole flow is unauthenticated - no account, no session
+    - so a booking code plus the phone number it was made with is the only
+    thing standing between a stranger and someone's name, phone number,
+    appointment time and payment receipt.
+
+    Two shapes of the same check reach here:
+
+      - the lookup, in the request body, because the phone number
+        belongs in a body rather than a URL that lands in an access log;
+      - the live status read, in headers, because a GET that carries a
+        credential must never be cached.
+
+    One implementation for both, so the two can never disagree about who
+    is allowed to see what - which is the failure that turns "code plus
+    phone" into "code".
+
+    :returns: the booking, so a caller can write `require_customer_booking(
+        booking, ...)` and carry on.
+    :raises ValidationError: with `CUSTOMER_PROOF_ERROR`.
+    """
+
+    if (
+        booking is None
+        or not code
+        or booking.booking_code != code
+        or not phone_matches(booking.customer_phone, phone)
+    ):
+        raise ValidationError(CUSTOMER_PROOF_ERROR)
+
+    return booking
 
 
 def raise_time_unavailable(message, *, status, **extra):
@@ -1293,9 +1344,9 @@ def get_available_times(
     )["available_times"]
 
 
-def find_bookings_by_code(*, code, phone):
+def find_booking_by_code(*, code, phone):
     """
-    Every booking made with one phone number, proved by one booking code.
+    One booking, named by its own code and proved by its own phone number.
 
     A booking code alone is not a credential. It is short, it is printed
     on the confirmation, and it is derived from a row id, so anyone could
@@ -1303,19 +1354,21 @@ def find_bookings_by_code(*, code, phone):
     a phone number, a service, an appointment time and a payment receipt,
     so the phone number the booking was made with is required as well.
 
-    The code proves who is asking. The phone number is then the key to
-    everything else they have booked - which is the whole point, because a
-    customer who wants to see their booking history does not want to type
-    in a code for each one. They have one of the codes and the number on
-    all of them.
+    Exactly one booking comes back, and that is the point. Every booking
+    carries its own code, so a customer who books twice on the same number
+    has two different references and either one leads to its own
+    appointment. Handing back "everything on this number" instead made the
+    code almost decorative - it identified the customer rather than the
+    booking, so the screen opened on a list in which the appointment they
+    were asking about was one row among however many, and the wrong row was
+    as plausible as the right one.
 
     Both failures are answered identically - one message naming both
     fields, never "code not found" on its own. Distinguishing them would
     turn this endpoint into a way to confirm which codes exist, which is
     the only thing the second factor is there to prevent.
 
-    :returns: (bookings, matched_booking) - the customer's history newest
-        first, and the row whose code was used to get it.
+    :returns: the one booking the code names.
     """
 
     normalised = normalise_booking_code(code)
@@ -1323,9 +1376,15 @@ def find_bookings_by_code(*, code, phone):
     anchor = None
 
     if normalised:
+        # `service`, `barber` and `payment` are joined in rather than left
+        # lazy. The caller serialises all three immediately - the response is
+        # this one booking in full - so leaving them lazy would spend three
+        # more round trips on every lookup, from a page the customer
+        # triggers by typing two fields.
         anchor = (
             Booking.objects
             .filter(booking_code=normalised)
+            .select_related("service", "barber", "payment")
             .first()
         )
 
@@ -1333,26 +1392,13 @@ def find_bookings_by_code(*, code, phone):
         raise ValidationError(
             {
                 "code": [
-                    "We could not match that booking code and phone "
-                    "number. Check both - the code looks like BK-1234 "
-                    "and the phone is the one you booked with - and "
-                    "try again."
+                    "We could not match that booking code and phone you booked"
+
                 ]
             }
         )
 
-    signature = anchor.phone_normalised or phone_signature(
-        anchor.customer_phone
-    )
-
-    history = (
-        Booking.objects
-        .filter(phone_normalised=signature)
-        .select_related("service", "barber", "payment")
-        .order_by("-booking_date", "-start_time", "-pk")
-    )
-
-    return list(history), anchor
+    return anchor
 
 
 def list_bookings_for_user(user):
