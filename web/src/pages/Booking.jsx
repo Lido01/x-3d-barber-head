@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Globe } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, Globe } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import BarberPicker from "../components/booking/BarberPicker";
 import EthiopianCalendar from "../components/booking/EthiopianCalendar";
+import EthiopianDayStrip from "../components/booking/EthiopianDayStrip";
 import ServicePicker from "../components/booking/ServicePicker";
 import TimeSlots from "../components/booking/TimeSlots";
 import Alert from "../components/ui/Alert";
@@ -15,10 +16,12 @@ import { useBarbers } from "../hooks/useBarbers";
 import { useServices } from "../hooks/useServices";
 import { createBooking } from "../services/bookingApi";
 import { rememberBooking } from "../utils/bookingSession";
+import { isPassedSlot } from "../utils/bookingWindow";
 import {
   formatEthiopianDate,
   formatEthiopianTime,
   formatEthiopianWeekday,
+  shiftIsoDate,
 } from "../utils/ethiopianDate";
 import {
   formatDuration,
@@ -30,6 +33,18 @@ const LABEL = "text-[10px] uppercase tracking-[0.25em] text-white/35";
 
 const INPUT =
   "w-full  border border-white/10 bg-[#181818] px-4 py-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50";
+
+/**
+ * How far ahead the day strip runs.
+ *
+ * Fourteen, because that is `AVAILABILITY_LOOKAHEAD_DAYS` in
+ * `bookings.services` - the window the availability endpoint searches when
+ * it is asked "when can I come in?". Matching it means the strip cannot
+ * offer a day beyond the one the server will look at, which would end with
+ * a customer choosing a tile and being told, after the fact, that the shop
+ * does not take bookings that far ahead.
+ */
+const BOOKING_HORIZON_DAYS = 14;
 
 /**
  * Everything that has to be true before a booking can be made.
@@ -72,6 +87,20 @@ function checklist({ serviceId, bookingDate, startTime, name, phone, notes }) {
     items.push({
       key: "start_time",
       label: "Pick an available time",
+      error: "start_time",
+    });
+  } else if (isPassedSlot(bookingDate, startTime)) {
+    /*
+     * A date being today is not enough for a time inside it to still be
+     * bookable. The morning is free in the diary at four in the afternoon,
+     * so without this the form offers a slot that has gone and then
+     * refuses it on submit - which is a worse answer than saying so while
+     * the time is still on screen. The server agrees; see
+     * utils/bookingWindow.js for why the same rule is applied twice.
+     */
+    items.push({
+      key: "start_time",
+      label: "That time has already passed today - pick a later one",
       error: "start_time",
     });
   }
@@ -264,11 +293,30 @@ const inFlight = useRef(false);
     setSlotGone(false);
   };
 
-  const handleSelectDate = (event) => {
-    setBookingDate(event.target.value);
-    setStartTime("");
-    setSlotGone(false);
-  };
+  /**
+ * Take a day from whichever control offered it.
+ *
+ * Three controls write the same one value and they do not agree on how:
+ * the day strip and the month grid hand over a plain `YYYY-MM-DD` string,
+ * the folded-away Gregorian `<input type="date">` hands over a change
+ * event. Both shapes arrive here rather than each control keeping its own
+ * setter, so "picking a day" clears the chosen time and the stale-slot
+ * message in exactly one place - which is what stops the grid leaving a
+ * 09:00 selected from another date while the picker underneath has moved.
+ */
+const handleSelectDate = (picked) => {
+  const iso =
+    typeof picked === "string" ? picked : picked?.target?.value || "";
+
+  if (!iso) {
+    return;
+  }
+
+  setBookingDate(iso);
+  setStartTime("");
+  setSlotGone(false);
+  markTouched("booking_date");
+};
 
   /**
    * Take the next free date the backend offered, and its first time.
@@ -480,10 +528,38 @@ const inFlight = useRef(false);
 
                     <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
                       <div id="booking-field-booking_date">
-                        <EthiopianCalendar
+                        {/*
+                          The row of days first, because it is the question
+                          nearly everyone arrives with: "can I come
+                          tomorrow". It starts at today, so there is no
+                          dimmed-out fortnight of days the shop will refuse,
+                          and it stops at the same fourteen days the
+                          availability endpoint looks ahead - so every tile
+                          on it is a day the shop can actually be booked.
+
+                          The month grid stays underneath for the customer
+                          who does want a specific date further out, and for
+                          the plain question "what is the date of the 3rd".
+                        */}
+                        <EthiopianDayStrip
                           value={bookingDate}
                           onChange={handleSelectDate}
+                          days={BOOKING_HORIZON_DAYS}
                         />
+
+                        <details className="group mt-3">
+                          <summary className="flex cursor-pointer list-none items-center gap-1.5 py-1 text-[11px] text-white/30 marker:hidden">
+                            <CalendarDays size={11} />
+                            Open the whole month
+                          </summary>
+
+                          <div className="mt-2">
+                            <EthiopianCalendar
+                              value={bookingDate}
+                              onChange={handleSelectDate}
+                            />
+                          </div>
+                        </details>
 
                         {/*
                           The Gregorian input stays, folded away, for anyone
@@ -501,6 +577,7 @@ const inFlight = useRef(false);
                             type="date"
                             value={bookingDate}
                             min={todayIsoDate()}
+                            max={shiftIsoDate(todayIsoDate(), BOOKING_HORIZON_DAYS - 1)}
                             onChange={handleSelectDate}
                             onBlur={() => markTouched("booking_date")}
                             disabled={submitting}
@@ -515,6 +592,7 @@ const inFlight = useRef(false);
                       <div id="booking-field-start_time">
                         <TimeSlots
                           times={availability.times}
+                          date={bookingDate}
                           loading={availability.loading}
                           error={availability.error}
                           isEmpty={availability.isEmpty}
