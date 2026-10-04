@@ -327,7 +327,113 @@ export function formatEthiopianWeekday(value) {
   )].name;
 }
 
-/** The Amharic part of the day a 24-hour time falls in. */
+/** "2026-09-11" -> 3, the Ethiopian day of the month. */
+export function ethiopianDayOfMonth(value) {
+  return ethiopianFromIso(value)?.day ?? null;
+}
+
+/** "2026-09-11" -> 2019, the Ethiopian year. */
+export function ethiopianYearOf(value) {
+  return ethiopianFromIso(value)?.year ?? null;
+}
+
+/**
+ * "2026-09-11" -> "2026-09-14", or the same string for a zero shift.
+ *
+ * Built on `Date.UTC` rather than on a local `Date`, because the one job
+ * here is to move a calendar day number and a local midnight is exactly
+ * the thing that shifts when the arithmetic is done wrong: a DST boundary
+ * makes `setDate(+1)` produce the same day twice or skip one outright.
+ *
+ * Nothing is ever converted back through a local `Date` either - the
+ * result is formatted from the UTC parts, so the round trip is arithmetic
+ * from beginning to end.
+ */
+export function shiftIsoDate(iso, days = 0) {
+  const [year, month, day] = String(iso || "")
+    .split("T")[0]
+    .split("-")
+    .map(Number);
+
+  if (!year || !month || !day) {
+    return iso || null;
+  }
+
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+
+  return [
+    String(shifted.getUTCFullYear()).padStart(4, "0"),
+    String(shifted.getUTCMonth() + 1).padStart(2, "0"),
+    String(shifted.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/**
+ * The next `count` days from `fromIso`, each in the Ethiopian calendar.
+ *
+ * ## Why a list and not a month grid
+ *
+ * A month grid asks someone to read a page of thirty numbers to answer
+ * "when can I come in?". Almost nobody is coming in on the 23rd; they
+ * are coming tomorrow, or on Saturday. A row of the next fortnight answers
+ * that question by being the answer - one swipe along and the day is
+ * chosen - and every day in it is a day the shop will actually take a
+ * booking, because the list stops where the availability lookahead does.
+ *
+ * ## Why it starts at today and not at the month
+ *
+ * Every day before today is already refused by the form and by the
+ * server, so showing them would spend most of the strip on buttons that
+ * cannot be pressed. The strip is the bookable future; the month grid
+ * below it is still there for anyone who needs to look further ahead.
+ *
+ * ## The shape of one entry
+ *
+ * Enough for a day tile with no conversion in the component: the ISO the
+ * API speaks, the Ethiopian day number, both names of the weekday, and
+ * whether it is today. Computed once here so eleven tiles and the readout
+ * under them cannot disagree about what day is which.
+ *
+ * @returns {{iso: string, day: number, month: number, year: number,
+ *            monthLabel: string, weekday: string, weekdayShort: string,
+ *            isToday: boolean}[]}
+ */
+export function ethiopianDaysFrom(fromIso, count = 14) {
+  const total = Math.max(0, Math.floor(Number(count) || 0));
+  const days = [];
+
+  for (let offset = 0; offset < total; offset += 1) {
+    const iso = shiftIsoDate(fromIso, offset);
+    const ethiopian = ethiopianFromIso(iso);
+
+    if (!ethiopian) {
+      break;
+    }
+
+    const weekdayIndex = ethiopianWeekdayIndex(
+      ethiopian.year,
+      ethiopian.month,
+      ethiopian.day
+    );
+
+    days.push({
+      iso,
+      day: ethiopian.day,
+      month: ethiopian.month,
+      year: ethiopian.year,
+      monthLabel: monthName(ethiopian.month),
+      weekday: ETHIOPIC_WEEKDAYS[weekdayIndex].name,
+      weekdayShort: ETHIOPIC_WEEKDAYS[weekdayIndex].short,
+      isToday: offset === 0,
+    });
+  }
+
+  return days;
+}
+
+/**
+ * The Amharic part of the day a 24-hour time falls in.
+ */
 export function ethiopianPartOfDay(hour) {
   const value = Number(hour);
 
