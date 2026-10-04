@@ -50,29 +50,6 @@ export default function BookingLookupPanel({
         onPaid={onPaid}
         autoOpenPayment
       />
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="flex min-w-0 items-center gap-2 text-[11px] leading-5 text-white/30">
-          <Clock3 size={12} className="shrink-0" />
-          Keep this code with the phone number you booked with — together
-          they are how you open this booking again, from any device.
-        </p>
-
-        {onRefresh && (
-          <button
-            type="button"
-            onClick={() => void onRefresh()}
-            disabled={loading}
-            className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border border-white/15 px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white disabled:opacity-50"
-          >
-            <RefreshCw
-              size={11}
-              className={loading ? "animate-spin" : undefined}
-            />
-            Check for updates
-          </button>
-        )}
-      </div>
     </div>
   );
 }

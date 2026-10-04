@@ -4,6 +4,7 @@ import {
   formatEthiopianTime,
   groupSlotsByEthiopianPartOfDay,
 } from "../../utils/ethiopianDate";
+import { splitPassedSlots } from "../../utils/bookingWindow";
 import Alert from "../ui/Alert";
 import Spinner from "../ui/Spinner";
 import AvailabilityNotice from "./AvailabilityNotice";
@@ -30,9 +31,20 @@ const SELECT =
  * scrollable list rather than a grid that has to fit 30 minutes into a
  * screen, and is announced correctly. A prettier grid here would cost
  * scrolling and accessibility for nothing.
+ *
+ * ## The one thing that is filtered, and why it is said out loud
+ *
+ * Slots whose start time has already gone on *today*. The server does not
+ * send these, but the list is a snapshot and this form is a long page:
+ * open it before lunch, come back after, and the morning is still sitting
+ * there. Dropping them silently would make the picker look like it lost
+ * four times for no reason, so the count of what went with the clock is
+ * printed under the control. Only today is ever affected - tomorrow's
+ * 09:00 is tomorrow's, not this morning's.
  */
 export default function TimeSlots({
   times,
+  date,
   loading,
   error,
   isEmpty,
@@ -96,8 +108,8 @@ export default function TimeSlots({
     );
   }
 
-  const availableTimes = Array.isArray(times) ? times : [];
-  const groups = groupSlotsByEthiopianPartOfDay(availableTimes);
+  const { open, passed } = splitPassedSlots(times, { date });
+  const groups = groupSlotsByEthiopianPartOfDay(open);
 
   return (
     <div className="space-y-2">
@@ -105,7 +117,7 @@ export default function TimeSlots({
         <select
           value={selectedTime || ""}
           onChange={(event) => onSelect(event.target.value)}
-          disabled={disabled}
+          disabled={disabled || open.length === 0}
           aria-label="Choose an available time"
           className={SELECT}
         >
@@ -125,11 +137,21 @@ export default function TimeSlots({
           className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#d6a85f]"
         />
       </div>
+
       <p className="text-[10px] leading-5 text-white/25">
-        {availableTimes.length} live slots available
+        {open.length} live slots available
         {window ? ` · ${window}` : ""}. Times refresh with your service, date,
         or barber selection.
       </p>
+
+      {/* The morning does not disappear without explanation. */}
+      {passed.length > 0 && (
+        <p className="text-[10px] leading-5 text-white/30">
+          {passed.length} earlier {passed.length === 1 ? "time" : "times"} on
+          this day {passed.length === 1 ? "has" : "have"} already passed, so{" "}
+          {passed.length === 1 ? "it is" : "they are"} not offered.
+        </p>
+      )}
     </div>
   );
 }

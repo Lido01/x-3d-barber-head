@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 
+import { registerModal } from "../../utils/modalStack";
+
 /**
  * A bottom sheet on a phone, a centred dialog on a desktop.
  *
@@ -13,12 +15,34 @@ import { X } from "lucide-react";
  * they just typed is still visible behind the sheet and there is nothing to
  * navigate back to.
  *
- * The responsive split is not decoration. A 360px phone has no room for a
- * centred dialog with a title, a body that scrolls and a close button: a
- * dialog narrower than the screen is unusable, and the safe-area inset at
- * the bottom is where the home indicator is. So on the narrowest screens it
- * is a sheet pinned to the bottom edge with real bottom padding, and from
- * `sm` up - where there is finally room for both - it becomes a dialog.
+ * ## Above the bottom bar, not merely over the page
+ *
+ * The mobile bottom bar is `fixed` at `z-55`. A sheet on the usual `z-50`
+ * is drawn underneath it, and the bar is about 90px tall on a phone: it
+ * sits exactly across the sheet's footer, so the buttons that dismiss it -
+ * and on "My bookings" the last rows of the booking itself - cannot be
+ * reached at all. Two changes fix that together and neither is enough on
+ * its own:
+ *
+ *   - the sheet is above the bar (`z-70`);
+ *   - the bar removes itself while any sheet is open (`utils/modalStack`),
+ *     because a raised "Book" button floating on top of a modal is a link
+ *     out of that modal sitting under someone's thumb.
+ *
+ * ## The responsive split is not decoration
+ *
+ * A 360px phone has no room for a centred dialog with a title, a body that
+ * scrolls and a close button: a dialog narrower than the screen is unusable,
+ * and the safe-area inset at the bottom is where the home indicator is. So
+ * on the narrowest screens it is a sheet pinned to the bottom edge with real
+ * bottom padding, and from `sm` up - where there is finally room for both -
+ * it becomes a dialog, capped at a width so it still reads as a dialog on a
+ * 1440px display rather than a full-screen takeover.
+ *
+ * The body scrolls on its own with `overscroll-contain`, and the header and
+ * footer sit outside that scroll area, so the title and the close button are
+ * still there at the bottom of a long booking - which is the whole reason
+ * the bar has to move rather than the sheet growing taller.
  *
  * Handles its own scroll lock, Escape and initial focus, so no screen has
  * to. The body scroll lock matters more here than in the console: these
@@ -48,6 +72,7 @@ export default function BookingSheet({
     }
 
     const previousOverflow = document.body.style.overflow;
+    const releaseModal = registerModal();
 
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
@@ -66,6 +91,11 @@ export default function BookingSheet({
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
+
+      // After the listener, so the bottom bar comes back on the same tick
+      // the sheet is gone rather than a frame later over a page that is
+      // already interactive again.
+      releaseModal();
     };
   }, [open, onClose]);
 
@@ -74,7 +104,7 @@ export default function BookingSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-6">
       <button
         type="button"
         onClick={onClose}
@@ -87,9 +117,9 @@ export default function BookingSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="relative flex max-h-[92svh] w-full flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-[#111] shadow-2xl sm:max-h-[88svh] sm:rounded-2xl sm:border-white/10 lg:max-w-2xl"
+        className="relative flex max-h-[92svh] w-full flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-[#111] shadow-2xl sm:max-h-[88svh] sm:max-w-2xl sm:rounded-2xl sm:border-white/10"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3.5 sm:px-5 sm:py-4">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 px-4 py-3.5 sm:px-5 sm:py-4">
           <div className="min-w-0">
             {eyebrow && (
               <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
@@ -100,7 +130,7 @@ export default function BookingSheet({
             <h2
               id={headingId}
               className={`font-serif leading-tight text-white ${
-                eyebrow ? "mt-1.5 text-xl sm:text-2xl" : "text-xl sm:text-2xl"
+                eyebrow ? "mt-1.5 text-lg sm:text-2xl" : "text-lg sm:text-2xl"
               }`}
             >
               {title}
@@ -125,13 +155,19 @@ export default function BookingSheet({
         </div>
 
         {/* `overscroll-contain` so a flick at the end of the list scrolls the
-            sheet rather than the page locked behind it. */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5">
+            sheet rather than the page locked behind it. The extra bottom
+            padding is only for the no-footer case, since a footer already
+            clears the home indicator itself. */}
+        <div
+          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5 ${
+            footer ? "" : "pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
+          }`}
+        >
           {children}
         </div>
 
         {footer && (
-          <div className="flex flex-col-reverse gap-2 border-t border-white/10 bg-[#0e0e0e] px-4 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:px-5 sm:pb-3.5">
+          <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-white/10 bg-[#0e0e0e] px-4 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:px-5 sm:pb-3.5">
             {footer}
           </div>
         )}
