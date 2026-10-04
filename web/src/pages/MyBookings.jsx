@@ -140,27 +140,11 @@ export default function MyBookings() {
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[900px]">
         <div className="max-w-2xl">
-          <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-            My booking
-          </p>
-
           <h1 className="mt-5 font-serif text-5xl leading-[0.9] sm:text-6xl">
             Open your
             <br />
             <span className="italic text-[#d6a85f]">booking.</span>
           </h1>
-
-          <p className="mt-6 text-sm leading-7 text-white/45">
-            Every booking gets its own booking ID — the one on your
-            confirmation, or the one the shop reads you out on the phone.
-            Enter that ID with the phone number you booked with and we will
-            open{" "}
-            <strong className="font-semibold text-white/70">
-              that appointment
-            </strong>
-            : whether the shop has confirmed it, and the payment you sent for
-            it.
-          </p>
         </div>
 
         {/* --- the two fields ------------------------------------ */}
@@ -216,11 +200,11 @@ export default function MyBookings() {
               <button
                 type="submit"
                 disabled={loading}
-                className="group inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                className="group inline-flex min-h-[52px] w-full items-center justify-center gap-2  bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
                 {loading ? (
                   <>
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
+                    <span className="h-4 w-4 animate-spin  border-2 border-black/25 border-t-black" />
                     Opening your booking...
                   </>
                 ) : (
@@ -233,12 +217,6 @@ export default function MyBookings() {
                   </>
                 )}
               </button>
-
-              <p className="mt-3 text-[11px] leading-5 text-white/30">
-                The booking ID opens the booking; the phone number proves it is
-                yours. Book twice? Each booking has its own ID — use the one
-                for the appointment you want.
-              </p>
             </div>
           </div>
         </form>
@@ -256,51 +234,8 @@ export default function MyBookings() {
         )}
 
         {loading && !booking && (
-          <div className="mt-8 flex justify-center rounded-2xl border border-white/10 bg-[#111] py-12">
+          <div className="mt-8 flex justify-center border border-white/10 bg-[#111] py-12">
             <p className="text-sm text-white/40">Checking with the shop...</p>
-          </div>
-        )}
-
-        {/* --- closed, but still loaded ------------------------- */}
-        {booking && !sheetOpen && (
-          <button
-            type="button"
-            onClick={() => setDismissedCode(null)}
-            className="mt-8 flex w-full items-center justify-between gap-4 rounded-2xl border border-[#d6a85f]/25 bg-[#d6a85f]/[0.05] px-5 py-4 text-left transition hover:border-[#d6a85f]/50"
-          >
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-white">
-                Open booking {matchedCode} again
-              </span>
-
-              <span className="mt-0.5 block text-[11px] text-white/45">
-                {booking.service_name || "Your appointment"}
-              </span>
-            </span>
-
-            <span className="shrink-0 text-[#d6a85f]">→</span>
-          </button>
-        )}
-
-        {/* --- nothing asked for yet ---------------------------- */}
-        {!booking && !loading && !error && (
-          <div className="mt-10 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
-            <p className="text-sm font-semibold text-white/70">
-              Nothing to open yet
-            </p>
-
-            <p className="mx-auto mt-2 max-w-md text-xs leading-6 text-white/40">
-              Your booking ID is on your confirmation, with a button to copy
-              it. If you have not booked, there is nothing to open.
-            </p>
-
-            <Link
-              to="/booking"
-              className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#d6a85f] px-5 py-3 text-xs font-semibold text-black transition hover:bg-[#e5bd7a]"
-            >
-              Book a chair
-              <span>→</span>
-            </Link>
           </div>
         )}
 
