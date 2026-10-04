@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
+from django.utils.timezone import localdate, localtime
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -10,6 +11,9 @@ from apps.accounts.models import StaffAccess
 from apps.services.models import Service
 from .models import Barber, Booking, build_booking_code
 from .services import (
+    CLOSING_MINUTES,
+    OPENING_MINUTES,
+    SLOT_INTERVAL_MINUTES,
     Availability,
     get_availability_report,
     get_available_times,
@@ -1014,6 +1018,177 @@ class AvailabilityReportTests(APITestCase):
                 booking_date=self.booking_date,
                 service=self.service,
             )
+
+
+class ElapsedTimeTests(APITestCase):
+    """
+    A date being today is not enough for a time inside it to be bookable.
+
+    `validate_booking_date` already refuses yesterday; these cover the half
+    it cannot see, which is the part of *today* that has gone. Without them
+    the morning is still free in the diary at four in the afternoon, so the
+    time picker offers 09:00 to someone reading the page at 16:00 and the
+    booking is accepted.
+    """
+
+    def setUp(self):
+        self.today = localdate()
+        self.service = Service.objects.create(name="Cut", price="350.00", duration=30)
+        self.barber = Barber.objects.create(name="Dawit")
+
+        self.tomorrow = self.today + timedelta(days=1)
+
+    def minutes_now(self):
+        return localtime().time().hour * 60 + localtime().time().minute
+
+    def report(self, booking_date):
+        return get_availability_report(
+            booking_date=booking_date,
+            service=self.service,
+        )
+
+    def test_today_never_offers_a_start_time_that_has_gone(self):
+        now = self.minutes_now()
+
+        for start in range(0, min(now, CLOSING_MINUTES), SLOT_INTERVAL_MINUTES):
+            Booking.objects.create(
+                customer_name="Blocker", customer_phone="123",
+                service=self.service, barber=self.barber,
+                booking_date=self.today,
+                start_time=time(start // 60, start % 60),
+                end_time=time((start + 30) // 60, (start + 30) % 60),
+            )
+
+        times = self.report(self.today)["available_times"]
+
+        for slot in times:
+            hour, minute = (int(part) for part in slot.split(":"))
+
+            self.assertGreaterEqual(
+                hour * 60 + minute,
+                now,
+                f"{slot} is in the past but was still offered",
+            )
+
+    def test_tomorrow_is_untouched_by_the_clock(self):
+        """
+        The bound belongs to today alone.
+
+        Tomorrow's 09:00 is not "passed" at 16:00 - it is tomorrow morning -
+        and filtering on the time of day regardless of the date would empty
+        every future day as the afternoon wore on.
+        """
+
+        self.assertIn("09:00", self.report(self.tomorrow)["available_times"])
+
+    def test_a_day_whose_hours_have_all_gone_says_the_time_passed(self):
+        """
+        Distinct from a full diary, because the fix is different.
+
+        Everything still ahead on today is taken and everything behind is
+        free, so the day offers nothing - but the chairs are not all in
+        use, the customer has simply got here late. They are told the day
+        is spent and offered tomorrow, not that the shop is full.
+        """
+
+        now = self.minutes_now()
+
+        for start in range(now, CLOSING_MINUTES, SLOT_INTERVAL_MINUTES):
+            Booking.objects.create(
+                customer_name="Blocker", customer_phone="123",
+                service=self.service, barber=self.barber,
+                booking_date=self.today,
+                start_time=time(start // 60, start % 60),
+                end_time=time((start + 30) // 60, (start + 30) % 60),
+            )
+
+        report = self.report(self.today)
+
+        self.assertEqual(report["available_times"], [])
+        self.assertEqual(
+            report["availability"]["status"], Availability.TIME_PASSED,
+        )
+        self.assertIn("already", report["availability"]["message"])
+
+        # And it still carries the way forward.
+        self.assertIsNotNone(report["availability"]["next_available"])
+
+    def test_a_full_day_is_still_reported_as_full_not_as_passed(self):
+        """
+        A diary that is genuinely booked out is `FULLY_BOOKED`, not
+        `TIME_PASSED`. Collapsing the two would tell a customer at 20:00
+        that the day is spent when it is actually full, which is a
+        different problem with a different answer.
+        """
+
+        self.fill_every_slot(self.tomorrow)
+
+        report = self.report(self.tomorrow)
+
+        self.assertEqual(report["available_times"], [])
+        self.assertEqual(
+            report["availability"]["status"], Availability.FULLY_BOOKED,
+        )
+
+    def fill_every_slot(self, day):
+        for start in range(
+            OPENING_MINUTES, CLOSING_MINUTES, SLOT_INTERVAL_MINUTES
+        ):
+            Booking.objects.create(
+                customer_name="Blocker", customer_phone="123",
+                service=self.service, barber=self.barber,
+                booking_date=day,
+                start_time=time(start // 60, start % 60),
+                end_time=time((start + 30) // 60, (start + 30) % 60),
+            )
+
+    def test_booking_an_elapsed_time_today_is_refused(self):
+        """
+        The availability list is a snapshot. A form left open across
+        lunchtime would otherwise keep offering the morning, so the write
+        is the last moment where refusing is still cheap.
+        """
+
+        now = self.minutes_now()
+        first = OPENING_MINUTES + (now // SLOT_INTERVAL_MINUTES - 1) * SLOT_INTERVAL_MINUTES
+
+        if first < OPENING_MINUTES or first + self.service.duration > CLOSING_MINUTES:
+            self.skipTest("No elapsed slot inside the bookable window right now.")
+
+        response = self.client.post(
+            "/api/bookings/",
+            {
+                "customer_name": "Sam Doe",
+                "customer_phone": "0911234567",
+                "service": self.service.id,
+                "booking_date": str(self.today),
+                "start_time": f"{first // 60:02d}:{first % 60:02d}",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("start_time", response.data)
+        self.assertIn("already passed", response.data["start_time"][0])
+        self.assertEqual(
+            response.data["availability"]["status"],
+            Availability.TIME_PASSED,
+        )
+
+    def test_the_availability_endpoint_hides_elapsed_times(self):
+        response = self.client.get(
+            "/api/bookings/availability/"
+            f"?service={self.service.id}&booking_date={self.today}"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        now = self.minutes_now()
+
+        for slot in response.data["available_times"]:
+            hour, minute = (int(part) for part in slot.split(":"))
+
+            self.assertGreaterEqual(hour * 60 + minute, now)
 
 
 class BookingStatusTransitionTests(APITestCase):
