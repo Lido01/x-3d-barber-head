@@ -3,6 +3,7 @@ import {
   Check,
   Copy,
   Mail,
+  MoveHorizontal,
   Pencil,
   Phone,
   RefreshCw,
@@ -13,17 +14,23 @@ import {
 import Alert from "../../components/ui/Alert";
 import {
   AdminButton,
+  AdminChip,
   AdminConfirmButton,
   AdminEmpty,
   AdminField,
   AdminInput,
   AdminLoading,
   AdminPageHeader,
-  AdminPanel,
   AdminSearch,
   AdminSheet,
   AdminStatus,
   AdminSwitch,
+  AdminTable,
+  AdminTableCell,
+  AdminTableHead,
+  AdminTableHeadCell,
+  AdminTableHint,
+  AdminTableRow,
 } from "../../components/admin/AdminUi";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { EMPTY_LIST, invalidateQuery, useQuery } from "../../hooks/useQuery";
@@ -63,6 +70,22 @@ import { formatDate } from "../../utils/format";
  * could grant console access, that one capability would quietly mean
  * "create staff" and the team screen's role gate would be decorative.
  * Staff are managed on the user and team screens.
+ *
+ * ## A table, because it is a directory
+ *
+ * A directory is looked things up in, and looking things up needs
+ * columns: the name, the handle, when they joined, how to reach them. One
+ * card per person showed the name and buried the rest, so answering "when
+ * did this person sign up" meant opening each one in turn.
+ *
+ * The username is the column that sticks to the left edge. It is the
+ * stable identifier - the name is editable, the handle is not - and it is
+ * what every action on this screen is keyed by.
+ *
+ * Email and phone are their own columns rather than two stacked link
+ * tiles, because on a phone the table scrolls sideways to reach them and
+ * a tap target that is 200px wide is much easier to hit than one squeezed
+ * into half a card.
  */
 
 const BLANK = {
@@ -321,113 +344,153 @@ export default function AdminCustomers() {
       )}
 
       {!loading && !error && customers.length > 0 && (
-        <ul className="grid gap-3">
-          {customers.map((customer) => {
-            const name = customer.full_name || customer.username;
-            const busy = busyId === customer.id;
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-console-muted">
+              Showing {customers.length}{query ? ` matching “${query}”` : ""}
+            </p>
 
-            return (
-              <li key={customer.id}>
-                <AdminPanel>
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-console-accent-soft text-sm font-semibold text-console-accent-strong">
-                      {name.charAt(0).toUpperCase()}
-                    </span>
+            <p className="hidden items-center gap-1.5 text-[11px] text-console-faint sm:flex">
+              <MoveHorizontal size={12} />
+              Scroll the table sideways to reach every column
+            </p>
+          </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate font-serif text-lg leading-tight text-console-ink">
-                          {name}
-                        </p>
+          <AdminTable
+            label="Customers"
+            caption="Registered customer accounts, with their contact details and when they joined."
+            minWidth="min-w-[62rem]"
+          >
+            <AdminTableHead>
+              <tr>
+                <AdminTableHeadCell sticky width="10rem">
+                  Account
+                </AdminTableHeadCell>
+                <AdminTableHeadCell width="14rem">Name</AdminTableHeadCell>
+                <AdminTableHeadCell width="10rem">Joined</AdminTableHeadCell>
+                <AdminTableHeadCell width="16rem">Email</AdminTableHeadCell>
+                <AdminTableHeadCell width="12rem">Phone</AdminTableHeadCell>
+                {canManage && (
+                  <AdminTableHeadCell width="17rem">
+                    Actions
+                  </AdminTableHeadCell>
+                )}
+              </tr>
+            </AdminTableHead>
 
-                        {!customer.is_active && (
+            <tbody>
+              {customers.map((customer) => {
+                const name = customer.full_name || customer.username;
+                const busy = busyId === customer.id;
+
+                return (
+                  <AdminTableRow key={customer.id}>
+                    <AdminTableCell sticky>
+                      <span className="font-mono text-sm text-console-ink">
+                        @{customer.username}
+                      </span>
+
+                      <div className="mt-2">
+                        {!customer.is_active ? (
                           <AdminStatus status="disabled" />
+                        ) : (
+                          <AdminChip tone="good">Active</AdminChip>
                         )}
                       </div>
+                    </AdminTableCell>
 
-                      <p className="mt-0.5 truncate text-xs text-console-muted">
-                        @{customer.username} · joined{" "}
+                    <AdminTableCell>
+                      <span className="block break-words font-medium text-console-ink">
+                        {name}
+                      </span>
+                    </AdminTableCell>
+
+                    <AdminTableCell>
+                      <span className="block whitespace-nowrap text-xs tabular-nums text-console-muted">
                         {formatDate(customer.created_at)}
-                      </p>
-                    </div>
-                  </div>
+                      </span>
+                    </AdminTableCell>
 
-                  <div className="mt-4 grid gap-2 border-t border-console-line pt-4 sm:grid-cols-2">
-                    {customer.email && (
-                      <a
-                        href={`mailto:${customer.email}`}
-                        className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-console-line bg-console-sunken px-3 text-sm text-console-body transition hover:border-console-accent hover:text-console-accent-strong"
-                      >
-                        <Mail size={14} className="shrink-0" />
-                        <span className="truncate">{customer.email}</span>
-                      </a>
-                    )}
-
-                    {customer.phone && (
-                      <a
-                        href={`tel:${customer.phone}`}
-                        className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-console-line bg-console-sunken px-3 text-sm text-console-body transition hover:border-console-accent hover:text-console-accent-strong"
-                      >
-                        <Phone size={14} className="shrink-0" />
-                        <span className="truncate">{customer.phone}</span>
-                      </a>
-                    )}
-
-                    {!customer.email && !customer.phone && (
-                      <p className="text-sm text-console-faint">
-                        No contact details on file.
-                      </p>
-                    )}
-                  </div>
-
-                  {canManage && (
-                    <div className="mt-4 flex flex-wrap gap-2 border-t border-console-line pt-4">
-                      <AdminButton
-                        size="sm"
-                        icon={Pencil}
-                        loading={busy}
-                        onClick={() => {
-                          setEditing(customer);
-                          setEdit({
-                            email: customer.email || "",
-                            first_name: customer.first_name || "",
-                            last_name: customer.last_name || "",
-                            phone: customer.phone || "",
-                            is_active: customer.is_active,
-                          });
-                          setActionError(null);
-                        }}
-                      >
-                        Edit
-                      </AdminButton>
-
-                      <AdminButton
-                        size="sm"
-                        tone={customer.is_active ? "danger" : "neutral"}
-                        loading={busy}
-                        onClick={() => toggleActive(customer)}
-                      >
-                        {customer.is_active ? "Disable" : "Enable"}
-                      </AdminButton>
-
-                      {canDelete && (
-                        <AdminConfirmButton
-                          size="sm"
-                          icon={Trash2}
-                          loading={busy}
-                          message={`Permanently delete ${customer.username}? This cannot be undone. If they have left reviews the server will refuse and you should disable them instead.`}
-                          onConfirm={() => handleDelete(customer)}
+                    <AdminTableCell>
+                      {customer.email ? (
+                        <a
+                          href={`mailto:${customer.email}`}
+                          className="inline-flex items-center gap-1.5 break-all text-console-body transition hover:text-console-accent"
                         >
-                          Delete
-                        </AdminConfirmButton>
+                          <Mail size={13} className="shrink-0" />
+                          {customer.email}
+                        </a>
+                      ) : (
+                        <span className="text-console-faint">—</span>
                       )}
-                    </div>
-                  )}
-                </AdminPanel>
-              </li>
-            );
-          })}
-        </ul>
+                    </AdminTableCell>
+
+                    <AdminTableCell>
+                      {customer.phone ? (
+                        <a
+                          href={`tel:${customer.phone}`}
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums text-console-body transition hover:text-console-accent"
+                        >
+                          <Phone size={13} className="shrink-0" />
+                          {customer.phone}
+                        </a>
+                      ) : (
+                        <span className="text-console-faint">—</span>
+                      )}
+                    </AdminTableCell>
+
+                    {canManage && (
+                      <AdminTableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <AdminButton
+                            icon={Pencil}
+                            loading={busy}
+                            onClick={() => {
+                              setEditing(customer);
+                              setEdit({
+                                email: customer.email || "",
+                                first_name: customer.first_name || "",
+                                last_name: customer.last_name || "",
+                                phone: customer.phone || "",
+                                is_active: customer.is_active,
+                              });
+                              setActionError(null);
+                            }}
+                          >
+                            Edit
+                          </AdminButton>
+
+                          <AdminButton
+                            tone={customer.is_active ? "danger" : "neutral"}
+                            loading={busy}
+                            onClick={() => toggleActive(customer)}
+                          >
+                            {customer.is_active ? "Disable" : "Enable"}
+                          </AdminButton>
+
+                          {canDelete && (
+                            <AdminConfirmButton
+                              icon={Trash2}
+                              loading={busy}
+                              message={`Permanently delete ${customer.username}? This cannot be undone. If they have left reviews the server will refuse and you should disable them instead.`}
+                              onConfirm={() => handleDelete(customer)}
+                            >
+                              Delete
+                            </AdminConfirmButton>
+                          )}
+                        </div>
+                      </AdminTableCell>
+                    )}
+                  </AdminTableRow>
+                );
+              })}
+            </tbody>
+          </AdminTable>
+
+          <AdminTableHint>
+            Swipe the table sideways for the rest of each row.
+          </AdminTableHint>
+        </>
       )}
 
       {/* --- Add a customer ----------------------------------------- */}
