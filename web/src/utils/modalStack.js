@@ -41,8 +41,23 @@ let openCount = 0;
 const subscribers = new Set();
 
 function publish() {
+  /*
+   * The current answer, passed *as an argument*.
+   *
+   * Subscribers are React state setters, and `setState()` with no argument
+   * is `setState(undefined)` — not "re-render with what you have". Calling
+   * them bare therefore drove every subscriber to `undefined`, which is
+   * falsy, so `useModalOpen()` returned false and the bottom bar never
+   * stepped aside for a sheet: the whole reason this module exists.
+   *
+   * Every subscriber is handed the value rather than being trusted to read
+   * `openCount` itself, so a late subscriber and an early one are told the
+   * same thing.
+   */
+  const next = openCount > 0;
+
   for (const notify of subscribers) {
-    notify();
+    notify(next);
   }
 }
 
