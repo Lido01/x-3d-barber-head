@@ -9,6 +9,7 @@ import {
   Scissors,
   Sparkles,
   CircleHelp,
+  MessageCircleQuestion,
   Ticket,
   UserRound,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import {
 import LanguageSwitcher from "./LanguageSwitcher";
 import { useCustomerAuth } from "../context/CustomerAuthContext";
 import { useLanguage } from "../i18n/LanguageContext";
+import { openAiChat } from "../utils/aiChat";
 import { useModalOpen } from "../utils/modalStack";
 
 /**
@@ -206,6 +208,22 @@ export default function BottomBar() {
             <CircleHelp size={18} />
             Help & FAQ
           </NavLink>
+
+          {/* The way back to the assistant once it has been closed.
+              `openAiChat` clears the dismissal flag as well as opening
+              the panel, so this one link is both "show me the chat" and
+              "un-hide it" - see utils/aiChat.js. */}
+          <button
+            type="button"
+            onClick={() => {
+              setMoreOpen(false);
+              openAiChat();
+            }}
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-left text-sm font-medium"
+          >
+            <MessageCircleQuestion size={18} />
+            {t("ai.title")}
+          </button>
 
           {/* <Link
             to="/admin"
