@@ -9,6 +9,7 @@ import {
   UserCog,
   ShieldCheck,
   ClipboardList,
+  BarChart3,
 } from "lucide-react";
 
 import { canManagePeople, hasCapability } from "../../utils/staffRole";
@@ -78,6 +79,23 @@ export const ADMIN_NAV = [
     icon: MessageSquareQuote,
     capability: "reviews.moderate",
   },
+  /*
+   * Reports is gated on `payments.view` rather than on people management.
+   *
+   * A report is mostly money and volume, and the dashboard endpoint scopes
+   * itself to the caller, so the screen itself works for any account that
+   * may see revenue - a receptionist gets the volume figures and no money
+   * ones. Gating it on people management instead would have hidden it from
+   * exactly the person most likely to want to know how busy the week is.
+   * The whole-shop half is a separate problem and is dealt with inside the
+   * screen, which only requests it from an owner or administrator.
+   */
+  {
+    label: "Reports",
+    to: "/admin/reports",
+    icon: BarChart3,
+    capability: "payments.view",
+  },
 ];
 
 /** The sections one account is allowed to see. */
@@ -95,11 +113,30 @@ export function visibleAdminNav(account) {
   });
 }
 
-/** Which section a pathname belongs to. */
+/**
+ * The console's screens that are not capability-filtered sections.
+ *
+ * Settings and your own profile are reachable by every staff account and
+ * are not "a job", so they stay out of the section list — but they still
+ * need a name in the mobile header, which reads the active route to say
+ * where you are. Without this they were announced as "Overview", which is
+ * how a barber ends up on their own profile page believing they had been
+ * sent to the dashboard.
+ */
+const STANDALONE_ROUTES = [
+  { label: "Settings", to: "/admin/settings" },
+  { label: "Profile", to: "/admin/profile" },
+];
+
+/** Which section a pathname belongs to, or which standalone screen. */
 export function activeAdminSection(pathname) {
-  return ADMIN_NAV.find((item) =>
-    item.end
-      ? pathname === item.to
-      : pathname.startsWith(item.to)
+  return (
+    ADMIN_NAV.find((item) =>
+      item.end
+        ? pathname === item.to
+        : pathname.startsWith(item.to)
+    ) ||
+    STANDALONE_ROUTES.find((item) => pathname.startsWith(item.to)) ||
+    null
   );
 }
