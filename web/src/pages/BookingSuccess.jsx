@@ -161,7 +161,7 @@ export default function BookingSuccess() {
               {headline}
             </h1>
 
-            <p className="mt-4 max-w-lg text-sm leading-7 text-white/45">
+            {/* <p className="mt-4 max-w-lg text-sm leading-7 text-white/45">
               {verified
                 ? "Your payment is checked and your appointment is locked in. Nothing else is needed."
                 : rejected
@@ -171,21 +171,9 @@ export default function BookingSuccess() {
                     : confirmed
                       ? "The shop has confirmed your appointment, so the chair is yours. The payment form is open below — a screenshot of your transfer or the TIN number on it is enough."
                       : "Reception confirms every booking by hand. Payment opens the moment they have — this page checks on its own, so there is nothing to do until then."}
-            </p>
+            </p> */}
           </div>
         </div>
-
-        {/* --- what just happened ------------------------------ */}
-        {justSubmitted && (
-          <Alert tone="success" title="Your payment was sent" className="mt-8">
-            {formatPrice(payment?.amount)} recorded for booking{" "}
-            <strong className="font-semibold tracking-[0.08em] text-white/80">
-              {booking?.booking_code || `#${bookingId}`}
-            </strong>
-            . The shop will match it against the bank. You can close this page;
-            we will still have your booking against that code.
-          </Alert>
-        )}
 
         {/* The code, above everything else on the page. */}
         <CopyCodeButton
@@ -227,37 +215,6 @@ export default function BookingSuccess() {
             with your code and the phone number you booked with to see it.
           </Alert>
         )}
-
-        {/* --- live read ---------------------------------------- */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#111] px-5 py-4">
-          <div className="flex min-w-0 items-center gap-2.5">
-            {live.loading ? (
-              <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-[#d6a85f]/30 border-t-[#d6a85f]" />
-            ) : (
-              <BellRing size={14} className="shrink-0 text-[#d6a85f]" />
-            )}
-
-            <p className="text-[11px] leading-5 text-white/45">
-              {live.loading
-                ? "Checking with the shop..."
-                : live.ready
-                  ? live.settled
-                    ? "Nothing further is waiting on the shop."
-                    : "This page checks the shop's answer for you."
-                  : "We need your booking code to check on this."}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={live.refresh}
-            disabled={!code || !phone}
-            className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border border-white/15 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white disabled:opacity-50"
-          >
-            <RefreshCw size={11} className={live.loading ? "animate-spin" : undefined} />
-            Refresh
-          </button>
-        </div>
 
         {/* --- what to do next ---------------------------------- */}
           {/*
