@@ -6,6 +6,7 @@ import Footer from "./components/Footer";
 import RequireAdmin from "./components/RequireAdmin";
 import RequireCustomer from "./components/RequireCustomer";
 import ScrollToTop from "./components/ScrollToTop";
+import AiChatWidget from "./components/ai/AiChatWidget";
 import AdminLayout from "./components/admin/AdminLayout";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
 import { CustomerAuthProvider } from "./context/CustomerAuthContext";
@@ -40,6 +41,8 @@ import AdminTeam from "./pages/admin/AdminTeam";
 import AdminAuditLog from "./pages/admin/AdminAuditLog";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminReports from "./pages/admin/AdminReports";
+import AdminProfile from "./pages/admin/AdminProfile";
 
 /**
  * Staff-only screen chunk. Each admin route is wrapped in RequireAdmin
@@ -166,6 +169,26 @@ function Shell() {
             path="/admin/users"
             element={<AdminScreen peopleOnly><AdminUsers /></AdminScreen>}
           />
+
+          {/* Reports. Read-only and scoped to what the caller may see -
+              the dashboard half is available to any staff account with a
+              money capability, and the whole-shop half only reaches an
+              owner or administrator. The screen decides from the payload
+              rather than refusing outright, so a receptionist still gets
+              the volume report they are allowed. */}
+          <Route
+            path="/admin/reports"
+            element={<AdminScreen capability="payments.view"><AdminReports /></AdminScreen>}
+          />
+
+          {/* Reports about the sign-in itself. Every staff account may
+              reach it: reading your own record and changing your own
+              password are not privileges, and the API agrees - the
+              password endpoint only asks for a valid token. */}
+          <Route
+            path="/admin/profile"
+            element={<AdminScreen><AdminProfile /></AdminScreen>}
+          />
           <Route
             path="/admin/payments"
             element={<AdminScreen capability="payments.view"><AdminPayments /></AdminScreen>}
@@ -199,6 +222,14 @@ function Shell() {
 
       {!bare && <Footer />}
       {!bare && <BottomBar />}
+
+      {/* The AI assistant floats above every storefront screen and is kept
+          off the `bare` paths — it is a customer tool, and painting a
+          chat launcher over the staff sign-in sheet or an account page
+          the customer did not ask for is noise. Keyed off `bare` rather
+          than off the pathname directly, so it agrees with the nav/footer
+          decision instead of restating it. */}
+      {!bare && <AiChatWidget />}
     </div>
   );
 }
