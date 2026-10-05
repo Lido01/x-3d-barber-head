@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronDown, Globe } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  Globe,
+  MessageCircleQuestion,
+} from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import BarberPicker from "../components/booking/BarberPicker";
 import EthiopianCalendar from "../components/booking/EthiopianCalendar";
 import EthiopianDayStrip from "../components/booking/EthiopianDayStrip";
+import { NeedPicker, StylePicker } from "../components/booking/NeedPicker";
 import ServicePicker from "../components/booking/ServicePicker";
 import TimeSlots from "../components/booking/TimeSlots";
 import Alert from "../components/ui/Alert";
@@ -15,6 +22,7 @@ import { invalidateQuery } from "../hooks/useQuery";
 import { useBarbers } from "../hooks/useBarbers";
 import { useServices } from "../hooks/useServices";
 import { createBooking } from "../services/bookingApi";
+import { openAiChat, setAiBookingContext } from "../utils/aiChat";
 import { rememberBooking } from "../utils/bookingSession";
 import { isPassedSlot } from "../utils/bookingWindow";
 import {
@@ -165,6 +173,17 @@ export default function Booking() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  /**
+   * The style the customer asked for, as a name.
+   *
+   * Kept apart from `notes` on purpose. The appointment books a *service*
+   * — the API has no style on it and the availability arithmetic knows
+   * nothing about one — so the style travels as a line the barber reads at
+   * the chair. Mixing it into the same textarea would make the customer's
+   * own words and a field the form wrote indistinguishable, and there is
+   * no way to take the style back out without editing their sentence.
+   */
+  const [styleName, setStyleName] = useState("");
 const [touched, setTouched] = useState({});
 const [submitAttempted, setSubmitAttempted] = useState(false);
 const [slotGone, setSlotGone] = useState(false);
@@ -195,6 +214,35 @@ const inFlight = useRef(false);
       : !hasContact
         ? "Add your name and phone to finish."
         : "Review the details and reserve the chair.";
+
+  /**
+   * Publish what has been chosen so the AI assistant can answer about
+   * *this* booking rather than asking the customer to repeat it.
+   *
+   * Set on every change and cleared on the way out, so leaving /booking
+   * does not leave the assistant quoting a service from three pages ago.
+   */
+  useEffect(() => {
+    setAiBookingContext({
+      customerName: name,
+      customerPhone: phone,
+      serviceId: serviceId || null,
+      bookingDate,
+      startTime,
+    });
+
+    return () => setAiBookingContext(null);
+  }, [name, phone, serviceId, bookingDate, startTime]);
+
+  /** The note actually sent: their words, then the style, if any. */
+  const composedNotes = useMemo(() => {
+    const own = notes.trim();
+    const style = styleName
+      ? `Style requested: ${styleName}`
+      : "";
+
+    return [own, style].filter(Boolean).join("\n");
+  }, [notes, styleName]);
 
   useEffect(() => {
     if (services.length === 0 || serviceId) {
@@ -291,6 +339,12 @@ const inFlight = useRef(false);
     setServiceId(String(service.id));
     setStartTime("");
     setSlotGone(false);
+
+    // A style belongs to the service it was chosen under. Switching
+    // service keeps a "High Fade" selected under a beard sculpt, which
+    // would then be written into the barber's note as though it were
+    // asked for.
+    setStyleName("");
   };
 
   /**
@@ -390,7 +444,7 @@ const handleSelectDate = (picked) => {
         barberId,
         bookingDate,
         startTime,
-        notes: notes.trim(),
+        notes: composedNotes,
       });
 
       rememberBooking(booking);
@@ -428,7 +482,7 @@ const handleSelectDate = (picked) => {
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1200px]">
         <div className="mt-12 grid gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
-          <div>
+          <div className="min-w-0">
             <h1 className="mt-5 font-serif text-6xl leading-[0.85] sm:text-7xl">
               Book your
               <br />
@@ -439,7 +493,7 @@ const handleSelectDate = (picked) => {
           <form
             onSubmit={handleSubmit}
             noValidate
-            className="border border-white/10 bg-[#111] p-6 sm:p-8"
+            className="min-w-0 border border-white/10 bg-[#111] p-6 sm:p-8"
           >
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
               <div>
@@ -491,7 +545,36 @@ const handleSelectDate = (picked) => {
             )}
 
             <div className="mt-7 grid gap-8">
-              <section aria-labelledby="booking-service-label">
+              {/*
+                Every child of this grid is `min-w-0`, and that is the whole
+                fix for the page being swipeable sideways.
+
+                A grid item's automatic minimum size is its min-content
+                width, and a *block* box in normal flow has no automatic
+                minimum of zero just because it scrolls - that exemption
+                only applies to the grid or flex item itself. So the
+                fourteen-day strip and the chip rows, which are hundreds of
+                pixels wider than a phone, propagated their content width up
+                through their sections, through the form and out to the
+                viewport. `min-w-0` on the items lets the sections shrink,
+                and the scrollers inside them do the scrolling.
+              */}
+              {/* The need first, the catalogue second.
+                  On a phone the `<select>` is a dropdown that has to be
+                  opened and read before anyone can tell whether the shop
+                  does what they came for. These chips answer "I want a
+                  sharp one" in one tap, and they are built from the
+                  services the API actually returned — so a chip can never
+                  offer something the shop does not sell. */}
+              {services.length > 0 && !servicesLoading && !servicesError && (
+                <NeedPicker
+                  services={services}
+                  selectedId={serviceId}
+                  onPick={handleSelectService}
+                />
+              )}
+
+              <section aria-labelledby="booking-service-label" className="min-w-0">
                 <div className="flex items-center justify-between gap-3">
                   <label id="booking-service-label" className={LABEL}>
                     01 · Choose your service
@@ -513,12 +596,37 @@ const handleSelectDate = (picked) => {
                     disabled={submitting}
                   />
                 </div>
+
+                <StylePicker
+                  service={selectedService}
+                  selectedName={styleName}
+                  onSelect={setStyleName}
+                />
+
+                {/* Unsure which one? The assistant already knows what has
+                    been picked on this form — the context above is
+                    published for it — so this opens the chat with a
+                    question about *this* service rather than a blank
+                    panel. */}
+                {selectedService && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openAiChat(`Tell me more about the ${selectedService.name} service.`)
+                    }
+                    className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-xs font-semibold text-white/50 transition hover:border-[#d6a85f]/50 hover:text-[#d6a85f]"
+                  >
+                    <MessageCircleQuestion size={14} />
+                    Not sure? Ask the assistant about this service
+                  </button>
+                )}
+
                 <FieldError message={fieldError("service")} />
               </section>
 
               {serviceId && (
                 <>
-                  <section aria-labelledby="booking-time-label">
+                  <section aria-labelledby="booking-time-label" className="min-w-0">
                     <div className="flex items-center justify-between gap-3">
                       <label id="booking-time-label" className={LABEL}>
                         02 · Date &amp; time
@@ -527,7 +635,21 @@ const handleSelectDate = (picked) => {
                     </div>
 
                     <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-                      <div id="booking-field-booking_date">
+                      {/*
+                        `min-w-0` on both columns, and it is load-bearing.
+
+                        They are grid items, and a grid item's automatic
+                        minimum size is its *min-content* width, which the
+                        browser will not shrink below. The date column holds
+                        a fourteen-day horizontal scroller and a seven-column
+                        month grid, so its min-content is far wider than a
+                        phone - and without this the whole page ends up as
+                        wide as that content and the customer can swipe the
+                        storefront sideways. `min-w-0` is what lets the
+                        columns shrink and their inner scrollers do the
+                        scrolling instead.
+                      */}
+                      <div id="booking-field-booking_date" className="min-w-0">
                         {/*
                           The row of days first, because it is the question
                           nearly everyone arrives with: "can I come
@@ -589,7 +711,7 @@ const handleSelectDate = (picked) => {
                         <FieldError message={fieldError("booking_date")} />
                       </div>
 
-                      <div id="booking-field-start_time">
+                      <div id="booking-field-start_time" className="min-w-0">
                         <TimeSlots
                           times={availability.times}
                           date={bookingDate}
@@ -620,7 +742,7 @@ const handleSelectDate = (picked) => {
                     </div>
                   </section>
 
-                  <section aria-labelledby="booking-details-label">
+                  <section aria-labelledby="booking-details-label" className="min-w-0">
                     <div className="flex items-center justify-between gap-3">
                       <label id="booking-details-label" className={LABEL}>
                         03 · Your details
@@ -729,7 +851,7 @@ const handleSelectDate = (picked) => {
                 </Alert>
               )}
 
-              <div>
+              <div className="min-w-0">
                 <button
                   type="submit"
                   disabled={submitting || !ready}
@@ -780,7 +902,9 @@ const handleSelectDate = (picked) => {
         {selectedService && (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#d6a85f]/20 bg-[#d6a85f]/[0.05] px-5 py-4 text-xs text-white/50">
             <span>
-              {selectedService.name} · {formatPrice(selectedService.price)} ·{" "}
+              {selectedService.name}
+              {styleName ? ` · ${styleName}` : ""} ·{" "}
+              {formatPrice(selectedService.price)} ·{" "}
               {formatDuration(selectedService.duration)}
             </span>
 
@@ -790,6 +914,72 @@ const handleSelectDate = (picked) => {
               {startTime ? ` · ${formatEthiopianTime(startTime)}` : ""}
               {barberId && selectedBarber ? ` · ${selectedBarber.name}` : " · Any available barber"}
             </span>
+          </div>
+        )}
+      </div>
+
+      {/*
+        The mobile action bar.
+
+        ## Why this exists
+
+        On a phone this form is three screens tall: what you want, when
+        you can come, and who you are. The Reserve button is at the very
+        bottom of the last one, so a customer who has finished everything
+        and is looking at their thumb has to scroll the entire form again
+        to find out whether they are done — and, worse, cannot tell at all
+        without scrolling, because the summary that tells them lives above
+        this point too.
+
+        Sticky rather than fixed, and it sits *inside* the page flow
+        rather than floating over it, for two reasons. A fixed bar would
+        fight the app bar that is already fixed at the bottom of a phone
+        screen, and the fight is always won by whichever has the higher
+        z-index — which is how you end up with one covering the other. And
+        sticky is released automatically by the same `useModalOpen` signal
+        that steps the app bar aside, so the two never need to know about
+        each other.
+
+        `lg:hidden`: from that breakpoint up the form fits in one screen
+        beside the headline, the summary below it is already on screen, and
+        a bar with the same information twice is just clutter.
+      */}
+      <div className="sticky bottom-[calc(env(safe-area-inset-bottom)_+_5.75rem)] z-10 mt-4 lg:hidden">
+        {selectedService && (
+          <div className="mx-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-[#0c0c0c]/95 px-3.5 py-3 shadow-[0_-10px_30px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-white">
+                {selectedService.name}
+                {styleName ? ` · ${styleName}` : ""}
+              </p>
+              <p className="mt-0.5 truncate text-[10px] text-white/40">
+                {[
+                  bookingDate ? formatEthiopianDate(bookingDate) : null,
+                  startTime ? formatEthiopianTime(startTime) : null,
+                  formatPrice(selectedService.price),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting || !ready}
+              aria-label={
+                ready
+                  ? "Reserve the chair"
+                  : `${outstanding.length} things still needed`
+              }
+              className="shrink-0 rounded-full bg-[#d6a85f] px-4 py-3 text-xs font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submitting
+                ? "Wait..."
+                : ready
+                  ? "Reserve"
+                  : `${outstanding.length} left`}
+            </button>
           </div>
         )}
       </div>
