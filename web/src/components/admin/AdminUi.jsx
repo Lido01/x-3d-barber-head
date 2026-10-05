@@ -377,6 +377,11 @@ const STATUS_CHIP = {
   good: "border-console-good/30 bg-console-good-soft text-console-good",
   bad: "border-console-bad/30 bg-console-bad-soft text-console-bad",
   info: "border-console-info/30 bg-console-info-soft text-console-info",
+  // The brand tone, for chips that mark *your own* state rather than a
+  // row's status - the signed-in role, the active theme. It was missing
+  // here, so `tone="accent"` silently rendered as the muted fallback.
+  accent:
+    "border-console-accent/40 bg-console-accent-soft text-console-accent-strong",
   neutral: "border-console-line-strong bg-console-sunken text-console-muted",
 };
 
