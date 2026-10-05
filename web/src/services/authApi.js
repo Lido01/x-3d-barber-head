@@ -94,6 +94,52 @@ export function updateCurrentAccount(patch, { signal } = {}) {
 }
 
 /**
+ * Edit the signed-in account from the staff console.
+ *
+ * The same endpoint as `updateCurrentAccount`, read through the staff
+ * session rather than the customer one — so a barber fixing their own
+ * phone number in the console writes to the record they are signed in as,
+ * and the two sessions cannot end up disagreeing about who they are.
+ *
+ * Only the fields an account owns are accepted. Role, permissions and
+ * `is_active` are refused here on purpose: the console changes those
+ * through `users/`, which is gated on people management, so "edit my
+ * profile" cannot become a back door to promoting yourself.
+ */
+export function updateStaffAccount(patch) {
+  return api
+    .patch("/accounts/me/", patch, { requiresAuth: true })
+    .then((response) => response.data);
+}
+
+/**
+ * Change the signed-in account's password.
+ *
+ * The current password is required, not optional. An endpoint that only
+ * asked for a token would let anyone walk up to an unattended, logged-in
+ * tablet in the shop and lock the owner out — and the staff console
+ * lives on exactly those tablets, left signed in between customers.
+ *
+ * The staff session is the default scope, so this is the console's own
+ * path. Existing tokens stay valid until they expire; the console does not
+ * sign the person out afterwards, because a barber who has just reset
+ * their password mid-shift should not have to find the sign-in screen.
+ */
+export function changePassword({ currentPassword, newPassword, confirmPassword }) {
+  return api
+    .post(
+      "/accounts/password/change/",
+      {
+        current_password: currentPassword,
+        new_password: newPassword,
+        new_password_confirm: confirmPassword,
+      },
+      { requiresAuth: true }
+    )
+    .then((response) => response.data);
+}
+
+/**
  * Staff-only customer directory.
  *
  * A query is handled server-side, so typing filters the database rather
