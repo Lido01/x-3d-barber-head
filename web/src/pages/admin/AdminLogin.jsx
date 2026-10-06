@@ -86,23 +86,14 @@ export default function AdminLogin() {
       </header>
 
       <div className="mx-auto w-full max-w-md flex-1 px-4 py-8 sm:px-6 sm:py-12">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-console-accent">
-          Staff only
-        </p>
-
         <h1 className="mt-2 font-serif text-3xl leading-tight text-console-ink sm:text-4xl">
           Sign in
         </h1>
 
-        <p className="mt-2 text-sm leading-6 text-console-muted">
-          Owners, administrators, reception and shop staff use this
-          workspace. Your permissions decide what you can see and do.
-        </p>
-
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="mt-6 grid gap-5 rounded-2xl border border-console-line bg-console-raised p-5 sm:p-6"
+          className="mt-6 grid gap-5  border border-console-line bg-console-raised p-5 sm:p-6"
         >
           <AdminField
             label="Username"
@@ -150,18 +141,13 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={submitting}
-            className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-console-accent bg-console-accent px-6 py-3 text-sm font-semibold text-console-on-accent transition hover:bg-console-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-12 w-full items-center justify-center gap-3 border border-console-accent bg-console-accent px-6 py-3 text-sm font-semibold text-console-on-accent transition hover:bg-console-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? <Spinner size={15} label="Signing in" /> : "Sign in"}
           </button>
         </form>
 
         <div className="mt-5 flex flex-col items-center gap-3 text-center">
-          <p className="text-[11px] leading-5 text-console-muted">
-            Customers use the regular sign-in to manage their profile and
-            reviews.
-          </p>
-
           <Link
             to="/login"
             className="text-xs font-semibold text-console-accent hover:underline"

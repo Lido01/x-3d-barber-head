@@ -483,11 +483,9 @@ const handleSelectDate = (picked) => {
       <div className="mx-auto max-w-[1200px]">
         <div className="mt-12 grid gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
           <div className="min-w-0">
-            <h1 className="mt-5 font-serif text-6xl leading-[0.85] sm:text-7xl">
-              Book your
-              <br />
-              <span className="italic text-[#d6a85f]">chair.</span>
-            </h1>
+            <h4 className="mt-5 font-serif text-6xl leading-[0.85] sm:text-7xl">
+              Book a chair
+            </h4>
           </div>
 
           <form
@@ -514,35 +512,6 @@ const handleSelectDate = (picked) => {
                 ))}
               </div>
             </div>
-
-            {/* What is still needed, before anything is sent.
-                The button below is disabled until this is empty; showing
-                the list is what turns "nothing happens when I press the
-                button" into something actionable. */}
-            {outstanding.length > 0 && serviceId && (
-              <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">
-                  Still needed
-                </p>
-
-                <ul className="mt-3 space-y-2">
-                  {outstanding.map((item) => (
-                    <li key={item.key} className="flex items-start gap-2.5">
-                      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/15">
-                        <ChevronDown
-                          size={9}
-                          className="-rotate-90 text-white/30"
-                        />
-                      </span>
-
-                      <span className="text-xs leading-5 text-white/50">
-                        {item.label}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
 
             <div className="mt-7 grid gap-8">
               {/*

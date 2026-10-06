@@ -28,18 +28,15 @@ export default function Gallery() {
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-28 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1440px]">
 
-        <div className="mt-12 max-w-4xl">
-          <p className="text-[10px] uppercase tracking-[.35em] text-[#d6a85f]">
-            Portfolio
-          </p>
-          <h1 className="mt-5 font-serif text-6xl leading-[.85] sm:text-7xl lg:text-9xl">
+        <div className="mt-2 max-w-4xl">
+          <h4 className="mt-5 font-serif text-6xl leading-[.85] sm:text-7xl lg:text-9xl">
             The
             <span className="italic text-[#d6a85f]"> gallery.</span>
-          </h1>
+          </h4>
         </div>
 
         {loading && (
-          <div className="mt-14 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
+          <div className="mt-8 flex items-center justify-center  border border-white/10 bg-[#111] py-24">
             <Spinner label="Loading the gallery..." />
           </div>
         )}
@@ -68,7 +65,7 @@ export default function Gallery() {
               <button
                 key={post.id}
                 onClick={() => setSelected(post)}
-                className="group relative h-80 rounded-2xl overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
+                className="group relative h-80  overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
               >
                 <img
                   src={mediaUrl(post.image)}
@@ -102,7 +99,7 @@ function PostModal({ post, close }) {
       onMouseDown={close}
     >
       <article
-        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto rounded-2xl border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
+        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto  border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button

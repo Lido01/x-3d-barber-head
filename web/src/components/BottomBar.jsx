@@ -111,7 +111,7 @@ export default function BottomBar() {
         style={{ boxShadow: "0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)" }}
       >
         {/* Home */}
-        <NavLink to="/" end className={tabClass}>
+        <NavLink to="/home" end className={tabClass}>
           <Home size={20} strokeWidth={2} />
           <span>{t("nav.home")}</span>
         </NavLink>

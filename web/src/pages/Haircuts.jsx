@@ -69,14 +69,8 @@ export default function Haircuts() {
   return (
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-28 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1440px]">
-        <div className="mt-12 max-w-4xl">
-          <h3 className="mt-5 font-serif text-5xl leading-[.85] tracking-tight sm:text-7xl lg:text-9xl">
-            Find Your<span className="italic text-[#d6a85f]">signature.</span>
-          </h3>
-        </div>
-
         {loading && (
-          <div className="mt-14 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
+          <div className="mt-14 flex items-center justify-center  border border-white/10 bg-[#111] py-24">
             <Spinner label="Loading haircuts..." />
           </div>
         )}
@@ -122,7 +116,7 @@ export default function Haircuts() {
                 <button
                   key={`${cut.service?.id || "root"}-${cut.id || cut.name}`}
                   onClick={() => setSelected(cut)}
-                  className="group relative min-h-[420px] rounded-2xl overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
+                  className="group relative min-h-[420px]  overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
                 >
                   {cut.image ? (
                     <img
@@ -138,7 +132,7 @@ export default function Haircuts() {
                     <span className="font-serif text-4xl text-white/50">
                       {cut.service?.id || "N"}
                     </span>
-                    <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-[9px] uppercase tracking-widest text-white/80 backdrop-blur">
+                    <span className=" border border-white/20 bg-black/30 px-3 py-1 text-[9px] uppercase tracking-widest text-white/80 backdrop-blur">
                       {cut.service?.name || "NOIR service"}
                     </span>
                   </div>
@@ -146,9 +140,9 @@ export default function Haircuts() {
                     <div className="flex items-end justify-between gap-4">
                       <div>
                         <h2 className="font-serif text-3xl">{cut.name}</h2>
-                        <p className="mt-2 max-w-sm text-xs leading-6 text-white/65">
+                        {/* <p className="mt-2 max-w-sm text-xs leading-6 text-white/65">
                           {cut.description || cut.service?.description}
-                        </p>
+                        </p> */}
                       </div>
                       <ArrowUpRight
                         size={22}
@@ -159,10 +153,10 @@ export default function Haircuts() {
                       <span className="font-semibold">
                         {formatPrice(cut.service?.price)}
                       </span>
-                      <span className="flex items-center gap-2 text-white/60">
+                      {/* <span className="flex items-center gap-2 text-white/60">
                         <Clock3 size={13} />
                         {formatDuration(cut.service?.duration)}
-                      </span>
+                      </span> */}
                     </div>
                   </div>
                 </button>
@@ -188,7 +182,7 @@ function CutModal({ cut, close }) {
       onMouseDown={close}
     >
       <article
-        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto rounded-2xl border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
+        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto  border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button

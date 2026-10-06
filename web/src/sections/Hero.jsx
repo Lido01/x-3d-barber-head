@@ -213,7 +213,7 @@ export default function Hero() {
       />
 
       {/* soft ambient glow */}
-      <div className="pointer-events-none absolute right-[-10%] top-[10%] h-[420px] w-[420px] rounded-full bg-[#d6a85f]/10 blur-[140px]" />
+      <div className="pointer-events-none absolute right-[-10%] top-[10%] h-[420px] w-[420px]  bg-[#d6a85f]/10 blur-[140px]" />
 
       <div className="relative z-10 mx-auto w-full max-w-[1440px] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
         <div className="max-w-3xl">
@@ -265,7 +265,7 @@ export default function Hero() {
                   className="flex h-11 min-w-8 cursor-pointer items-center justify-center"
                 >
                   <span
-                    className={`h-1.5 rounded-full transition-all ${
+                    className={`h-1.5  transition-all ${
                       index === active
                         ? "w-10 bg-[#d6a85f]"
                         : "w-5 bg-white/25 hover:bg-white/45"
