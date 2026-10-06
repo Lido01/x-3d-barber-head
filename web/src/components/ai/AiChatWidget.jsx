@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { chatWithAgent } from "../../services/aiAgentApi";
+import { listQuickAnswers } from "../../services/quickAnswersApi";
 import { useLanguage } from "../../i18n/LanguageContext";
 import {
   isAiChatDismissed,
@@ -74,6 +75,32 @@ export default function AiChatWidget() {
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState(null);
+  const [sessionId, setSessionId] = useState(() => {
+    try {
+      return window.sessionStorage.getItem("ai-chat-session") || null;
+    } catch {
+      return null;
+    }
+  });
+  const [quickAnswers, setQuickAnswers] = useState([]);
+
+  // Saved questions the admin added — offered as one-tap prompts so
+  // the common answers are never typed.
+  useEffect(() => {
+    let cancelled = false;
+
+    listQuickAnswers()
+      .then((rows) => {
+        if (!cancelled) {
+          setQuickAnswers(Array.isArray(rows) ? rows : []);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const scrollRef = useRef(null);
 
@@ -141,12 +168,23 @@ export default function AiChatWidget() {
       try {
         const reply = await chatWithAgent({
           message,
+          sessionId,
           customerName: context.customerName,
           customerPhone: context.customerPhone,
           serviceId: context.serviceId,
           bookingDate: context.bookingDate,
           startTime: context.startTime,
         });
+
+        if (reply.sessionId) {
+          setSessionId(reply.sessionId);
+          try {
+            window.sessionStorage.setItem("ai-chat-session", reply.sessionId);
+          } catch {
+            // Private mode may deny storage — the chat still works,
+            // it just starts a fresh session next time.
+          }
+        }
 
         setMessages((current) => [
           ...current.slice(-(MAX_MESSAGES - 1)),
@@ -163,7 +201,7 @@ export default function AiChatWidget() {
         setThinking(false);
       }
     },
-    []
+    [sessionId]
   );
 
   // A page asked for the panel — /booking's "ask about this" button, or
@@ -226,6 +264,12 @@ export default function AiChatWidget() {
     setMessages([]);
     setError(null);
     setDraft("");
+    setSessionId(null);
+    try {
+      window.sessionStorage.removeItem("ai-chat-session");
+    } catch {
+      // see above
+    }
   };
 
   const showLauncher = !open;
@@ -270,7 +314,7 @@ export default function AiChatWidget() {
               </p>
             </div>
 
-            {messages.length > 0 && (
+            {/* {messages.length > 0 && (
               <button
                 type="button"
                 onClick={handleClear}
@@ -280,7 +324,7 @@ export default function AiChatWidget() {
               >
                 <Trash2 size={14} />
               </button>
-            )}
+            )} */}
 
             <button
               type="button"
@@ -292,7 +336,7 @@ export default function AiChatWidget() {
               <ChevronDown size={17} />
             </button>
 
-            <button
+            {/* <button
               type="button"
               onClick={handleDismiss}
               aria-label={t("ai.close")}
@@ -300,7 +344,7 @@ export default function AiChatWidget() {
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-[#e05a4f]/15 hover:text-[#e0776b]"
             >
               <X size={16} />
-            </button>
+            </button> */}
           </div>
 
           {/* Transcript */}
@@ -317,14 +361,17 @@ export default function AiChatWidget() {
                 </p>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {SUGGESTION_KEYS.map((key) => (
+                  {(quickAnswers.length > 0
+                    ? quickAnswers.slice(0, 6).map((qa) => qa.question)
+                    : SUGGESTION_KEYS.map((key) => t(key))
+                  ).map((label) => (
                     <button
-                      key={key}
+                      key={label}
                       type="button"
-                      onClick={() => send(t(key))}
+                      onClick={() => send(label)}
                       className="rounded-full border border-white/12 px-3 py-1.5 text-left text-[11px] leading-4 text-white/55 transition hover:border-[#d6a85f]/60 hover:text-[#d6a85f]"
                     >
-                      {t(key)}
+                      {label}
                     </button>
                   ))}
                 </div>
