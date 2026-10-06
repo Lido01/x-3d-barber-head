@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BadgePercent,
   CalendarCheck2,
@@ -14,6 +14,7 @@ import {
 import { Link } from "react-router-dom";
 
 import Button from "../components/Button";
+import { listQuickAnswers } from "../services/quickAnswersApi";
 
 const faqs = [
   {
@@ -56,6 +57,34 @@ const packages = [
 
 export default function Help() {
   const [openFaq, setOpenFaq] = useState(0);
+  const [quickAnswers, setQuickAnswers] = useState([]);
+
+  // Saved questions managed from the admin dashboard. When the shop
+  // has added some, they lead the FAQ list; the static answers remain
+  // as a fallback rather than disappearing.
+  useEffect(() => {
+    let cancelled = false;
+
+    listQuickAnswers()
+      .then((rows) => {
+        if (!cancelled) {
+          setQuickAnswers(Array.isArray(rows) ? rows : []);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const faqList = [
+    ...quickAnswers.map((row) => ({
+      question: row.question,
+      answer: row.answer,
+    })),
+    ...faqs,
+  ];
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#090909] px-5 pb-24 pt-28 sm:px-8 lg:px-10">
@@ -102,7 +131,7 @@ export default function Help() {
 
         <section className="grid gap-12 py-20 lg:grid-cols-[.85fr_1.15fr]">
           <div><p className="text-xs font-semibold uppercase tracking-[.28em] text-[#d6a85f]">Answers, clearly</p><h2 className="mt-4 font-serif text-4xl sm:text-5xl">No surprises<br /><i>at the mirror.</i></h2><div className="mt-8 flex gap-3 border-l-2 border-[#d6a85f] pl-4 text-sm leading-6 text-white/55"><ShieldCheck size={20} className="shrink-0 text-[#d6a85f]" />Any service or payment change is discussed with you before your barber starts.</div></div>
-          <div className="divide-y divide-white/10 border-y border-white/10">{faqs.map((faq, index) => <div key={faq.question}><button type="button" onClick={() => setOpenFaq(openFaq === index ? -1 : index)} className="flex w-full items-center justify-between gap-5 py-5 text-left text-base font-semibold text-white"><span>{faq.question}</span><ChevronDown size={19} className={`shrink-0 text-[#d6a85f] transition-transform ${openFaq === index ? "rotate-180" : ""}`} /></button>{openFaq === index && <p className="max-w-2xl pb-6 text-sm leading-7 text-white/50">{faq.answer}</p>}</div>)}</div>
+          <div className="divide-y divide-white/10 border-y border-white/10">{faqList.map((faq, index) => <div key={faq.question}><button type="button" onClick={() => setOpenFaq(openFaq === index ? -1 : index)} className="flex w-full items-center justify-between gap-5 py-5 text-left text-base font-semibold text-white"><span>{faq.question}</span><ChevronDown size={19} className={`shrink-0 text-[#d6a85f] transition-transform ${openFaq === index ? "rotate-180" : ""}`} /></button>{openFaq === index && <p className="max-w-2xl pb-6 text-sm leading-7 text-white/50">{faq.answer}</p>}</div>)}</div>
         </section>
 
         <section className="mb-10 grid gap-6 border border-[#d6a85f]/35 bg-gradient-to-r from-[#1b1710] to-[#111] p-7 sm:p-10 md:grid-cols-[1fr_auto] md:items-center"><div><p className="text-xs font-semibold uppercase tracking-[.28em] text-[#d6a85f]">Still need help?</p><h2 className="mt-3 font-serif text-3xl sm:text-4xl">Talk to a real person.</h2><p className="mt-3 text-sm leading-6 text-white/50">Need help choosing a service, changing a booking, or confirming a package? We are here.</p></div><div className="flex flex-wrap gap-3"><a href="tel:+251911000000" className="inline-flex items-center gap-2 bg-[#d6a85f] px-5 py-3 text-sm font-bold text-black transition hover:bg-[#e5bd7a]"><Phone size={16} /> Call us</a><a href="mailto:hello@noirbarbers.com" className="inline-flex items-center gap-2 border border-white/15 px-5 py-3 text-sm font-semibold text-white/80 transition hover:border-[#d6a85f]"><MessageCircle size={16} /> Email us</a></div></section>
