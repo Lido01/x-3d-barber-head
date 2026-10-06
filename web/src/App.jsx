@@ -43,6 +43,7 @@ import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminProfile from "./pages/admin/AdminProfile";
+import AdminQuickAnswers from "./pages/admin/AdminQuickAnswers";
 
 /**
  * Staff-only screen chunk. Each admin route is wrapped in RequireAdmin
@@ -108,10 +109,10 @@ function Shell() {
       >
         <Routes>
           {/* Public site */}
-          <Route path="/" element={<Home />} />
+          <Route path="/home" element={<Home />} />
           <Route path="/services" element={<Services />} />
           <Route path="/services/:id" element={<ServiceDetail />} />
-          <Route path="/haircuts" element={<Haircuts />} />
+          <Route path="/" element={<Haircuts />} />
           <Route path="/barbers" element={<Barbers />} />
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/help" element={<Help />} />
@@ -204,6 +205,10 @@ function Shell() {
           <Route
             path="/admin/testimonials"
             element={<AdminScreen capability="reviews.moderate"><AdminTestimonials /></AdminScreen>}
+          />
+          <Route
+            path="/admin/quick-answers"
+            element={<AdminScreen capability="ai.manage"><AdminQuickAnswers /></AdminScreen>}
           />
 
           {/* Shop settings. No capability gate on the screen itself:

@@ -3,6 +3,7 @@ import {
   CreditCard,
   Images,
   LayoutDashboard,
+  MessageCircleQuestion,
   MessageSquareQuote,
   Scissors,
   UserRound,
@@ -78,6 +79,12 @@ export const ADMIN_NAV = [
     to: "/admin/testimonials",
     icon: MessageSquareQuote,
     capability: "reviews.moderate",
+  },
+  {
+    label: "Quick answers",
+    to: "/admin/quick-answers",
+    icon: MessageCircleQuestion,
+    capability: "ai.manage",
   },
   /*
    * Reports is gated on `payments.view` rather than on people management.
