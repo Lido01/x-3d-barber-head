@@ -43,6 +43,7 @@ const CHAT_TIMEOUT = 45000;
 
 export function chatWithAgent({
   message,
+  sessionId = null,
   customerName = "",
   customerPhone = "",
   serviceId = null,
@@ -54,6 +55,10 @@ export function chatWithAgent({
     customer_name: customerName || "",
     customer_phone: customerPhone || "",
   };
+
+  if (sessionId) {
+    payload.session_id = sessionId;
+  }
 
   // Only send what there is. `service_id: null` would clear the
   // assistant's memory of a service the customer already picked.
@@ -98,6 +103,8 @@ export function chatWithAgent({
       return {
         message: data.message || "",
         state: data.state || null,
+        sessionId: data.session_id || null,
+        quickAnswer: Boolean(data.quick_answer),
       };
     });
 }
