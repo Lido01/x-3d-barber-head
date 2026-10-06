@@ -43,6 +43,7 @@ export const CAPABILITIES = [
   { value: "gallery.manage", label: "Manage gallery" },
   { value: "reviews.moderate", label: "Moderate reviews" },
   { value: "settings.manage", label: "Change shop settings" },
+  { value: "ai.manage", label: "Manage AI assistant" },
 ];
 
 /** Roles an administrator can assign from the console. */
