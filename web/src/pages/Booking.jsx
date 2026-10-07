@@ -514,27 +514,6 @@ const handleSelectDate = (picked) => {
             </div>
 
             <div className="mt-7 grid gap-8">
-              {/*
-                Every child of this grid is `min-w-0`, and that is the whole
-                fix for the page being swipeable sideways.
-
-                A grid item's automatic minimum size is its min-content
-                width, and a *block* box in normal flow has no automatic
-                minimum of zero just because it scrolls - that exemption
-                only applies to the grid or flex item itself. So the
-                fourteen-day strip and the chip rows, which are hundreds of
-                pixels wider than a phone, propagated their content width up
-                through their sections, through the form and out to the
-                viewport. `min-w-0` on the items lets the sections shrink,
-                and the scrollers inside them do the scrolling.
-              */}
-              {/* The need first, the catalogue second.
-                  On a phone the `<select>` is a dropdown that has to be
-                  opened and read before anyone can tell whether the shop
-                  does what they came for. These chips answer "I want a
-                  sharp one" in one tap, and they are built from the
-                  services the API actually returned — so a chip can never
-                  offer something the shop does not sell. */}
               {services.length > 0 && !servicesLoading && !servicesError && (
                 <NeedPicker
                   services={services}
