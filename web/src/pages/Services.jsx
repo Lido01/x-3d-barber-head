@@ -94,11 +94,6 @@ export default function Services() {
                         <span className="font-semibold text-[#d6a85f]">
                           {formatPrice(service.price)}
                         </span>
-
-                        {/* <span className="flex items-center gap-2 text-xs text-white/45">
-                          <Clock3 size={13} />
-                          {formatDuration(service.duration)}
-                        </span> */}
                       </div>
 
                       <Link
