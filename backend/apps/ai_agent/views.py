@@ -251,8 +251,18 @@ class AIAgentViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        import uuid
+
+        try:
+            session_uuid = uuid.UUID(str(session_id))
+        except (ValueError, AttributeError, TypeError):
+            return Response(
+                {"detail": "session_id is not a valid UUID."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         session = ChatSession.objects.filter(
-            session_id=session_id
+            session_id=session_uuid
         ).first()
 
         if session is None:
