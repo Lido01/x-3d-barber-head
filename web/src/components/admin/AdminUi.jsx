@@ -1060,6 +1060,13 @@ export function AdminSheet({ open, onClose, title, description, children, footer
   const panelRef = useRef(null);
   const closeRef = useRef(null);
 
+  // `onClose` is an inline closure at most call sites, so it gets a new
+  // identity on every render. Keeping it in a ref stops the effect below
+  // from re-running on every keystroke - which used to yank focus back
+  // onto the close button mid-typing and swallow the first character.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) {
       return undefined;
@@ -1070,20 +1077,26 @@ export function AdminSheet({ open, onClose, title, description, children, footer
 
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
-        onClose();
+        onCloseRef.current();
       }
     };
 
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
-    closeRef.current?.focus();
+
+    // Focus the first editable field, not the X button: typing should
+    // go straight into the form the sheet opened for.
+    const field = panelRef.current?.querySelector(
+      'input:not([type="hidden"]):not([disabled]), textarea:not([disabled])'
+    );
+    (field || closeRef.current)?.focus();
 
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
       releaseModal();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) {
     return null;
