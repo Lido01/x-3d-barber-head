@@ -36,6 +36,7 @@ export default {
     minimize: "Qopheeffama gudqateessi",
     close: "Qopheeffama dhaqqabi",
     clear: "Wajjireen haaraa jalqabi",
+    quickQuestions: "Gaaffii saffisiisaa mul'iisii yookaan dhaamsi",
     placeholder: "Waa qopheeffuu, giiffa yookaan yeroo bilisaa qaadhuu...",
     send: "Ergaa'i",
     thinking: "Qopheeffama jira...",

@@ -46,6 +46,7 @@ export default {
     minimize: "Minimise the assistant",
     close: "Close the assistant",
     clear: "Start a new chat",
+    quickQuestions: "Show or hide quick questions",
     placeholder: "Ask about a cut, a price or a free time...",
     send: "Send",
     thinking: "Thinking...",

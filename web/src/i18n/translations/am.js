@@ -36,6 +36,7 @@ export default {
     minimize: "አስረጋዩን አወርድ",
     close: "አስረጋዩን ዝጋ",
     clear: "አዲስ ውይይት ጀምር",
+    quickQuestions: "ፈጥን ጥያቄዎችን አሳይ ወይም ደብቅ",
     placeholder: "ስለ ፀጉር፣ ዋጋ ወይም ነፃ ሰዓት ይጠይቁ...",
     send: "ላክ",
     thinking: "በማስተላለፍ ላይ...",
