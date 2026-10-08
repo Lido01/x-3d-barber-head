@@ -12,6 +12,8 @@ import {
 
 import { chatWithAgent } from "../../services/aiAgentApi";
 import { listQuickAnswers } from "../../services/quickAnswersApi";
+import { EMPTY_LIST, useQuery } from "../../hooks/useQuery";
+import { toArray } from "../../utils/toArray";
 import { useLanguage } from "../../i18n/LanguageContext";
 import {
   isAiChatDismissed,
@@ -82,25 +84,23 @@ export default function AiChatWidget() {
       return null;
     }
   });
-  const [quickAnswers, setQuickAnswers] = useState([]);
 
-  // Saved questions the admin added — offered as one-tap prompts so
-  // the common answers are never typed.
-  useEffect(() => {
-    let cancelled = false;
+  const { data: quickAnswerRows } = useQuery(
+    "/quick-answers/",
+    (signal) => listQuickAnswers({ signal }),
+    { select: toArray }
+  );
+  const quickAnswers = quickAnswerRows || EMPTY_LIST;
 
-    listQuickAnswers()
-      .then((rows) => {
-        if (!cancelled) {
-          setQuickAnswers(Array.isArray(rows) ? rows : []);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  /**
+   * Quick-question chips stay available after one is tapped.
+   *
+   * The list used to be a one-shot thing: tap a question and the chips
+   * were gone for the rest of the visit. Now the header carries a
+   * toggle — tap a question to send it, tap the toggle to show or hide
+   * the whole list again.
+   */
+  const [showQuick, setShowQuick] = useState(true);
 
   const scrollRef = useRef(null);
 
@@ -297,7 +297,17 @@ export default function AiChatWidget() {
       )}
 
       {open && (
-        <div role="dialog" aria-label={t("ai.title")} className={PANEL}>
+        <div
+          role="dialog"
+          aria-label={t("ai.title")}
+          className={
+            PANEL +
+            // Full screen on a phone, like a real messaging app: the
+            // panel covers the display edge to edge instead of floating
+            // over the page. Desktop keeps the floating card.
+            " max-sm:fixed max-sm:inset-0 max-sm:z-[80] max-sm:h-[100dvh] max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:border-x-0"
+          }
+        >
           {/* Header. Two controls, not one: minimise keeps the
               conversation, close removes the launcher entirely. */}
           <div className="flex shrink-0 items-center gap-3 border-b border-white/10 px-3.5 py-3">
@@ -314,7 +324,23 @@ export default function AiChatWidget() {
               </p>
             </div>
 
-            {/* {messages.length > 0 && (
+            {/* Quick-questions toggle. The chips below stay in the chat
+                after one is tapped; this button shows or hides the list
+                without losing the conversation. */}
+            <button
+              type="button"
+              onClick={() => setShowQuick((v) => !v)}
+              aria-label={t("ai.quickQuestions")}
+              title={t("ai.quickQuestions")}
+              aria-expanded={showQuick}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/5 hover:text-white"
+            >
+              <MessageCircleQuestion size={17} />
+            </button>
+
+            {/* Clear history. Starts a fresh conversation and drops the
+                saved session id, so the next message opens a new one. */}
+            {messages.length > 0 && (
               <button
                 type="button"
                 onClick={handleClear}
@@ -324,7 +350,7 @@ export default function AiChatWidget() {
               >
                 <Trash2 size={14} />
               </button>
-            )} */}
+            )}
 
             <button
               type="button"
@@ -347,34 +373,41 @@ export default function AiChatWidget() {
             </button> */}
           </div>
 
-          {/* Transcript */}
+          {/* Transcript. On a phone the panel is full screen, so the
+              transcript takes the whole middle; on desktop it stays a
+              floating card. */}
           <div
             ref={scrollRef}
-            className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-3.5 py-3.5"
+            className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-3.5 py-3.5 max-sm:max-h-none"
             style={{ maxHeight: "min(52svh, 24rem)" }}
           >
+            {/* Quick questions. Shown until the header toggle hides them,
+                and never auto-hidden after a tap — tapping one sends it,
+                the rest stay right here. */}
+            {showQuick && (
+              <div className="flex flex-wrap gap-1.5 pb-1">
+                {(quickAnswers.length > 0
+                  ? quickAnswers.slice(0, 6).map((qa) => qa.question)
+                  : SUGGESTION_KEYS.map((key) => t(key))
+                ).map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => send(label)}
+                    className="rounded-full border border-white/12 px-3 py-1.5 text-left text-[11px] leading-4 text-white/55 transition hover:border-[#d6a85f]/60 hover:text-[#d6a85f]"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {messages.length === 0 && !thinking && (
               <div className="space-y-3">
                 <p className="flex items-start gap-2 rounded-2xl rounded-bl-md border border-white/10 bg-white/[0.04] px-3.5 py-3 text-sm leading-6 text-white/70">
                   <Sparkles size={15} className="mt-1 shrink-0 text-[#d6a85f]" />
                   {t("ai.emptyBody")}
                 </p>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {(quickAnswers.length > 0
-                    ? quickAnswers.slice(0, 6).map((qa) => qa.question)
-                    : SUGGESTION_KEYS.map((key) => t(key))
-                  ).map((label) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => send(label)}
-                      className="rounded-full border border-white/12 px-3 py-1.5 text-left text-[11px] leading-4 text-white/55 transition hover:border-[#d6a85f]/60 hover:text-[#d6a85f]"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
 
