@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   BadgePercent,
   CalendarCheck2,
@@ -15,6 +15,8 @@ import { Link } from "react-router-dom";
 
 import Button from "../components/Button";
 import { listQuickAnswers } from "../services/quickAnswersApi";
+import { EMPTY_LIST, useQuery } from "../hooks/useQuery";
+import { toArray } from "../utils/toArray";
 
 const faqs = [
   {
@@ -57,26 +59,13 @@ const packages = [
 
 export default function Help() {
   const [openFaq, setOpenFaq] = useState(0);
-  const [quickAnswers, setQuickAnswers] = useState([]);
 
-  // Saved questions managed from the admin dashboard. When the shop
-  // has added some, they lead the FAQ list; the static answers remain
-  // as a fallback rather than disappearing.
-  useEffect(() => {
-    let cancelled = false;
-
-    listQuickAnswers()
-      .then((rows) => {
-        if (!cancelled) {
-          setQuickAnswers(Array.isArray(rows) ? rows : []);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data: quickAnswerRows } = useQuery(
+    "/quick-answers/",
+    (signal) => listQuickAnswers({ signal }),
+    { select: toArray }
+  );
+  const quickAnswers = quickAnswerRows || EMPTY_LIST;
 
   const faqList = [
     ...quickAnswers.map((row) => ({
