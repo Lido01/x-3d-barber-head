@@ -59,11 +59,17 @@ capacity allows it.
 The final booking decision must always come from Django.
 """
 
-    def __init__(self, state=None):
+    def __init__(self, state=None, history=None):
         self.state = state or {}
+        self.history = history or []
         self.client = GeminiClient()
 
     def process(self, message):
+
+        transcript = "\n".join(
+            f"{turn['role']}: {turn['text']}"
+            for turn in self.history
+        )
 
         prompt = f"""
 {self.SYSTEM_PROMPT}
@@ -71,6 +77,10 @@ The final booking decision must always come from Django.
 Current conversation state:
 
 {self.state}
+
+Conversation so far:
+
+{transcript or "(no earlier messages)"}
 
 Customer message:
 

@@ -1,39 +1,90 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ExternalLink, RefreshCw, Search, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  MoveHorizontal,
+  RefreshCw,
+  X,
+} from "lucide-react";
+import { Link } from "react-router-dom";
 
-import StatusBadge from "../../components/StatusBadge";
 import Alert from "../../components/ui/Alert";
-import Spinner from "../../components/ui/Spinner";
 import {
   AdminButton,
+  AdminDetails,
+  AdminDetail,
   AdminEmpty,
+  AdminField,
   AdminFilterTabs,
   AdminLoading,
   AdminPageHeader,
-  AdminPanel,
+  AdminSearch,
+  AdminSheet,
+  AdminStatus,
+  AdminTable,
+  AdminTableCell,
+  AdminTableDetail,
+  AdminTableHead,
+  AdminTableHeadCell,
+  AdminTableHint,
+  AdminTableRow,
+  AdminTextarea,
 } from "../../components/admin/AdminUi";
 import { useAdminAuth } from "../../context/AdminAuthContext";
 import { mediaUrl } from "../../services/api";
+import { toArray } from "../../utils/toArray";
 import {
   listPayments,
   rejectPayment,
   verifyPayment,
 } from "../../services/paymentApi";
-import { formatPrice } from "../../utils/format";
+import { invalidateQuery, useQuery, EMPTY_LIST } from "../../hooks/useQuery";
+import { formatDate, formatPrice, formatTime } from "../../utils/format";
 
 /**
  * Staff payment verification.
  *
- * Verifying calls POST /api/payments/payments/{id}/verify/, which is
- * also what confirms the booking on the backend (verify_payment ->
- * confirm_booking). Rows are replaced with the API's response, so the
- * list always shows the server's state rather than an optimistic guess.
+ * The queue. Its job is to answer one question per row - is this the right
+ * money for this appointment - and that is why every row now carries the
+ * booking's code, status, date and time rather than only the money: the
+ * answer is impossible to give from an amount, a method and a reference
+ * alone, and getting it wrong means accepting a transfer against the wrong
+ * chair.
  *
- * The default filter is `pending` because that is the queue staff
- * actually work. On a phone the receipt is the first thing shown, full
- * width and tappable, since deciding a payment means looking at it, and
- * the reference and method sit underneath as scannable rows rather
- * than a two-column grid that would be 150px wide.
+ * Verifying calls POST /api/payments/payments/{id}/verify/. It no longer
+ * confirms the booking as a side effect - reception confirms first and
+ * payment opens second - so the booking status on a row is information
+ * rather than something this screen quietly fixes. Both cached views are
+ * invalidated afterwards, so the bookings screen moves with this one rather
+ * than waiting out a TTL: deciding a payment is deciding the booking's money
+ * state, and the two screens must never disagree about it.
+ *
+ * The same decision can be made on the bookings screen, where the
+ * appointment and its receipt are on one row. This queue is the other way
+ * in: everything still waiting, in one list, ordered by what needs doing.
+ *
+ * The default filter is `pending` because that is the queue staff actually
+ * work.
+ *
+ * ## A table, because this is a queue and not a feed
+ *
+ * This is the list people work down under time pressure, so the row has to
+ * be scannable: reference, who it is for, the appointment it is paying
+ * for, the amount, and the two buttons that decide it - all on one line,
+ * all visible at once. The receipt opens underneath the row rather than
+ * sitting in it, because deciding a payment means looking at the image and
+ * a thumbnail sized to fit a cell leaves it unreadable, while a full-width
+ * image in a table row makes the row 200px tall.
+ *
+ * On a phone the table scrolls sideways to reach the buttons; the sticky
+ * first column keeps the reference on screen while it does. See
+ * `AdminTable`.
+ *
+ * Rejecting asks for a reason in a sheet rather than expanding a field
+ * inline: a rejection is a decision with a consequence for a customer, and
+ * it should not be one tap away from the row above it.
  */
 
 const FILTERS = [
@@ -43,48 +94,255 @@ const FILTERS = [
   { key: "all", label: "All" },
 ];
 
-const TEXTAREA =
-  "w-full resize-none rounded-xl border border-white/10 bg-[#181818] px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#d6a85f]/50";
+/**
+ * One payment: the row that is worked from, and the receipt underneath it.
+ *
+ * The reference leads and sticks to the left edge. It is what makes a row
+ * identifiable when the rest of it is off the edge of a phone screen, and
+ * it is what the customer quotes when they ring to ask why the shop has
+ * not seen their money.
+ */
+function PaymentRows({
+  payment,
+  busy,
+  expanded,
+  onToggle,
+  onVerify,
+  onReject,
+}) {
+  const receipt = mediaUrl(payment.receipt);
+  const isPending = payment.status === "pending";
+
+  return (
+    <>
+      <AdminTableRow aria-expanded={expanded}>
+        <AdminTableCell sticky>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={expanded}
+              aria-label={
+                expanded
+                  ? `Hide the receipt for payment ${payment.id}`
+                  : `Show the receipt for payment ${payment.id}`
+              }
+              className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-console-muted transition hover:bg-console-sunken hover:text-console-ink"
+            >
+              {expanded ? (
+                <ChevronDown size={15} />
+              ) : (
+                <ChevronRight size={15} />
+              )}
+            </button>
+
+            <span className="font-mono text-sm text-console-ink">
+              {payment.booking_code || `#${payment.booking}`}
+            </span>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <AdminStatus status={payment.status} />
+
+            {/* The booking's own state, so "is this money for a chair the
+                shop agreed to" is answerable from this row. A pending
+                booking on a payment is a booking that should never have been
+                payable. */}
+            <AdminStatus
+              status={payment.booking_status}
+              className="opacity-80"
+            />
+          </div>
+        </AdminTableCell>
+
+        <AdminTableCell>
+          <span className="block break-words font-medium text-console-ink">
+            {payment.booking_customer || "Unknown customer"}
+          </span>
+
+          <span className="mt-0.5 block break-words text-xs text-console-muted">
+            {[payment.booking_service, payment.booking_barber]
+              .filter(Boolean)
+              .join(" · ") || "—"}
+          </span>
+        </AdminTableCell>
+
+        <AdminTableCell>
+          <span className="block tabular-nums text-console-ink">
+            {formatDate(payment.booking_date)}
+          </span>
+
+          <span className="mt-0.5 block text-xs tabular-nums text-console-muted">
+            {formatTime(payment.booking_start_time)}
+          </span>
+        </AdminTableCell>
+
+        <AdminTableCell numeric>
+          <span className="font-serif text-lg text-console-accent-strong">
+            {formatPrice(payment.amount)}
+          </span>
+
+          <span className="mt-0.5 block text-xs text-console-muted">
+            {String(payment.method || "").replace(/_/g, " ") || "—"}
+          </span>
+        </AdminTableCell>
+
+        <AdminTableCell>
+          <span className="block break-all font-mono text-xs text-console-ink">
+            {payment.transaction_reference || "—"}
+          </span>
+
+          <span className="mt-0.5 block text-[11px] text-console-muted">
+            {new Date(payment.created_at).toLocaleString("en-GB", {
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        </AdminTableCell>
+
+        <AdminTableCell>
+          <div className="flex flex-wrap gap-2">
+            {isPending && (
+              <>
+                <AdminButton
+                  tone="good"
+                  icon={Check}
+                  loading={busy}
+                  onClick={onVerify}
+                >
+                  Verify payment
+                </AdminButton>
+
+                <AdminButton
+                  icon={X}
+                  loading={busy}
+                  onClick={onReject}
+                >
+                  Reject
+                </AdminButton>
+              </>
+            )}
+
+            {/* The same decision is available on the booking, where the
+                appointment and its receipt sit on one row. Linked rather
+                than repeated, so there is one place that decides money and
+                one that decides the chair. */}
+            <Link
+              to="/admin/bookings"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-[11px] text-console-muted transition hover:text-console-accent"
+            >
+              Open the booking
+              <ExternalLink size={11} />
+            </Link>
+          </div>
+        </AdminTableCell>
+      </AdminTableRow>
+
+      {expanded && (
+        <AdminTableDetail columns={6}>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+            <div className="min-w-0">
+              <AdminDetails columns={2}>
+                <AdminDetail label="Method">
+                  {String(payment.method || "").replace(/_/g, " ") || "—"}
+                </AdminDetail>
+
+                <AdminDetail label="Reference" mono>
+                  {payment.transaction_reference || "—"}
+                </AdminDetail>
+
+                <AdminDetail label="Payment id" mono>
+                  #{payment.id}
+                </AdminDetail>
+
+                <AdminDetail label="Booking id" mono>
+                  #{payment.booking}
+                </AdminDetail>
+
+                {payment.rejection_reason && (
+                  <AdminDetail
+                    label="Rejection reason"
+                    className="sm:col-span-2"
+                  >
+                    <span className="text-console-bad">
+                      {payment.rejection_reason}
+                    </span>
+                  </AdminDetail>
+                )}
+              </AdminDetails>
+            </div>
+
+            {receipt ? (
+              <a
+                href={receipt}
+                target="_blank"
+                rel="noreferrer"
+                className="block min-w-0"
+              >
+                <img
+                  src={receipt}
+                  alt={`Receipt for payment ${payment.id}`}
+                  loading="lazy"
+                  className="h-52 w-full rounded-xl border border-console-line object-cover transition hover:border-console-accent sm:object-contain"
+                />
+
+                <span className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-console-muted">
+                  <ExternalLink size={11} />
+                  Open the receipt full size
+                </span>
+              </a>
+            ) : (
+              <div className="flex h-24 items-center justify-center gap-2 rounded-xl border border-dashed border-console-line-strong text-center text-xs text-console-faint">
+                No receipt attached
+              </div>
+            )}
+          </div>
+        </AdminTableDetail>
+      )}
+    </>
+  );
+}
 
 export default function AdminPayments() {
   const { account } = useAdminAuth();
 
-  const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [filter, setFilter] = useState("pending");
   const [query, setQuery] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
 
   /** id of the payment currently being verified or rejected */
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState(null);
 
-  /** payment id whose reject form is open */
+/** payment id whose reject sheet is open */
   const [rejectingId, setRejectingId] = useState(null);
   const [reason, setReason] = useState("");
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    setRefreshing(true);
+  /**
+   * Which row's receipt is open.
+   *
+   * One at a time: two receipts open side by side is how the wrong one gets
+   * verified against the right one.
+   */
+  const [expandedId, setExpandedId] = useState(null);
 
-    return listPayments()
-      .then((data) => {
-        setPayments(Array.isArray(data) ? data : data?.results || []);
-        setLoading(false);
-        setRefreshing(false);
-      })
-      .catch((apiError) => {
-        setError(apiError);
-        setLoading(false);
-        setRefreshing(false);
-      });
-  }, []);
+  // Verified and rejected are final, so this queue settles rather than
+  // drifting. The short TTL keeps a second staff member's decision from
+  // sitting unseen.
+  const {
+    data,
+    loading,
+    error,
+    isFetching: refreshing,
+    refetch: load,
+  } = useQuery("/payments/payments/", listPayments, {
+    scope: "staff",
+    staleMs: 30 * 1000,
+    select: toArray,
+  });
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const payments = data || EMPTY_LIST;
 
   const counts = useMemo(() => {
     const tally = { all: payments.length };
@@ -110,9 +368,11 @@ export default function AdminPayments() {
         return true;
       }
 
-      return [
+return [
         payment.booking_customer,
         payment.booking_service,
+        payment.booking_code,
+        payment.booking_barber,
         payment.transaction_reference,
         String(payment.id),
         String(payment.booking),
@@ -124,10 +384,22 @@ export default function AdminPayments() {
     });
   }, [payments, filter, query]);
 
-  const replaceRow = (updated) => {
-    setPayments((rows) =>
-      rows.map((row) => (row.id === updated.id ? updated : row))
-    );
+/**
+   * A decision here changes the booking's money state, so the bookings
+   * screen is now out of date too - it carries the same payment attached.
+   * It also has to reach the customer's live page, which reads the booking
+   * status endpoint; both keys contain "bookings", so one invalidation
+   * covers them and neither screen is left showing a payment the other has
+   * already settled.
+   */
+  const refreshAffected = () => {
+    invalidateQuery("payments");
+    invalidateQuery("bookings");
+    invalidateQuery("reports/dashboard");
+
+    // The open receipt belongs to a row whose status has just been settled,
+    // and the buttons on that row are derived from that status.
+    setExpandedId(null);
   };
 
   const handleVerify = async (payment) => {
@@ -135,7 +407,8 @@ export default function AdminPayments() {
     setActionError(null);
 
     try {
-      replaceRow(await verifyPayment(payment.id));
+      await verifyPayment(payment.id);
+      refreshAffected();
     } catch (apiError) {
       setActionError(apiError);
     } finally {
@@ -157,9 +430,10 @@ export default function AdminPayments() {
     setActionError(null);
 
     try {
-      replaceRow(await rejectPayment(payment.id, reason.trim()));
+      await rejectPayment(payment.id, reason.trim());
       setRejectingId(null);
       setReason("");
+      refreshAffected();
     } catch (apiError) {
       setActionError(apiError);
     } finally {
@@ -167,8 +441,11 @@ export default function AdminPayments() {
     }
   };
 
+  const rejecting = payments.find((payment) => payment.id === rejectingId);
+  const activeLabel = FILTERS.find((option) => option.key === filter)?.label;
+
   return (
-    <div>
+    <div className="space-y-5">
       <AdminPageHeader
         eyebrow="Staff · Management"
         title="Payments"
@@ -178,12 +455,8 @@ export default function AdminPayments() {
             : "Verify customer payments"
         }
         actions={
-          <AdminButton
-            onClick={load}
-            icon={RefreshCw}
-            disabled={refreshing}
-          >
-            {refreshing ? "Refreshing..." : "Refresh"}
+          <AdminButton onClick={load} icon={RefreshCw} loading={refreshing}>
+            Refresh
           </AdminButton>
         }
       />
@@ -197,40 +470,14 @@ export default function AdminPayments() {
         onChange={setFilter}
       />
 
-      <div className="relative mt-4">
-        <Search
-          size={15}
-          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30"
-        />
+      <AdminSearch
+        value={query}
+        onChange={setQuery}
+        placeholder="Search by name, service or reference"
+      />
 
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by name, service or reference"
-          aria-label="Search payments"
-          className="w-full rounded-xl border border-white/10 bg-[#181818] py-3 pl-11 pr-11 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50"
-        />
-
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            aria-label="Clear search"
-            className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-white/40 transition hover:text-white"
-          >
-            <X size={15} />
-          </button>
-        )}
-      </div>
-
-      {actionError && (
-        <Alert
-          tone="error"
-          title="Action failed"
-          details={actionError.fieldErrors}
-          className="mt-5"
-        >
+      {actionError && !rejectingId && (
+        <Alert tone="error" title="Action failed" details={actionError.fieldErrors}>
           {actionError.message}
         </Alert>
       )}
@@ -243,7 +490,6 @@ export default function AdminPayments() {
           title="Could not load payments"
           details={error.fieldErrors}
           onRetry={load}
-          className="mt-8"
         >
           {error.message}
         </Alert>
@@ -257,189 +503,150 @@ export default function AdminPayments() {
               ? `No payments match "${query}".`
               : filter === "all"
                 ? "No payments have been submitted yet."
-                : `No ${filter} payments right now.`
+                : `No ${activeLabel?.toLowerCase()} payments right now.`
           }
           onRetry={load}
         />
       )}
 
       {!loading && !error && shown.length > 0 && (
-        <div className="mt-5 grid gap-3">
-          {shown.map((payment) => {
-            const receipt = mediaUrl(payment.receipt);
-            const busy = busyId === payment.id;
-            const isPending = payment.status === "pending";
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-console-muted">
+              Showing {shown.length} of {payments.length}
+            </p>
 
-            return (
-              <AdminPanel key={payment.id}>
-                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                      <p className="font-serif text-lg text-white sm:text-xl">
-                        Payment #{payment.id}
-                      </p>
+            <p className="hidden items-center gap-1.5 text-[11px] text-console-faint sm:flex">
+              <MoveHorizontal size={12} />
+              Scroll the table sideways to reach every column
+            </p>
+          </div>
 
-                      <StatusBadge
-                        status={payment.status}
-                        kind="payment"
-                      />
-                    </div>
+          <AdminTable
+            label="Payments"
+            caption="Payments submitted by customers, with the appointment each one is for."
+            minWidth="min-w-[64rem]"
+          >
+            <AdminTableHead>
+              <tr>
+                <AdminTableHeadCell sticky width="11rem">
+                  Payment
+                </AdminTableHeadCell>
+                <AdminTableHeadCell width="14rem">Customer</AdminTableHeadCell>
+                <AdminTableHeadCell width="11rem">Appointment</AdminTableHeadCell>
+                <AdminTableHeadCell numeric width="9rem">
+                  Amount
+                </AdminTableHeadCell>
+                <AdminTableHeadCell width="13rem">Reference</AdminTableHeadCell>
+                <AdminTableHeadCell width="16rem">
+                  Actions
+                </AdminTableHeadCell>
+              </tr>
+            </AdminTableHead>
 
-                    <p className="mt-2 break-words text-xs text-white/45">
-                      Booking #{payment.booking}
-                      {payment.booking_customer
-                        ? ` · ${payment.booking_customer}`
-                        : ""}
-                      {payment.booking_service
-                        ? ` · ${payment.booking_service}`
-                        : ""}
-                    </p>
-                  </div>
+            <tbody>
+              {shown.map((payment) => (
+                <PaymentRows
+                  key={payment.id}
+                  payment={payment}
+                  busy={busyId === payment.id}
+                  expanded={expandedId === payment.id}
+                  onToggle={() =>
+                    setExpandedId(
+                      expandedId === payment.id ? null : payment.id
+                    )
+                  }
+                  onVerify={() => handleVerify(payment)}
+                  onReject={() => {
+                    setRejectingId(payment.id);
+                    setReason("");
+                    setActionError(null);
+                  }}
+                />
+              ))}
+            </tbody>
+          </AdminTable>
 
-                  <p className="text-lg font-semibold text-[#d6a85f]">
-                    {formatPrice(payment.amount)}
-                  </p>
-                </div>
+          <AdminTableHint>
+            Swipe the table sideways for the rest of each row. Open a row to
+            read its receipt.
+          </AdminTableHint>
 
-                {/* Receipt first and full width on a phone: deciding a
-                    payment means looking at it, and a 96px thumbnail
-                    beside a two-column grid left it unreadable. */}
-                <div className="mt-4 border-t border-white/10 pt-4">
-                  {receipt ? (
-                    <a
-                      href={receipt}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block"
-                    >
-                      <img
-                        src={receipt}
-                        alt={`Receipt for payment ${payment.id}`}
-                        className="h-40 w-full rounded-xl border border-white/10 object-cover transition hover:border-[#d6a85f]/50 sm:h-48 lg:h-56 lg:w-56 lg:object-contain"
-                      />
-
-                      <span className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-white/35">
-                        <ExternalLink size={11} />
-                        Tap the receipt to open it full size
-                      </span>
-                    </a>
-                  ) : (
-                    <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-white/10 text-center text-xs text-white/25">
-                      No receipt attached
-                    </div>
-                  )}
-                </div>
-
-                <dl className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
-                  <div className="min-w-0">
-                    <dt className="text-[10px] uppercase tracking-[0.2em] text-white/30">
-                      Method
-                    </dt>
-                    <dd className="mt-1 text-sm capitalize text-white/75">
-                      {String(payment.method || "").replace(/_/g, " ") ||
-                        "—"}
-                    </dd>
-                  </div>
-
-                  <div className="min-w-0">
-                    <dt className="text-[10px] uppercase tracking-[0.2em] text-white/30">
-                      Reference
-                    </dt>
-                    <dd className="mt-1 break-all text-sm text-white/75">
-                      {payment.transaction_reference || "—"}
-                    </dd>
-                  </div>
-
-                  {payment.rejection_reason && (
-                    <div className="sm:col-span-2">
-                      <dt className="text-[10px] uppercase tracking-[0.2em] text-white/30">
-                        Rejection reason
-                      </dt>
-
-                      <dd className="mt-1 break-words text-sm text-[#e0776b]">
-                        {payment.rejection_reason}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-
-                {isPending && (
-                  <div className="mt-4 border-t border-white/10 pt-4">
-                    {rejectingId === payment.id ? (
-                      <div className="grid gap-3">
-                        <textarea
-                          value={reason}
-                          onChange={(event) =>
-                            setReason(event.target.value)
-                          }
-                          placeholder="Why is this payment being rejected?"
-                          rows={2}
-                          disabled={busy}
-                          className={TEXTAREA}
-                        />
-
-                        <div className="flex flex-wrap gap-2">
-                          <AdminButton
-                            tone="primary"
-                            onClick={() =>
-                              handleReject(payment)
-                            }
-                            disabled={busy}
-                            className="!border-[#e05a4f] !bg-[#e05a4f] !text-black hover:!bg-[#e0776b]"
-                          >
-                            {busy ? "Rejecting..." : "Confirm rejection"}
-                          </AdminButton>
-
-                          <AdminButton
-                            onClick={() => {
-                              setRejectingId(null);
-                              setReason("");
-                              setActionError(null);
-                            }}
-                            disabled={busy}
-                          >
-                            Cancel
-                          </AdminButton>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        <AdminButton
-                          tone="primary"
-                          icon={busy ? undefined : Check}
-                          onClick={() => handleVerify(payment)}
-                          disabled={busy}
-                        >
-                          {busy ? (
-                            <Spinner size={13} label="Verifying" />
-                          ) : (
-                            "Verify payment"
-                          )}
-                        </AdminButton>
-
-                        <AdminButton
-                          icon={X}
-                          onClick={() => {
-                            setRejectingId(payment.id);
-                            setActionError(null);
-                          }}
-                          disabled={busy}
-                        >
-                          Reject
-                        </AdminButton>
-                      </div>
-                    )}
-
-                    <p className="mt-3 text-[10px] leading-5 text-white/25">
-                      Verifying a payment also confirms its booking.
-                    </p>
-                  </div>
-                )}
-              </AdminPanel>
-            );
-          })}
-        </div>
+          <p className="text-[11px] leading-5 text-console-muted">
+            Bookings are confirmed by reception before payment opens, so
+            everything here should sit on a confirmed booking. Verifying
+            records who checked the money; it does not confirm the chair.
+          </p>
+        </>
       )}
+      <AdminSheet
+        open={Boolean(rejectingId)}
+        onClose={() => {
+          setRejectingId(null);
+          setReason("");
+          setActionError(null);
+        }}
+        title="Reject this payment"
+        description={
+          rejecting
+            ? `Payment #${rejecting.id} for ${formatPrice(rejecting.amount)}. The customer sees this reason.`
+            : ""
+        }
+        footer={
+          <>
+            <AdminButton
+              onClick={() => {
+                setRejectingId(null);
+                setReason("");
+                setActionError(null);
+              }}
+              disabled={busyId === rejectingId}
+            >
+              Cancel
+            </AdminButton>
+
+            <AdminButton
+              tone="danger"
+              loading={busyId === rejectingId}
+              onClick={() => rejecting && handleReject(rejecting)}
+            >
+              Confirm rejection
+            </AdminButton>
+          </>
+        }
+      >
+        {rejecting && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleReject(rejecting);
+            }}
+            className="space-y-4"
+          >
+            {actionError && (
+              <Alert tone="error" title="Could not reject" details={actionError.fieldErrors}>
+                {actionError.message}
+              </Alert>
+            )}
+
+            <AdminField
+              label="Reason"
+              required
+              error={actionError?.fieldErrors?.reason}
+              hint="The customer reads this, so say what they need to do."
+            >
+              <AdminTextarea
+                rows={4}
+                value={reason}
+                placeholder="Why is this payment being rejected?"
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </AdminField>
+
+            <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1} />
+          </form>
+        )}
+      </AdminSheet>
     </div>
   );
 }

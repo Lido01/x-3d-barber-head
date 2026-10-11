@@ -8,12 +8,17 @@ import {
   LogIn,
   Scissors,
   Sparkles,
+  CircleHelp,
+  MessageCircleQuestion,
+  Ticket,
   UserRound,
 } from "lucide-react";
 
 import LanguageSwitcher from "./LanguageSwitcher";
 import { useCustomerAuth } from "../context/CustomerAuthContext";
 import { useLanguage } from "../i18n/LanguageContext";
+import { openAiChat } from "../utils/aiChat";
+import { useModalOpen } from "../utils/modalStack";
 
 /**
  * Mobile-first bottom app bar (Telegram-style).
@@ -26,6 +31,16 @@ import { useLanguage } from "../i18n/LanguageContext";
  *
  * A small tap-target overlay menu (opened from the "+ More" tab) gives
  * access to About + the staff console on small screens.
+ *
+ * ## It leaves the room when a sheet opens
+ *
+ * A booking sheet - the answer on "My bookings", the payment form, the
+ * booking lookup - covers the bottom 90px of a phone screen with its own
+ * footer. The bar is `fixed` there too, so one of the two has to give. The
+ * sheet is at `z-70` and above this bar, which stops the bar hiding the
+ * sheet; the bar in turn steps aside, because a "Book" button sitting on
+ * top of a modal the customer is reading is a link that navigates away
+ * from it under their thumb. Both halves are in `utils/modalStack`.
  */
 export default function BottomBar() {
   const location = useLocation();
@@ -34,6 +49,7 @@ export default function BottomBar() {
   const [hidden, setHidden] = useState(false);
   const lastScroll = useRef(0);
   const [moreOpen, setMoreOpen] = useState(false);
+  const modalOpen = useModalOpen();
 
   // Scroll direction: hide on the way down, reveal on the way up.
   useEffect(() => {
@@ -64,17 +80,26 @@ export default function BottomBar() {
     return null;
   }
 
+  const outOfTheWay = modalOpen || hidden;
+
   const base =
-    "flex flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 text-[10px] font-medium transition-colors";
+    "flex flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10px] font-medium transition-colors";
 
   const tabClass = (active) =>
     `${base} ${active ? "text-white" : "text-white/45 active:text-white/80"}`;
 
   return (
     <nav
+      aria-hidden={modalOpen || undefined}
       className={`fixed inset-x-0 bottom-0 z-[55] lg:hidden ${
-        hidden ? "translate-y-full" : "translate-y-0"
-      } transition-transform duration-300 ease-out`}
+        outOfTheWay ? "invisible translate-y-full" : "visible translate-y-0"
+      } ${
+        // Scrolling is the customer's own gesture and is worth animating;
+        // a sheet opening is not, and `pointer-events-none` matters more
+        // than the transition - without it the bar keeps swallowing taps
+        // aimed at the sheet during the slide.
+        modalOpen ? "pointer-events-none" : "transition-transform duration-300 ease-out"
+      }`}
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
         paddingLeft: "env(safe-area-inset-left)",
@@ -86,7 +111,7 @@ export default function BottomBar() {
         style={{ boxShadow: "0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)" }}
       >
         {/* Home */}
-        <NavLink to="/" end className={tabClass}>
+        <NavLink to="/home" end className={tabClass}>
           <Home size={20} strokeWidth={2} />
           <span>{t("nav.home")}</span>
         </NavLink>
@@ -127,7 +152,7 @@ export default function BottomBar() {
 
       {/* More sheet */}
       <div
-        className={`absolute inset-x-3 bottom-[calc(100%+0.75rem)] overflow-hidden rounded-3xl border border-white/10 bg-[#0c0c0c]/95 backdrop-blur-2xl transition-all duration-300 ${
+        className={`absolute inset-x-3 bottom-[calc(100%+0.75rem)] rounded-2xl overflow-hidden border border-white/10 bg-[#0c0c0c]/95 backdrop-blur-2xl transition-all duration-300 ${
           moreOpen
             ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none translate-y-3 opacity-0"
@@ -137,7 +162,7 @@ export default function BottomBar() {
           <NavLink
             to="/gallery"
             onClick={() => setMoreOpen(false)}
-            className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
           >
             <LayoutGrid size={18}  />
             {t("nav.gallery")}
@@ -146,29 +171,68 @@ export default function BottomBar() {
           <NavLink
             to="/haircuts"
             onClick={() => setMoreOpen(false)}
-            className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
           >
             <Sparkles size={18} />
             {t("nav.haircuts")}
           </NavLink>
 
+          {/* A guest booking has no account to sit under, so the way
+              back to one is a booking code - this is where it is spent.
+              Reachable from the More sheet rather than a tab: the bar is
+              already carrying five items and this is a lookup, not a
+              browse. */}
+          <NavLink
+            to="/bookings"
+            onClick={() => setMoreOpen(false)}
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
+          >
+            <Ticket size={18} />
+            My bookings
+          </NavLink>
+
           <NavLink
             to="/#about"
             onClick={() => setMoreOpen(false)}
-            className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
           >
             <CalendarDays size={18} />
             {t("nav.about")}
           </NavLink>
 
-          <Link
+          <NavLink
+            to="/help"
+            onClick={() => setMoreOpen(false)}
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
+          >
+            <CircleHelp size={18} />
+            Help & FAQ
+          </NavLink>
+
+          {/* The way back to the assistant once it has been closed.
+              `openAiChat` clears the dismissal flag as well as opening
+              the panel, so this one link is both "show me the chat" and
+              "un-hide it" - see utils/aiChat.js. */}
+          <button
+            type="button"
+            onClick={() => {
+              setMoreOpen(false);
+              openAiChat();
+            }}
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-left text-sm font-medium"
+          >
+            <MessageCircleQuestion size={18} />
+            {t("ai.title")}
+          </button>
+
+          {/* <Link
             to="/admin"
             onClick={() => setMoreOpen(false)}
             className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
           >
             <UserRound size={18} />
             {t("nav.staff")}
-          </Link>
+          </Link> */}
 
           {/* Account entry point. A signed-in customer goes straight to
               their reviews; a visitor is sent to sign in. */}
@@ -176,7 +240,7 @@ export default function BottomBar() {
             <NavLink
               to="/account"
               onClick={() => setMoreOpen(false)}
-              className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+              className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
             >
               <CircleUser size={18} />
               {t("account.title")}
@@ -186,7 +250,7 @@ export default function BottomBar() {
               to="/login"
               state={{ from: location.pathname }}
               onClick={() => setMoreOpen(false)}
-              className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-4 text-sm font-medium"
+              className="flex items-center gap-3 bg-white/[0.03] p-4 text-sm font-medium"
             >
               <LogIn size={18} />
               {t("account.signInTitle")}

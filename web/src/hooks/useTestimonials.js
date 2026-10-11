@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "./useQuery";
 
 import { listApprovedTestimonials } from "../services/testimonialsApi";
+import { toArray } from "../utils/toArray";
 
 /**
  * Approved testimonials from GET /api/testimonials/testimonials/.
@@ -9,39 +10,13 @@ import { listApprovedTestimonials } from "../services/testimonialsApi";
  * section never re-filters client side.
  */
 export function useTestimonials() {
-  const [testimonials, setTestimonials] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data, error, loading, refetch } = useQuery(
+    "/testimonials/testimonials/",
+    listApprovedTestimonials,
+    {
+      select: toArray,
+    }
+  );
 
-  const reload = useCallback(() => {
-    setReloadKey((key) => key + 1);
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    setLoading(true);
-    setError(null);
-
-    listApprovedTestimonials({ signal: controller.signal })
-      .then((data) => {
-        setTestimonials(Array.isArray(data) ? data : data?.results || []);
-        setLoading(false);
-      })
-      .catch((apiError) => {
-        if (apiError?.isCancelled) {
-          return;
-        }
-
-        setError(apiError);
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [reloadKey]);
-
-  return { testimonials, loading, error, reload };
+  return { testimonials: data || [], loading, error, reload: refetch };
 }

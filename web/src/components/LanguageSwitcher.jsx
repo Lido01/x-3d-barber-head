@@ -68,7 +68,7 @@ export default function LanguageSwitcher({ variant = "dropdown", className = "" 
                 type="button"
                 onClick={() => choose(language.code)}
                 aria-current={selected}
-                className={`flex w-full items-center justify-between gap-3 rounded-2xl p-4 text-left text-sm font-medium transition ${
+                className={`flex w-full items-center justify-between gap-3 p-4 text-left text-sm font-medium transition ${
                   selected
                     ? "bg-[#d6a85f] text-black"
                     : "bg-white/[0.03] text-white/70 hover:bg-white/[0.07] hover:text-white"
@@ -132,7 +132,7 @@ export default function LanguageSwitcher({ variant = "dropdown", className = "" 
 
               {language.beta && (
                 <span
-                  className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[.1em] ${
+                  className={` rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[.1em] ${
                     selected ? "bg-black/15 text-black/70" : "bg-[#d6a85f]/15 text-[#d6a85f]"
                   }`}
                 >
@@ -167,7 +167,7 @@ export default function LanguageSwitcher({ variant = "dropdown", className = "" 
       {open && (
         <div
           role="listbox"
-          className="absolute right-0 z-50 mt-2 w-56 origin-top-right  border border-white/10 bg-[#0c0c0c]/97 p-1.5 shadow-[0_24px_60px_rgba(0,0,0,0.7)] backdrop-blur-2xl"
+          className="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-2xl border border-white/10 bg-[#0c0c0c]/97 p-1.5 shadow-[0_24px_60px_rgba(0,0,0,0.7)] backdrop-blur-2xl"
         >
           <p className="px-3 py-2 text-[9px] uppercase tracking-[.28em] text-white/30">
             {t("common.language")}

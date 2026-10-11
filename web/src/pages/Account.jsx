@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from "react";
 import { LogOut, RefreshCw, Star } from "lucide-react";
 
 import AuthShell from "../components/account/AuthShell";
@@ -10,9 +9,11 @@ import {
   useCustomerAuth,
 } from "../context/CustomerAuthContext";
 import { useLanguage } from "../i18n/LanguageContext";
+import { EMPTY_LIST, useQuery } from "../hooks/useQuery";
 import { mediaUrl } from "../services/api";
 import { listMyTestimonials } from "../services/testimonialsApi";
 import { formatDate } from "../utils/format";
+import { toArray } from "../utils/toArray";
 
 /**
  * Customer account — /account
@@ -27,28 +28,19 @@ export default function Account() {
   const { t } = useLanguage();
   const { account, signOut } = useCustomerAuth();
 
-  const [reviews, setReviews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Scoped to the customer audience, so a cached list here is never
+  // handed to the storefront or to staff.
+  const { data, loading, error, refetch } = useQuery(
+    "/testimonials/testimonials/mine/",
+    listMyTestimonials,
+    {
+      scope: "customer",
+      staleMs: 30 * 1000,
+      select: toArray,
+    }
+  );
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
-    return listMyTestimonials()
-      .then((data) => {
-        setReviews(Array.isArray(data) ? data : data?.results || []);
-        setLoading(false);
-      })
-      .catch((apiError) => {
-        setError(apiError);
-        setLoading(false);
-      });
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const reviews = data || EMPTY_LIST;
 
   const name = customerDisplayName(account);
 
@@ -92,7 +84,7 @@ export default function Account() {
 
           <button
             type="button"
-            onClick={load}
+            onClick={refetch}
             aria-label={t("common.retry")}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-white/60 transition hover:border-[#d6a85f]/50 hover:text-white"
           >
@@ -111,7 +103,7 @@ export default function Account() {
             tone="error"
             title={t("account.reviewsErrorTitle")}
             details={error.fieldErrors}
-            onRetry={load}
+            onRetry={refetch}
             className="mt-4"
           >
             {error.message}
@@ -136,18 +128,6 @@ export default function Account() {
                 className="rounded-2xl border border-white/10 bg-[#111] p-4"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-0.5 text-[#d6a85f]">
-                    {Array.from({ length: review.rating }).map(
-                      (_, index) => (
-                        <Star
-                          key={index}
-                          size={13}
-                          fill="currentColor"
-                        />
-                      )
-                    )}
-                  </div>
-
                   <StatusBadge
                     status={review.status}
                     kind="testimonial"

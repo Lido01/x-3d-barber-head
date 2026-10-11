@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import { getCurrentAccount, login as loginRequest } from "../services/authApi";
-import { listBookings } from "../services/bookingApi";
+import { clearCache } from "../services/queryCache";
 import { adminTokens } from "../utils/tokenStore";
 
 /**
@@ -24,20 +24,6 @@ import { adminTokens } from "../utils/tokenStore";
  */
 
 const AdminAuthContext = createContext(null);
-
-async function hasStaffAccess() {
-  try {
-    await listBookings();
-    return true;
-  } catch (error) {
-    if (error?.status === 401 || error?.status === 403) {
-      return false;
-    }
-
-    // Network or server trouble: don't claim the account is invalid.
-    throw error;
-  }
-}
 
 export function AdminAuthProvider({ children }) {
   const [account, setAccount] = useState(null);
@@ -58,6 +44,12 @@ export function AdminAuthProvider({ children }) {
     getCurrentAccount()
       .then((data) => {
         if (active) {
+          if (!data.staff_role) {
+            adminTokens.clearTokens();
+            setAccount(null);
+            setStatus("anonymous");
+            return;
+          }
           setAccount(data);
           setStatus("authenticated");
         }
@@ -83,31 +75,54 @@ export function AdminAuthProvider({ children }) {
       refresh: data.refresh,
     });
 
-    const staff = await hasStaffAccess();
-
-    if (!staff) {
+    if (!data.user?.staff_role) {
       adminTokens.clearTokens();
 
       throw {
         status: 403,
         message:
-          "This account does not have staff access. Ask an administrator to grant it.",
+          "This is a customer account. Use Customer sign-in, or ask the owner to grant staff access.",
         fieldErrors: {},
         isNetwork: false,
         isServer: false,
       };
     }
 
-    setAccount(data.user || null);
+    // Anything cached during a previous session was fetched with the
+    // previous account's permissions. Starting clean here is what stops
+    // a second barber signing in on a shared machine from seeing a
+    // screen the first one was allowed to open.
+    clearCache();
+
+    setAccount(data.user);
     setStatus("authenticated");
 
     return data;
   }, []);
 
-  const signOut = useCallback(() => {
+const signOut = useCallback(() => {
     adminTokens.clearTokens();
+    clearCache();
     setAccount(null);
     setStatus("anonymous");
+  }, []);
+
+  /**
+   * Merge a change into the signed-in account.
+   *
+   * The profile screen calls this after a save so the console header, the
+   * drawer's "Signed in" block and this page all read the new name
+   * immediately, instead of the person saving a correction and still
+   * seeing the old one above them until the next sign-in.
+   *
+   * `patch` is merged rather than replacing: PATCH /accounts/me/ answers
+   * with the profile fields only, while the session additionally carries
+   * `staff_role`, `permissions` and `is_unlimited` — so a bare replace
+   * would drop the account's role and lock the console's own nav down to
+   * a single section.
+   */
+  const updateAccount = useCallback((patch) => {
+    setAccount((current) => (current ? { ...current, ...patch } : current));
   }, []);
 
   const value = useMemo(
@@ -118,8 +133,9 @@ export function AdminAuthProvider({ children }) {
       isChecking: status === "checking",
       signIn,
       signOut,
+      updateAccount,
     }),
-    [account, status, signIn, signOut]
+    [account, status, signIn, signOut, updateAccount]
   );
 
   return (

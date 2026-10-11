@@ -26,11 +26,12 @@ export default function Navbar() {
   // Keyed off the translation function so the labels re-resolve on a
   // language change instead of freezing at first render.
   const links = [
-    { label: t("nav.home"), to: "/" },
     { label: t("nav.services"), to: "/services" },
-    { label: t("nav.haircuts"), to: "/haircuts" },
+    { label: t("nav.haircuts"), to: "/" },
     { label: t("nav.barbers"), to: "/barbers" },
     { label: t("nav.gallery"), to: "/gallery" },
+    { label: "My bookings", to: "/bookings" },
+    { label: "Help", to: "/help" },
     { label: t("nav.about"), to: "/#about" },
   ];
 
@@ -73,7 +74,7 @@ export default function Navbar() {
     >
       <div className="mx-auto flex h-[78px] max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-10">
         {/* Logo */}
-        <Link to="/" className="group flex items-center gap-3">
+        <Link to="/home" className="group flex items-center gap-3">
           <div className="relative flex h-16 w-14 items-center justify-center">
             <Scissors
               size={19}
@@ -84,9 +85,6 @@ export default function Navbar() {
           <div className="leading-none">
             <div className="font-serif text-lg font-bold tracking-[0.12em] text-white">
               NOIR
-            </div>
-            <div className="mt-1 text-[8px] font-medium tracking-[0.32em] text-[#d6a85f]">
-              BARBER STUDIO
             </div>
           </div>
         </Link>
@@ -143,12 +141,12 @@ export default function Navbar() {
         <div className="hidden items-center gap-6 lg:flex">
           <LanguageSwitcher />
 
-          <Link
+          {/* <Link
             to="/admin"
             className="text-[13px] font-medium tracking-[0.08em] text-white/40 transition hover:text-white"
           >
             {t("nav.staff")}
-          </Link>
+          </Link> */}
 
           {/* A signed-in customer gets their name and a way back to
               their reviews; a visitor gets a plain sign-in link. */}

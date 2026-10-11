@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.accounts.models import StaffAccess
 from .models import Service
 
 
@@ -25,6 +26,10 @@ class ServiceApiTests(APITestCase):
             username="services-admin",
             password="test-password",
             is_staff=True,
+        )
+        StaffAccess.objects.create(
+            user=self.admin,
+            role=StaffAccess.Role.ADMIN,
         )
         self.client.force_authenticate(self.admin)
 

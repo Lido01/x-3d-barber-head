@@ -1,26 +1,39 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, LogOut, Menu, Scissors, X } from "lucide-react";
+import {
+  ExternalLink,
+  LogOut,
+  Menu,
+  Scissors,
+  Settings,
+  UserRound,
+  X,
+} from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
+import { ThemeToggle } from "./AdminUi";
 import { useAdminAuth } from "../../context/AdminAuthContext";
-import { ADMIN_NAV, activeAdminSection } from "./adminNav";
+import { visibleAdminNav, activeAdminSection } from "./adminNav";
+import { staffRoleLabel } from "../../utils/staffRole";
 
 /**
  * Staff console shell.
  *
- * Three navigation surfaces, because a phone and a desktop want
- * different things:
+ * Two navigation surfaces, because a phone and a desktop want different
+ * things:
  *
- *   >= lg   fixed 256px sidebar, always visible
- *   < lg    a compact sticky header showing the current section, plus a
- *           fixed bottom tab bar with every section one thumb-reach
- *           away, plus a drawer for the account and sign-out actions
+ *   >= lg   fixed sidebar, always visible
+ *   < lg    a compact sticky header showing the current section, and a
+ *           bottom sheet holding every section plus the account actions
  *
- * The bottom tab bar is the reason a phone admin can actually work a
- * shift: hopping between payments, bookings and reviews is one tap
- * instead of opening a menu first. The drawer keeps the two rare
- * actions (back to site, sign out) out of the tab bar, where they would
- * crowd out a section.
+ * The bottom tab bar that used to sit under both is gone. Ten sections
+ * across a 360px screen is 36px per tab, which is below what a thumb can
+ * hit reliably, and "Users" next to "Admins" is not a distinction anyone
+ * can make at that size. It also permanently ate the bottom of every
+ * phone screen, which is where the last card of a list lives.
+ *
+ * The drawer replaces it properly: it opens under the thumb, shows every
+ * section with its label, and holds nothing that is only reachable from
+ * there.
  *
  * Body scroll is locked while the drawer is open, Escape closes it, and
  * focus moves to the close button and returns to the trigger - a modal
@@ -73,25 +86,28 @@ export default function AdminLayout({ children }) {
   };
 
   const brand = (
-    <div className="flex items-center gap-3 px-4 py-5 sm:px-5">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#181818]">
-        <Scissors size={16} className="text-[#d6a85f]" />
+    <div className="flex items-center gap-3 px-4 py-4 sm:px-5">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-console-accent text-console-on-accent">
+        <Scissors size={17} />
       </span>
 
-      <div className="leading-none">
-        <p className="font-serif text-base font-bold tracking-[0.12em] text-white">
+      <div className="min-w-0 leading-none">
+        <p className="font-serif text-base font-bold tracking-[0.12em] text-console-ink">
           NOIR
         </p>
-        <p className="mt-1 text-[8px] tracking-[0.3em] text-[#d6a85f]">
-          STAFF CONSOLE
+        <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.25em] text-console-accent">
+          {staffRoleLabel(account?.staff_role)} console
         </p>
       </div>
     </div>
   );
 
-  const sidebarLinks = (
-    <div className="space-y-1 px-3">
-      {ADMIN_NAV.map((item) => {
+  const visibleNav = visibleAdminNav(account);
+
+  /** Sections, with a leading rule marking the active one. */
+  const navLinks = (onNavigate) => (
+    <nav aria-label="Admin sections" className="space-y-0.5 px-3">
+      {visibleNav.map((item) => {
         const Icon = item.icon;
 
         return (
@@ -99,37 +115,92 @@ export default function AdminLayout({ children }) {
             key={item.to}
             to={item.to}
             end={item.end}
+            onClick={onNavigate}
             className={({ isActive }) =>
-              `flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-medium transition ${
+              `flex min-h-12 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition ${
                 isActive
-                  ? "bg-[#d6a85f] text-black"
-                  : "text-white/55 hover:bg-white/[0.05] hover:text-white"
+                  ? "bg-console-accent-soft font-semibold text-console-accent-strong"
+                  : "text-console-body hover:bg-console-sunken hover:text-console-ink"
               }`
             }
           >
-            <Icon size={17} />
-            {item.label}
+            {({ isActive }) => (
+              <>
+                <span
+                  className={`h-5 w-1 shrink-0 rounded-full transition ${
+                    isActive ? "bg-console-accent" : "bg-transparent"
+                  }`}
+                />
+                <Icon size={17} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              </>
+            )}
           </NavLink>
         );
       })}
-    </div>
+    </nav>
+  );
+
+  /**
+   * Settings sits outside the capability-filtered section list, so it is
+   * its own link. It is readable by any staff account - a receptionist
+   * looking up the address is not asking for anything privileged - and
+   * the screen itself decides what may be edited.
+   */
+  const settingsLink = (onNavigate) => (
+    <nav aria-label="Console settings" className="mt-1 space-y-0.5 px-3">
+      <NavLink
+        to="/admin/settings"
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          `flex min-h-12 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition ${
+            isActive
+              ? "bg-console-accent-soft font-semibold text-console-accent-strong"
+              : "text-console-body hover:bg-console-sunken hover:text-console-ink"
+          }`
+        }
+      >
+        {({ isActive }) => (
+          <>
+            <span
+              className={`h-5 w-1 shrink-0 rounded-full ${
+                isActive ? "bg-console-accent" : "bg-transparent"
+              }`}
+            />
+            <Settings size={17} className="shrink-0" />
+            Settings
+          </>
+        )}
+      </NavLink>
+    </nav>
   );
 
   const accountBlock = (
-    <div className="space-y-2 border-t border-white/10 px-3 py-4">
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-        <p className="text-[9px] uppercase tracking-[0.25em] text-white/35">
+    <div className="space-y-1 border-t border-console-line px-3 py-3">
+      <NavLink
+        to="/admin/profile"
+        className="block rounded-xl bg-console-sunken px-3.5 py-2.5 transition hover:bg-console-line"
+      >
+        <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-console-muted">
           Signed in
         </p>
-        <p className="mt-1 truncate text-sm font-medium text-white">
-          {account?.username || "Team member"}
-        </p>
-      </div>
+
+        <span className="mt-0.5 flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-sm font-medium text-console-ink">
+            {account?.username || "Team member"}
+          </span>
+
+          {/* The way to your own details and your password. In the block
+              rather than in the section list above because it is not a
+              section of the shop - it is the person looking at it. */}
+          <UserRound size={15} className="shrink-0 text-console-accent" />
+        </span>
+      </NavLink>
 
       <button
         type="button"
         onClick={() => navigate("/")}
-        className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-medium text-white/55 transition hover:bg-white/[0.05] hover:text-white"
+        className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-medium text-console-body transition hover:bg-console-sunken hover:text-console-ink"
       >
         <ExternalLink size={17} />
         Back to website
@@ -138,7 +209,7 @@ export default function AdminLayout({ children }) {
       <button
         type="button"
         onClick={handleSignOut}
-        className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-medium text-white/55 transition hover:bg-[#e05a4f]/10 hover:text-[#e0776b]"
+        className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-console-body transition hover:bg-console-bad-soft hover:text-console-bad"
       >
         <LogOut size={17} />
         Sign out
@@ -147,55 +218,70 @@ export default function AdminLayout({ children }) {
   );
 
   return (
-    <div className="min-h-[var(--viewport-height)] bg-[#090909]">
+    <div className="min-h-[var(--viewport-height)] bg-console text-console-ink">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col overflow-y-auto border-r border-white/10 bg-[#0d0d0d] lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col overflow-y-auto border-r border-console-line bg-console-raised lg:flex">
         {brand}
 
-        <p className="px-6 pb-2 text-[9px] uppercase tracking-[0.25em] text-white/25">
+        <p className="px-6 pb-2 pt-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-console-faint">
           Manage shop
         </p>
 
-        {sidebarLinks}
+        {navLinks()}
 
         <div className="flex-1" />
+
+        {/* A desktop has room for the theme switch and settings in the
+            bar, so on a phone they only exist in the drawer. */}
+        <div className="border-t border-console-line pt-2">
+          {settingsLink()}
+        </div>
 
         {accountBlock}
       </aside>
 
       {/* Mobile header */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-white/10 bg-[#0d0d0d]/95 px-3 backdrop-blur sm:px-4 lg:hidden">
-        <div className="flex min-w-0 items-center gap-2">
-          <button
-            ref={menuButtonRef}
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Open admin menu"
-            aria-expanded={drawerOpen}
-            aria-controls="admin-navigation-drawer"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 text-white/75 transition hover:border-[#d6a85f]/40 hover:text-white"
-          >
-            <Menu size={19} />
-          </button>
-
-          <div className="min-w-0">
-            <p className="truncate text-[9px] uppercase tracking-[0.25em] text-[#d6a85f]">
-              Staff
-            </p>
-            <p className="mt-0.5 truncate text-sm font-medium text-white">
-              {currentItem?.label || "Overview"}
-            </p>
-          </div>
-        </div>
-
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-console-line bg-console-raised/95 px-3 backdrop-blur sm:px-4 lg:hidden">
         <button
+          ref={menuButtonRef}
           type="button"
           onClick={() => setDrawerOpen(true)}
           aria-label="Open admin menu"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-xs font-semibold text-[#d6a85f]"
+          aria-expanded={drawerOpen}
+          aria-controls="admin-navigation-drawer"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-console-line text-console-body transition hover:border-console-accent hover:text-console-accent-strong"
         >
-          {(account?.username || "N").charAt(0).toUpperCase()}
+          <Menu size={19} />
         </button>
+
+        <div className="min-w-0 flex-1 text-center">
+          <p className="truncate text-[9px] font-semibold uppercase tracking-[0.2em] text-console-accent">
+            {staffRoleLabel(account?.staff_role)}
+          </p>
+          <p className="mt-0.5 truncate text-sm font-semibold text-console-ink">
+            {currentItem?.label || "Overview"}
+          </p>
+        </div>
+
+        {/* Your own details and password, one tap away rather than three
+            taps into the drawer. On a phone that matters, because the
+            console is mostly used on one. */}
+        <NavLink
+          to="/admin/profile"
+          aria-label="Your profile"
+          title="Your profile"
+          className={({ isActive }) =>
+            `flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition ${
+              isActive
+                ? "border-console-accent text-console-accent-strong"
+                : "border-console-line text-console-body hover:border-console-accent hover:text-console-accent-strong"
+            }`
+          }
+        >
+          <UserRound size={17} />
+        </NavLink>
+
+        <ThemeToggle compact />
       </header>
 
       {/* Mobile drawer - a bottom sheet, so it opens under the thumb
@@ -206,7 +292,7 @@ export default function AdminLayout({ children }) {
             type="button"
             aria-label="Close admin menu"
             onClick={() => setDrawerOpen(false)}
-            className="absolute inset-0 bg-black/75"
+            className="absolute inset-0 bg-console-ink/40"
           />
 
           <aside
@@ -214,26 +300,30 @@ export default function AdminLayout({ children }) {
             role="dialog"
             aria-modal="true"
             aria-label="Admin navigation"
-            className="absolute inset-x-0 bottom-0 flex max-h-[85svh] flex-col overflow-hidden rounded-t-3xl border-t border-white/10 bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)] shadow-2xl"
+            className="absolute inset-x-0 bottom-0 flex max-h-[85svh] flex-col overflow-hidden rounded-t-2xl border-t border-console-line bg-console-raised pb-[env(safe-area-inset-bottom)] shadow-2xl"
           >
             <button
               ref={closeButtonRef}
               type="button"
               onClick={() => setDrawerOpen(false)}
               aria-label="Close admin menu"
-              className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-white/70 transition hover:border-[#d6a85f]/40 hover:text-white"
+              className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-console-line text-console-body transition hover:border-console-accent hover:text-console-accent-strong"
             >
               <X size={18} />
             </button>
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2">
               {brand}
 
-              <p className="px-6 pb-2 text-[9px] uppercase tracking-[0.25em] text-white/25">
+              <p className="px-6 pb-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-console-faint">
                 Manage shop
               </p>
 
-              {sidebarLinks}
+              {navLinks(() => setDrawerOpen(false))}
+
+              <div className="mt-1 border-t border-console-line pt-2">
+                {settingsLink(() => setDrawerOpen(false))}
+              </div>
 
               {accountBlock}
             </div>
@@ -241,52 +331,17 @@ export default function AdminLayout({ children }) {
         </div>
       )}
 
-      {/* Content. pb clears the fixed tab bar on a phone.
+      {/* Content. No bottom bar to clear any more, so the last card of a
+          list is reachable with a plain bottom margin.
           A <div>, not a <main>: App.jsx already renders the page's single
           <main id="main-content"> landmark around every route, and nesting
           a second one is invalid - screen readers announce the landmark
           list with a duplicate and no way to tell them apart. */}
       <div className="lg:pl-64">
-        <div className="mx-auto w-full max-w-[1600px] px-4 pb-28 pt-5 sm:px-6 sm:pt-8 lg:px-10 lg:pb-16 lg:pt-10">
+        <div className="mx-auto w-full max-w-[1500px] px-4 pb-10 pt-5 sm:px-6 sm:pt-7 lg:px-8 lg:pb-12">
           {children}
         </div>
       </div>
-
-      {/* Mobile tab bar */}
-      <nav
-        aria-label="Admin sections"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0d0d0d]/97 backdrop-blur-xl lg:hidden"
-        style={{
-          paddingBottom: "env(safe-area-inset-bottom)",
-        }}
-      >
-        <ul className="no-scrollbar flex overflow-x-auto">
-          {ADMIN_NAV.map((item) => {
-            const Icon = item.icon;
-
-            return (
-              <li key={item.to} className="min-w-0 flex-1">
-                <NavLink
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    `flex min-h-14 min-w-[3.7rem] flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors ${
-                      isActive
-                        ? "text-[#d6a85f]"
-                        : "text-white/45 active:text-white/80"
-                    }`
-                  }
-                >
-                  <Icon size={18} />
-                  <span className="max-w-full truncate">
-                    {item.label}
-                  </span>
-                </NavLink>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
     </div>
   );
 }

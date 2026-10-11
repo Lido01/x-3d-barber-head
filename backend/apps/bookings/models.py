@@ -1,6 +1,86 @@
+from django.conf import settings
 from django.db import models
+import re
 
 from apps.services.models import Service
+
+#: Every customer-facing booking reference starts with this, so a code is
+#: recognisable in a screenshot or a phone call even before it is read out.
+BOOKING_CODE_PREFIX = "BK"
+
+#: Minimum digits in a code. Zero-padded to this width so BK-0007 and
+#: BK-3274 are both four characters and neither is "BK-7".
+BOOKING_CODE_DIGITS = 4
+
+#: How many trailing digits identify a subscriber. Ethiopian mobile numbers
+#: are nine digits after the trunk zero, and the country code is optional in
+#: practice - so this is the part that two spellings of one number agree on.
+PHONE_SIGNATURE_DIGITS = 9
+
+
+def reduce_phone(value):
+    """
+    Reduce a phone number to the digits that identify its subscriber.
+
+        "0911 234 567"    -> "911234567"
+        "+251911234567"   -> "911234567"
+        "0911-234-567"    -> "911234567"
+
+    Formatting, the country code and a trunk zero all vary between the
+    number a customer types into the booking form and the number staff
+    write on the booking card. None of those differences identify a
+    different person, so none of them are kept.
+
+    This is the value stored in `Booking.phone_normalised`, and it is what
+    makes "show me every booking I have made" one indexed lookup. The
+    alternative - filtering on the stored string - cannot work: no single
+    SQL pattern matches all three spellings above at once.
+    """
+
+    digits = re.sub(r"\D", "", str(value or ""))
+
+    if digits.startswith("251"):
+        digits = digits[3:]
+
+    return digits.lstrip("0")
+
+
+def phone_signature(value):
+    """
+    The trailing digits two spellings of one number will agree on.
+
+    Falls back to the whole reduced number when it is too short to have a
+    nine-digit tail, so a landline is not reduced to nothing.
+    """
+
+    reduced = reduce_phone(value)
+
+    if len(reduced) > PHONE_SIGNATURE_DIGITS:
+        return reduced[-PHONE_SIGNATURE_DIGITS:]
+
+    return reduced
+
+
+def build_booking_code(value):
+    """
+    "27" -> "BK-0027".
+
+    Derived from the primary key rather than drawn at random. That is a
+    deliberate trade:
+
+      * It can never collide, so there is no retry loop and no unique
+        constraint violation under concurrent booking.
+      * Staff already quote the row id ("booking 27"), so the code and
+        the internal reference agree and cannot drift apart.
+      * It is backfillable - a migration can give every existing row a
+        code from its own id, with no guessing.
+
+    The cost is that the code is guessable, which is why reading a
+    booking by code additionally requires the phone number the booking
+    was made with. See bookings.services.find_booking_by_code.
+    """
+
+    return f"{BOOKING_CODE_PREFIX}-{int(value):0{BOOKING_CODE_DIGITS}d}"
 
 
 class Barber(models.Model):
@@ -70,6 +150,38 @@ class Booking(models.Model):
 
     customer_phone = models.CharField(
         max_length=30,
+    )
+
+    booking_code = models.CharField(
+        max_length=16,
+        default="",
+        unique=True,
+        editable=False,
+        help_text=(
+            "Customer-facing reference, e.g. BK-3274. Derived from the "
+            "primary key and assigned on first save."
+        ),
+    )
+
+    phone_normalised = models.CharField(
+        max_length=20,
+        default="",
+        blank=True,
+        editable=False,
+        db_index=True,
+        help_text=(
+            "customer_phone reduced to its significant digits. Indexes "
+            "the customer's bookings so 'show me everything I booked' is "
+            "one indexed lookup rather than a scan in Python."
+        ),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="bookings",
+        null=True,
+        blank=True,
     )
 
     service = models.ForeignKey(
@@ -143,13 +255,95 @@ class Booking(models.Model):
                 ),
                 name="booking_end_time_after_start_time",
             ),
+            # One live booking per barber per slot.
+            #
+            # `check_booking_conflict` already refuses a second booking
+            # that overlaps this barber's diary, and this constraint
+            # cannot be looser than that: two bookings for the same
+            # barber starting at the same minute always overlap, so
+            # nothing legitimate is forbidden here.
+            #
+            # What it adds is the guarantee that survives the check not
+            # running, or not running in time. The check is
+            # read-then-write with nothing in between, so two requests
+            # arriving together - a double tap on a phone, a customer
+            # and their partner booking the same slot from two tabs, a
+            # retried POST after a dropped connection - can both read
+            # "free" and both write. `select_for_update` on the barber
+            # row is what is supposed to serialise them, and it does
+            # exactly nothing on SQLite, which is what this project
+            # runs on. The database is the only place that cannot be
+            # raced this way.
+            #
+            # Restricted to the statuses that occupy a chair, so a
+            # cancelled or completed booking does not block the slot
+            # being rebooked later. A booking with no barber (only staff
+            # can create one) is outside the constraint entirely, which
+            # SQLite is happy with: NULLs never collide in a unique
+            # index.
+            models.UniqueConstraint(
+                fields=["barber", "booking_date", "start_time"],
+                condition=models.Q(
+                    status__in=[
+                        "pending",
+                        "confirmed",
+                    ]
+                ),
+                name="unique_live_booking_per_barber_slot",
+            ),
         ]
 
+    def save(self, *args, **kwargs):
+        """
+        Assign the derived fields on the way in.
+
+        The booking code is built from the primary key, and the primary
+        key does not exist until after the INSERT, so that one is
+        necessarily a second statement. It is issued with
+        QuerySet.update() rather than another save() so it cannot
+        re-enter this method, and so it does not fire post_save twice for
+        what the application considers one booking being created.
+
+        Everything after the first insert leaves an assigned code alone:
+        rescheduling or cancelling a booking must never change the number
+        the customer was given.
+
+        `phone_normalised` is different - it tracks `customer_phone`, and
+        staff can correct a mistyped number on an existing booking, so it
+        is recomputed whenever the number changes.
+        """
+
+        inserting = self._state.adding
+
+        fields = kwargs.get("update_fields")
+        narrowed = fields is not None and "customer_phone" not in fields
+
+        if not inserting and not narrowed:
+            self.phone_normalised = reduce_phone(self.customer_phone)
+
+        super().save(*args, **kwargs)
+
+        if inserting:
+            self.phone_normalised = reduce_phone(self.customer_phone)
+
+            if not self.booking_code:
+                self.booking_code = build_booking_code(self.pk)
+
+            # A single UPDATE for both derived columns: one write, and no
+            # chance of the code being written without the phone key that
+            # makes this booking findable.
+            Booking.objects.filter(pk=self.pk).update(
+                booking_code=self.booking_code,
+                phone_normalised=self.phone_normalised,
+            )
+
     def __str__(self):
+        reference = self.booking_code or f"#{self.pk}"
+
+        service = self.service.name if self.service_id else "no service"
+        barber = self.barber.name if self.barber_id else "any barber"
+
         return (
-            f"{self.customer_name} — "
-            f"{self.service.name} — " if self.service else "Service: #{self.id} — "
-            f"{self.barber.name} " if self.barber else "Barber: #{self.id} "
-            f"({self.booking_date} "
-            f"{self.start_time})"
+            f"{reference} — {self.customer_name} — {service} — {barber} "
+            f"({self.booking_date} {self.start_time:%H:%M})"
         )

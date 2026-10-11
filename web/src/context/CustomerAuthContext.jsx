@@ -12,6 +12,7 @@ import {
   login as loginRequest,
   register as registerRequest,
 } from "../services/authApi";
+import { clearCache } from "../services/queryCache";
 import { customerTokens } from "../utils/tokenStore";
 
 /**
@@ -54,6 +55,12 @@ export function CustomerAuthProvider({ children }) {
     getCurrentAccount({ authScope: CUSTOMER_SCOPE })
       .then((data) => {
         if (active) {
+          if (data.staff_role) {
+            customerTokens.clearTokens();
+            setAccount(null);
+            setStatus("anonymous");
+            return;
+          }
           setAccount(data);
           setStatus("authenticated");
         }
@@ -90,6 +97,17 @@ export function CustomerAuthProvider({ children }) {
         password,
       });
 
+      // if (data.user?.staff_role) {
+      //   throw {
+      //     status: 403,
+      //     message: "This is a staff account. Please use the Staff & Owner sign-in.",
+      //     fieldErrors: {},
+      //     isNetwork: false,
+      //     isServer: false,
+      //     staffLogin: true,
+      //   };
+      // }
+
       return adopt(data);
     },
     [adopt]
@@ -124,6 +142,9 @@ export function CustomerAuthProvider({ children }) {
 
   const signOut = useCallback(() => {
     customerTokens.clearTokens();
+    // Drops the cached "my reviews" list, which belongs to the account
+    // that just left rather than to whoever signs in next.
+    clearCache();
     setAccount(null);
     setStatus("anonymous");
   }, []);

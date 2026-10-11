@@ -18,6 +18,8 @@ from .services import (
     create_gallery_post,
     update_gallery_post,
 )
+from apps.accounts.permissions import capability_permission
+from apps.accounts.audit import log_action
 
 
 class GalleryPostViewSet(viewsets.ModelViewSet):
@@ -60,7 +62,7 @@ class GalleryPostViewSet(viewsets.ModelViewSet):
         ]:
             return [AllowAny()]
 
-        return [IsAdminUser()]
+        return [capability_permission("gallery.manage")()]
 
     def get_queryset(self):
         """
@@ -98,6 +100,8 @@ class GalleryPostViewSet(viewsets.ModelViewSet):
         gallery_post = create_gallery_post(
             **serializer.validated_data
         )
+
+        log_action(request, "gallery_post.created", gallery_post, {"title": gallery_post.title})
 
         output = self.get_serializer(
             gallery_post
@@ -143,6 +147,8 @@ class GalleryPostViewSet(viewsets.ModelViewSet):
             **serializer.validated_data,
         )
 
+        log_action(request, "gallery_post.updated", gallery_post, {"fields": sorted(serializer.validated_data.keys())})
+
         output = self.get_serializer(
             gallery_post
         )
@@ -186,7 +192,11 @@ class GalleryPostViewSet(viewsets.ModelViewSet):
     ):
         gallery_post = self.get_object()
 
+        title = gallery_post.title
+
         gallery_post.delete()
+
+        log_action(request, "gallery_post.deleted", details={"title": title})
 
         return Response(
             status=status.HTTP_204_NO_CONTENT

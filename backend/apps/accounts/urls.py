@@ -4,10 +4,22 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
     AdminAccountListView,
+    AdminAccountDetailView,
+    AdminAccountDeleteView,
     CurrentAccountView,
     LoginView,
     PasswordChangeView,
     RegistrationView,
+    ShopSettingsView,
+    StaffAccessListCreateView,
+    StaffAccessDetailView,
+    AuditLogListView,
+    DashboardView,
+    UserManagementListView,
+    UserManagementCreateView,
+    UserManagementDetailView,
+    UserPasswordResetView,
+    OperationsReportView,
 )
 
 urlpatterns = [
@@ -16,6 +28,30 @@ urlpatterns = [
         AdminAccountListView.as_view(),
         name="admin-customer-list",
     ),
+    path(
+        "customers/<int:pk>/",
+        AdminAccountDetailView.as_view(),
+        name="admin-customer-detail",
+    ),
+    path(
+        "customers/<int:pk>/delete/",
+        AdminAccountDeleteView.as_view(),
+        name="admin-customer-delete",
+    ),
+    path("settings/", ShopSettingsView.as_view(), name="shop-settings"),
+    path("staff/", StaffAccessListCreateView.as_view(), name="staff-access-list"),
+    path("staff/<int:pk>/", StaffAccessDetailView.as_view(), name="staff-access-detail"),
+    path("audit-logs/", AuditLogListView.as_view(), name="audit-log-list"),
+    path("users/", UserManagementListView.as_view(), name="user-management-list"),
+    path(
+        "users/new/",
+        UserManagementCreateView.as_view(),
+        name="user-management-create",
+    ),
+    path("users/<int:pk>/", UserManagementDetailView.as_view(), name="user-management-detail"),
+    path("users/<int:pk>/password/", UserPasswordResetView.as_view(), name="user-password-reset"),
+    path("reports/dashboard/", DashboardView.as_view(), name="dashboard"),
+    path("reports/operations/", OperationsReportView.as_view(), name="operations-report"),
     path(
         "register/",
         RegistrationView.as_view(),

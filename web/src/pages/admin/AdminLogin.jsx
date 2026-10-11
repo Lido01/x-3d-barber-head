@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { ExternalLink, Lock } from "lucide-react";
+import { ExternalLink, Lock, Scissors } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import Alert from "../../components/ui/Alert";
-import FieldError from "../../components/ui/FieldError";
 import Spinner from "../../components/ui/Spinner";
+import { AdminButton, AdminField, AdminInput } from "../../components/admin/AdminUi";
 import { useAdminAuth } from "../../context/AdminAuthContext";
+import { staffDashboardPath } from "../../utils/staffRole";
 
 /**
  * Staff sign-in against POST /api/accounts/login/ (JWT).
@@ -14,16 +15,14 @@ import { useAdminAuth } from "../../context/AdminAuthContext";
  * container, which on a 667px-tall phone pushed the sign-in button
  * below the fold and left the form scrolling behind a lot of empty
  * space. This is a plain top-aligned scrolling column under a compact
- * sticky header, with a 48px-tall button - the screen staff open first
- * thing, often one-handed while holding a coffee.
+ * header, with a 48px-tall button - the screen staff open first thing,
+ * often one-handed while holding a coffee.
+ *
+ * It uses the console's own field components rather than the
+ * storefront's dark inputs, because the surface behind this form is the
+ * console surface, and a dark-on-dark field on a light panel is the
+ * kind of thing that is invisible until someone fails to type into it.
  */
-
-const LABEL =
-  "block text-[10px] uppercase tracking-[0.25em] text-white/35";
-
-const INPUT =
-  "mt-2 w-full rounded-xl border border-white/10 bg-[#181818] px-4 py-3.5 text-base text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50 sm:text-sm";
-
 export default function AdminLogin() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,10 +34,12 @@ export default function AdminLogin() {
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const destination = location.state?.from || "/admin/payments";
+  const destination = location.state?.from;
 
   if (isAuthenticated) {
-    return <Navigate to={destination} replace />;
+    // Falls back to the role's own dashboard rather than `undefined`,
+    // which would render a Navigate with no target.
+    return <Navigate to={destination || "/admin"} replace />;
   }
 
   const handleSubmit = async (event) => {
@@ -52,8 +53,14 @@ export default function AdminLogin() {
     setSubmitting(true);
 
     try {
-      await signIn({ username: username.trim(), password });
-      navigate(destination, { replace: true });
+      const data = await signIn({
+        username: username.trim(),
+        password,
+      });
+
+      navigate(destination || staffDashboardPath(data.user?.staff_role), {
+        replace: true,
+      });
     } catch (apiError) {
       setError(apiError);
     } finally {
@@ -62,46 +69,38 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="flex min-h-[var(--viewport-height)] flex-col bg-[#090909]">
-      <header className="border-b border-white/10 bg-[#0d0d0d] px-4 py-3 sm:px-6">
+    <div className="flex min-h-[var(--viewport-height)] flex-col bg-console text-console-ink">
+      <header className="border-b border-console-line bg-console-raised px-4 py-3 sm:px-6">
         <div className="mx-auto flex max-w-md items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#181818]">
-            <Lock size={15} className="text-[#d6a85f]" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-console-accent text-console-on-accent">
+            <Scissors size={16} />
           </span>
 
-          <p className="font-serif text-sm font-bold tracking-[0.12em] text-white">
-            NOIR · STAFF
+          <p className="font-serif text-sm font-bold tracking-[0.12em] text-console-ink">
+            NOIR
+            <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-console-accent">
+              Staff console
+            </span>
           </p>
         </div>
       </header>
 
       <div className="mx-auto w-full max-w-md flex-1 px-4 py-8 sm:px-6 sm:py-12">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
-          Staff only
-        </p>
-
-        <h1 className="mt-3 font-serif text-3xl leading-tight text-white sm:text-4xl">
+        <h1 className="mt-2 font-serif text-3xl leading-tight text-console-ink sm:text-4xl">
           Sign in
         </h1>
-
-        <p className="mt-3 text-sm leading-6 text-white/45">
-          Verify payments, work the booking list and moderate reviews.
-        </p>
 
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="mt-7 grid gap-5 rounded-[2rem] border border-white/10 bg-[#111] p-5 sm:p-8"
+          className="mt-6 grid gap-5  border border-console-line bg-console-raised p-5 sm:p-6"
         >
-          <div>
-            <label
-              className={LABEL}
-              htmlFor="admin-username"
-            >
-              Username
-            </label>
-
-            <input
+          <AdminField
+            label="Username"
+            htmlFor="admin-username"
+            error={error?.fieldErrors?.username}
+          >
+            <AdminInput
               id="admin-username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
@@ -109,32 +108,25 @@ export default function AdminLogin() {
               autoCapitalize="none"
               spellCheck="false"
               disabled={submitting}
-              className={INPUT}
+              invalid={Boolean(error?.fieldErrors?.username)}
             />
+          </AdminField>
 
-            <FieldError message={error?.fieldErrors?.username} />
-          </div>
-
-          <div>
-            <label
-              className={LABEL}
-              htmlFor="admin-password"
-            >
-              Password
-            </label>
-
-            <input
+          <AdminField
+            label="Password"
+            htmlFor="admin-password"
+            error={error?.fieldErrors?.password}
+          >
+            <AdminInput
               id="admin-password"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
               disabled={submitting}
-              className={INPUT}
+              invalid={Boolean(error?.fieldErrors?.password)}
             />
-
-            <FieldError message={error?.fieldErrors?.password} />
-          </div>
+          </AdminField>
 
           {error && (
             <Alert
@@ -149,32 +141,36 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={submitting}
-            className="flex min-h-12 w-full items-center justify-center gap-3 rounded-full bg-[#d6a85f] px-6 py-4 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-12 w-full items-center justify-center gap-3 border border-console-accent bg-console-accent px-6 py-3 text-sm font-semibold text-console-on-accent transition hover:bg-console-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting ? (
-              <>
-                <Spinner size={15} label="Signing in" />
-                Signing in...
-              </>
-            ) : (
-              "Sign in"
-            )}
+            {submitting ? <Spinner size={15} label="Signing in" /> : "Sign in"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-[11px] leading-6 text-white/25">
-          Customers never sign in here. They create an account from the
-          review form on the site to leave a review.
-        </p>
+        <div className="mt-5 flex flex-col items-center gap-3 text-center">
+          <Link
+            to="/login"
+            className="text-xs font-semibold text-console-accent hover:underline"
+          >
+            Customer sign-in
+          </Link>
 
-        <Link
-          to="/"
-          className="mx-auto mt-5 flex w-fit items-center gap-2 text-xs text-white/35 transition hover:text-white/70"
-        >
-          <ExternalLink size={13} />
-          Back to the website
-        </Link>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 text-xs text-console-muted hover:text-console-ink"
+          >
+            <ExternalLink size={13} />
+            Back to the website
+          </Link>
+        </div>
       </div>
+
+      <footer className="border-t border-console-line px-4 py-4 sm:px-6">
+        <p className="mx-auto flex max-w-md items-center justify-center gap-2 text-[11px] text-console-faint">
+          <Lock size={12} />
+          Sessions last 30 minutes and refresh on their own.
+        </p>
+      </footer>
     </div>
   );
 }

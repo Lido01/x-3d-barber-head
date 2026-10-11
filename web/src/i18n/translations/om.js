@@ -29,6 +29,27 @@ export default {
     closeMenu: "Menu dhaqqabi",
   },
 
+  ai: {
+    title: "Qopheeffama",
+    subtitle: "Tajaajiloota, giiffa, yeroo bilisaa",
+    open: "Qopheeffama bani",
+    minimize: "Qopheeffama gudqateessi",
+    close: "Qopheeffama dhaqqabi",
+    clear: "Wajjireen haaraa jalqabi",
+    quickQuestions: "Gaaffii saffisiisaa mul'iisii yookaan dhaamsi",
+    placeholder: "Waa qopheeffuu, giiffa yookaan yeroo bilisaa qaadhuu...",
+    send: "Ergaa'i",
+    thinking: "Qopheeffama jira...",
+    emptyBody: "Waa kamiyyuu tajaajiloota keenyaa, giiffa yookaan yeroo bilisaa irratti qaadhuu.",
+    errorBody: "Qopheeffamaan yeroo ammaatti argachuu hin danda'u. Maalla qoodhaa irra deebi'i.",
+    suggestions: {
+      cuts: "Qopheeffama kamiyyuu natti danda'a?",
+      price: "Qophiin barreeffamaa kan qofa gidhi meeraa?",
+      free: "K mootummaa yeroo ammaa bilisaa?",
+      book: "Fade fudhadhuu barbaadee",
+    },
+  },
+
   hero: {
     titleLead: "QOOPPHINA KEE.",
     titleTail: "QOOPPHINAA KEE.",

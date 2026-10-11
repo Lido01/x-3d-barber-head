@@ -1,16 +1,4 @@
-/**
- * Gallery moderation.
- *
- * Photos are the one admin screen that is genuinely visual, so the card
- * grid starts at one column on a phone and widens from sm: two cards at
- * 640px left a 200px-wide image per card on a large phone, which is too
- * small to judge whether the photo is a good one.
- *
- * The form's Image / Visible / Save row was a three-item flex row that
- * overflowed at 360px; it is now a stacked column with full-width
- * controls, matching the service editor.
- */
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Eye,
   EyeOff,
@@ -22,39 +10,53 @@ import {
 } from "lucide-react";
 
 import Alert from "../../components/ui/Alert";
-import FieldError from "../../components/ui/FieldError";
 import {
   AdminButton,
+  AdminChip,
+  AdminConfirmButton,
   AdminEmpty,
+  AdminField,
+  AdminFileInput,
+  AdminInput,
   AdminLoading,
   AdminPageHeader,
+  AdminSheet,
+  AdminSwitch,
+  AdminTextarea,
 } from "../../components/admin/AdminUi";
 import { mediaUrl } from "../../services/api";
+import { toArray } from "../../utils/toArray";
 import {
   createGalleryPost,
   deleteGalleryPost,
   listGalleryPosts,
   updateGalleryPost,
 } from "../../services/galleryApi";
+import { invalidateQuery, useQuery } from "../../hooks/useQuery";
 
-const INPUT =
-  "w-full min-w-0 rounded-xl border border-white/10 bg-[#181818] px-4 py-3 text-base text-white outline-none transition placeholder:text-white/25 focus:border-[#d6a85f]/50 sm:text-sm";
-
-const LABEL =
-  "block text-[10px] uppercase tracking-[0.25em] text-white/35";
-
-const FILE_INPUT =
-  "w-full min-w-0 text-xs text-white/60 file:mr-3 file:rounded-full file:border-0 file:bg-[#d6a85f] file:px-4 file:py-2.5 file:text-xs file:font-semibold file:text-black";
+/**
+ * Gallery moderation.
+ *
+ * Photos are the one admin screen that is genuinely visual, so the card
+ * grid starts at one column on a phone and widens from sm: two cards at
+ * 640px left a 200px-wide image per card on a large phone, which is too
+ * small to judge whether the photo is a good one.
+ *
+ * The add/edit form is a sheet for the same reason as everywhere else in
+ * the console: an inline form pushes the grid out from under the
+ * cursor, and on a phone it scrolls the card being edited off the top.
+ *
+ * Visibility is a switch rather than a button because it is a state,
+ * not an action — the label says what the post *is*, and tapping it
+ * changes that. The separate Hide/Show button stays on each card for the
+ * common case of flipping one without opening the form.
+ */
 
 const BLANK = { title: "", description: "", style_name: "" };
 
 export default function AdminGallery() {
-  const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   const [editing, setEditing] = useState(null); // null | "new" | post
   const [form, setForm] = useState(BLANK);
@@ -62,27 +64,33 @@ export default function AdminGallery() {
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    setRefreshing(true);
+  // Scope "staff": staff see every post including hidden ones, the public
+  // only sees active ones. One shared key would leak hidden photos.
+  const {
+    data: posts,
+    loading,
+    error,
+    isFetching: refreshing,
+    refetch: load,
+  } = useQuery(
+    "/gallery/gallery/",
+    (signal) => listGalleryPosts({ signal, requiresAuth: true }),
+    {
+      scope: "staff",
+      select: toArray,
+    }
+  );
 
-    return listGalleryPosts({ requiresAuth: true })
-      .then((data) => {
-        setPosts(Array.isArray(data) ? data : data?.results || []);
-        setLoading(false);
-        setRefreshing(false);
-      })
-      .catch((apiError) => {
-        setError(apiError);
-        setLoading(false);
-        setRefreshing(false);
-      });
-  }, []);
+  const rows = posts || [];
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  /** A write here changes the public gallery too, so drop both views. */
+  const refreshBothViews = () => invalidateQuery("gallery");
+
+  const closeForm = () => {
+    setEditing(null);
+    setImageFile(null);
+    setActionError(null);
+  };
 
   const openNew = () => {
     setEditing("new");
@@ -101,11 +109,6 @@ export default function AdminGallery() {
     });
     setImageFile(null);
     setActive(post.is_active);
-    setActionError(null);
-  };
-
-  const closeForm = () => {
-    setEditing(null);
     setActionError(null);
   };
 
@@ -141,7 +144,7 @@ export default function AdminGallery() {
       }
 
       closeForm();
-      load();
+      refreshBothViews();
     } catch (apiError) {
       setActionError(apiError);
     } finally {
@@ -150,16 +153,12 @@ export default function AdminGallery() {
   };
 
   const handleDelete = async (post) => {
-    if (!window.confirm(`Delete gallery post "${post.title}"?`)) {
-      return;
-    }
-
     setBusyId(post.id);
     setActionError(null);
 
     try {
       await deleteGalleryPost(post.id);
-      setPosts((rows) => rows.filter((row) => row.id !== post.id));
+      refreshBothViews();
     } catch (apiError) {
       setActionError(apiError);
     } finally {
@@ -172,13 +171,11 @@ export default function AdminGallery() {
     setActionError(null);
 
     try {
-      const updated = await updateGalleryPost(post.id, {
+      await updateGalleryPost(post.id, {
         is_active: nextValue,
       });
 
-      setPosts((rows) =>
-        rows.map((row) => (row.id === updated.id ? updated : row))
-      );
+      refreshBothViews();
     } catch (apiError) {
       setActionError(apiError);
     } finally {
@@ -186,28 +183,24 @@ export default function AdminGallery() {
     }
   };
 
+  const fieldError = (name) => actionError?.fieldErrors?.[name];
+
   return (
-    <div>
+    <div className="space-y-5">
       <AdminPageHeader
         eyebrow="Staff · Management"
         title="Gallery"
         description="Photos shown on the public gallery."
         actions={
           <>
-            <AdminButton
-              onClick={load}
-              icon={RefreshCw}
-              disabled={refreshing}
-            >
-              {refreshing ? "Refreshing..." : "Refresh"}
+            <AdminButton onClick={load} icon={RefreshCw} loading={refreshing}>
+              Refresh
             </AdminButton>
 
             <AdminButton
               tone={editing === null ? "primary" : "neutral"}
               icon={editing === null ? Plus : X}
-              onClick={() =>
-                editing === null ? openNew() : closeForm()
-              }
+              onClick={editing === null ? openNew : closeForm}
             >
               {editing === null ? "Add photo" : "Cancel"}
             </AdminButton>
@@ -215,123 +208,10 @@ export default function AdminGallery() {
         }
       />
 
-      {actionError && (
-        <Alert
-          tone="error"
-          title="Action failed"
-          details={actionError.fieldErrors}
-          className="mt-5"
-        >
+      {actionError && !editing && (
+        <Alert tone="error" title="Action failed" details={actionError.fieldErrors}>
           {actionError.message}
         </Alert>
-      )}
-
-      {editing && (
-        <form
-          onSubmit={handleSave}
-          noValidate
-          className="mt-6 rounded-2xl border border-white/10 bg-[#111] p-4 sm:p-6"
-        >
-          <p className="text-[10px] uppercase tracking-[0.3em] text-[#d6a85f]">
-            {editing === "new"
-              ? "Add a gallery post"
-              : `Edit #${editing.id}`}
-          </p>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div className="min-w-0">
-              <label className={LABEL}>Title</label>
-              <input
-                value={form.title}
-                onChange={(event) =>
-                  setForm((f) => ({
-                    ...f,
-                    title: event.target.value,
-                  }))
-                }
-                className={`${INPUT} mt-2`}
-              />
-              <FieldError
-                message={actionError?.fieldErrors?.title}
-              />
-            </div>
-
-            <div className="min-w-0">
-              <label className={LABEL}>Style name</label>
-              <input
-                value={form.style_name}
-                onChange={(event) =>
-                  setForm((f) => ({
-                    ...f,
-                    style_name: event.target.value,
-                  }))
-                }
-                placeholder="e.g. Low Fade"
-                className={`${INPUT} mt-2`}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <label className={LABEL}>Description</label>
-            <textarea
-              value={form.description}
-              onChange={(event) =>
-                setForm((f) => ({
-                  ...f,
-                  description: event.target.value,
-                }))
-              }
-              rows={2}
-              className={`${INPUT} mt-2 resize-none`}
-            />
-          </div>
-
-          <div className="mt-4">
-            <label className={LABEL}>Image</label>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(event) =>
-                setImageFile(event.target.files[0] || null)
-              }
-              className={`mt-2 ${FILE_INPUT}`}
-            />
-            <FieldError message={actionError?.fieldErrors?.image} />
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setActive((value) => !value)}
-              aria-pressed={active}
-              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-xs font-semibold transition ${
-                active
-                  ? "border-[#5fb98a]/40 bg-[#5fb98a]/10 text-[#7fcfa4]"
-                  : "border-white/15 text-white/50"
-              }`}
-            >
-              {active ? (
-                <>
-                  <Eye size={14} /> Visible on the site
-                </>
-              ) : (
-                <>
-                  <EyeOff size={14} /> Hidden
-                </>
-              )}
-            </button>
-
-            <AdminButton
-              type="submit"
-              tone="primary"
-              disabled={saving}
-              className="sm:justify-self-end"
-            >
-              {saving ? "Saving..." : "Save"}
-            </AdminButton>
-          </div>
-        </form>
       )}
 
       {loading && <AdminLoading label="Loading gallery..." />}
@@ -342,108 +222,216 @@ export default function AdminGallery() {
           title="Could not load gallery"
           details={error.fieldErrors}
           onRetry={load}
-          className="mt-8"
         >
           {error.message}
         </Alert>
       )}
 
-      {!loading && !error && posts.length === 0 && (
+      {!loading && !error && rows.length === 0 && (
         <AdminEmpty
-          title="Nothing here yet"
+          title="No photos yet"
           body="Add a photo to start the gallery."
           onRetry={load}
+          action={
+            <AdminButton tone="primary" icon={Plus} onClick={openNew}>
+              Add the first photo
+            </AdminButton>
+          }
         />
       )}
 
-      {!loading && !error && posts.length > 0 && (
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-          {posts.map((post) => {
+      {!loading && !error && rows.length > 0 && (
+        <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+          {rows.map((post) => {
             const busy = busyId === post.id;
 
             return (
-              <article
-                key={post.id}
-                className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#111]"
-              >
-                <div className="relative h-48 sm:h-44">
-                  {post.image ? (
-                    <img
-                      src={mediaUrl(post.image)}
-                      alt={post.title}
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center bg-gradient-to-br from-[#242424] to-[#0d0d0d] text-xs text-white/20">
-                      No image
-                    </div>
-                  )}
+              <li key={post.id}>
+                <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-console-line bg-console-raised">
+                  <div className="relative h-48 bg-console-sunken sm:h-44">
+                    {post.image ? (
+                      <img
+                        src={mediaUrl(post.image)}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-console-faint">
+                        No image
+                      </div>
+                    )}
 
-                  <span
-                    className={`absolute left-3 top-3 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-widest ${
-                      post.is_active
-                        ? "bg-[#5fb98a] text-black"
-                        : "bg-white/20 text-white backdrop-blur"
-                    }`}
-                  >
-                    {post.is_active ? "Visible" : "Hidden"}
-                  </span>
-                </div>
-
-                <div className="flex flex-1 flex-col p-4 sm:p-5">
-                  <p className="text-[9px] uppercase tracking-[0.2em] text-[#d6a85f]">
-                    {post.style_name || "Recent work"}
-                  </p>
-
-                  <p className="mt-1 break-words font-serif text-lg sm:text-xl">
-                    {post.title}
-                  </p>
-
-                  <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-white/45">
-                    {post.description || "—"}
-                  </p>
-
-                  {/* mt-auto pins the actions to the bottom so cards in a
-                      row line up even when descriptions differ in length */}
-                  <div className="mt-auto flex flex-wrap gap-2 border-t border-white/10 pt-4">
-                    <AdminButton
-                      icon={Pencil}
-                      onClick={() => openEdit(post)}
-                      disabled={busy}
-                    >
-                      Edit
-                    </AdminButton>
-
-                    <AdminButton
-                      icon={post.is_active ? EyeOff : Eye}
-                      onClick={() =>
-                        handleToggleActive(post, !post.is_active)
-                      }
-                      disabled={busy}
-                    >
-                      {busy
-                        ? "..."
-                        : post.is_active
-                          ? "Hide"
-                          : "Show"}
-                    </AdminButton>
-
-                    <AdminButton
-                      tone="danger"
-                      icon={Trash2}
-                      onClick={() => handleDelete(post)}
-                      disabled={busy}
-                    >
-                      Delete
-                    </AdminButton>
+                    <span className="absolute left-3 top-3">
+                      <AdminChip tone={post.is_active ? "good" : "neutral"}>
+                        {post.is_active ? "Visible" : "Hidden"}
+                      </AdminChip>
+                    </span>
                   </div>
-                </div>
-              </article>
+
+                  <div className="flex flex-1 flex-col p-4 sm:p-5">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-console-accent">
+                      {post.style_name || "Recent work"}
+                    </p>
+
+                    <p className="mt-1 break-words font-serif text-lg leading-tight text-console-ink sm:text-xl">
+                      {post.title}
+                    </p>
+
+                    <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-console-muted">
+                      {post.description || "—"}
+                    </p>
+
+                    {/* mt-auto pins the actions to the bottom so cards in a
+                        row line up even when descriptions differ in length */}
+                    <div className="mt-auto flex flex-wrap gap-2 border-t border-console-line pt-4">
+                      <AdminButton
+                        size="sm"
+                        icon={Pencil}
+                        loading={busy}
+                        onClick={() => openEdit(post)}
+                      >
+                        Edit
+                      </AdminButton>
+
+                      <AdminButton
+                        size="sm"
+                        icon={post.is_active ? EyeOff : Eye}
+                        loading={busy}
+                        onClick={() =>
+                          handleToggleActive(post, !post.is_active)
+                        }
+                      >
+                        {post.is_active ? "Hide" : "Show"}
+                      </AdminButton>
+
+                      <AdminConfirmButton
+                        size="sm"
+                        icon={Trash2}
+                        loading={busy}
+                        message={`Delete gallery post "${post.title}"? This cannot be undone.`}
+                        onConfirm={() => handleDelete(post)}
+                      >
+                        Delete
+                      </AdminConfirmButton>
+                    </div>
+                  </div>
+                </article>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
+
+      <AdminSheet
+        open={Boolean(editing)}
+        onClose={closeForm}
+        title={editing === "new" ? "Add a photo" : "Edit photo"}
+        description={
+          editing === "new"
+            ? "Shown on the public gallery page."
+            : `Editing #${editing?.id}.`
+        }
+        footer={
+          <>
+            <AdminButton onClick={closeForm} disabled={saving}>
+              Cancel
+            </AdminButton>
+
+            <AdminButton
+              type="submit"
+              form="gallery-form"
+              tone="primary"
+              loading={saving}
+            >
+              {saving ? "Saving..." : "Save"}
+            </AdminButton>
+          </>
+        }
+      >
+        {editing && (
+          <form
+            id="gallery-form"
+            onSubmit={handleSave}
+            noValidate
+            className="space-y-4"
+          >
+            {actionError && (
+              <Alert tone="error" title="Could not save" details={actionError.fieldErrors}>
+                {actionError.message}
+              </Alert>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AdminField
+                label="Title"
+                required
+                error={fieldError("title")}
+              >
+                <AdminInput
+                  value={form.title}
+                  invalid={Boolean(fieldError("title"))}
+                  onChange={(event) =>
+                    setForm((f) => ({ ...f, title: event.target.value }))
+                  }
+                />
+              </AdminField>
+
+              <AdminField
+                label="Style name"
+                error={fieldError("style_name")}
+                hint="Optional label above the title."
+              >
+                <AdminInput
+                  value={form.style_name}
+                  placeholder="e.g. Low Fade"
+                  onChange={(event) =>
+                    setForm((f) => ({ ...f, style_name: event.target.value }))
+                  }
+                />
+              </AdminField>
+            </div>
+
+            <AdminField label="Description" error={fieldError("description")}>
+              <AdminTextarea
+                rows={3}
+                value={form.description}
+                onChange={(event) =>
+                  setForm((f) => ({ ...f, description: event.target.value }))
+                }
+              />
+            </AdminField>
+
+            <AdminField
+              label={editing === "new" ? "Photo" : "Replace photo"}
+              error={fieldError("image")}
+              hint="JPG, PNG or WebP, up to 5MB."
+            >
+              <AdminFileInput
+                id="gallery-image"
+                accept="image/jpeg,image/png,image/webp"
+                invalid={Boolean(fieldError("image"))}
+                onChange={(event) =>
+                  setImageFile(event.target.files[0] || null)
+                }
+              />
+            </AdminField>
+
+            <div className=" rounded-xl border border-console-line bg-console-sunken p-3.5">
+              <AdminSwitch
+                checked={active}
+                onChange={setActive}
+                label={active ? "Visible on the site" : "Hidden"}
+                description={
+                  active
+                    ? "Appears in the public gallery."
+                    : "Kept for later — not shown to customers."
+                }
+              />
+            </div>
+          </form>
+        )}
+      </AdminSheet>
     </div>
   );
 }

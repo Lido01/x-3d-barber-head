@@ -96,37 +96,3 @@ export function todayIsoDate() {
 
   return `${now.getFullYear()}-${month}-${day}`;
 }
-
-/**
- * Split the backend's available_times into parts of the day purely so
- * a long list stays scannable.
- *
- * This is presentation only: every slot Django returns is rendered,
- * nothing is filtered out or added.
- */
-export function groupSlotsByPartOfDay(times = []) {
-  const groups = [
-    { key: "morning", label: "Morning", slots: [] },
-    { key: "afternoon", label: "Afternoon", slots: [] },
-    { key: "evening", label: "Evening", slots: [] },
-    { key: "overnight", label: "Late night", slots: [] },
-  ];
-
-  const byKey = Object.fromEntries(groups.map((group) => [group.key, group]));
-
-  for (const slot of times) {
-    const hour = Number(String(slot).slice(0, 2));
-
-    if (hour >= 5 && hour < 12) {
-      byKey.morning.slots.push(slot);
-    } else if (hour >= 12 && hour < 17) {
-      byKey.afternoon.slots.push(slot);
-    } else if (hour >= 17 && hour < 22) {
-      byKey.evening.slots.push(slot);
-    } else {
-      byKey.overnight.slots.push(slot);
-    }
-  }
-
-  return groups.filter((group) => group.slots.length > 0);
-}

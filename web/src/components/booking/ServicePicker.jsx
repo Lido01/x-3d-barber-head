@@ -6,7 +6,7 @@ import Alert from "../ui/Alert";
 import Spinner from "../ui/Spinner";
 
 const SELECT =
-  "w-full appearance-none rounded-xl border border-white/10 bg-[#181818] px-4 py-4 pr-12 text-sm text-white outline-none transition focus:border-[#d6a85f]/50 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full appearance-none  border border-white/10 bg-[#181818] px-4 py-4 pr-12 text-sm text-white outline-none transition focus:border-[#d6a85f]/50 disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function ServicePicker({
   services,
@@ -19,7 +19,7 @@ export default function ServicePicker({
 }) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-8 text-center">
+      <div className=" border border-white/10 bg-white/[0.02] px-4 py-8 text-center">
         <Spinner label="Loading services..." />
       </div>
     );
@@ -82,12 +82,12 @@ export default function ServicePicker({
       </div>
 
       {selectedService && (
-        <div className="flex items-center gap-3 rounded-xl border border-[#d6a85f]/20 bg-[#d6a85f]/[0.05] p-3">
+        <div className="flex items-center gap-3  border border-[#d6a85f]/20 bg-[#d6a85f]/[0.05] p-3">
           {selectedImage && (
             <img
               src={selectedImage}
               alt=""
-              className="h-16 w-20 shrink-0 rounded-lg object-cover"
+              className="h-16 w-20 shrink-0  object-cover"
             />
           )}
           <div className="min-w-0">

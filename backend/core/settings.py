@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-k(=rr7mg&(#nqaag+4=n6-bjd*i9$!49dte)1id&raq=!uofh9
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = ["*", "10.240.41.172", "localhost", "127.0.0.1"]
 
 
 # Application definition
@@ -60,6 +60,12 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+
+    # After CommonMiddleware (it supplies the ETag machinery) and before
+    # anything that would consume the body, so a repeat read can be
+    # answered 304 without the view ever running.
+    'core.middleware.ConditionalGetMiddleware',
+
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -198,5 +204,5 @@ AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")
 AI_API_KEY = os.getenv("AI_API_KEY")
 AI_MODEL = os.getenv(
     "AI_MODEL",
-    "gemini-2.5-flash",
+    "gemini-3.8-flash",
 )

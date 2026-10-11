@@ -17,26 +17,15 @@ export default function Barbers() {
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-32 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1440px]">
 
-        <div className="mt-12 max-w-4xl">
+        <div className=" max-w-4xl">
           <p className="text-[10px] uppercase tracking-[0.35em] text-[#d6a85f]">
-            The artists
-          </p>
-
-          <h1 className="mt-5 font-serif text-6xl leading-[0.85] sm:text-7xl lg:text-9xl">
-            Meet the
-            <br />
-            <span className="italic text-[#d6a85f]">barbers.</span>
-          </h1>
-
-          <p className="mt-8 max-w-xl text-sm leading-7 text-white/45 sm:text-base">
-            Different styles. Different perspectives. One obsession: making
-            sure you leave the chair looking your best.
+            Barbers
           </p>
         </div>
 
-        <div className="mt-20">
+        <div className="mt-2">
           {loading && (
-            <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
+            <div className="flex items-center justify-center  border border-white/10 bg-[#111] py-24">
               <Spinner label="Loading the team..." />
             </div>
           )}
@@ -63,7 +52,7 @@ export default function Barbers() {
               {barbers.map((barber, index) => (
                 <article
                   key={barber.id}
-                  className="group overflow-hidden border border-white/10 bg-[#111]"
+                  className="group  overflow-hidden border border-white/10 bg-[#111]"
                 >
                   <div className="relative h-[430px] overflow-hidden bg-gradient-to-b from-[#292929] to-[#111]">
                     {barber.image ? (
@@ -81,7 +70,7 @@ export default function Barbers() {
                       </div>
                     )}
 
-                    <div className="absolute left-5 top-5 border border-white/10 bg-black/30 px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-white/40 backdrop-blur">
+                    <div className="absolute left-5 top-5  border border-white/10 bg-black/30 px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-white/40 backdrop-blur">
                       0{index + 1}
                     </div>
                   </div>
@@ -98,7 +87,7 @@ export default function Barbers() {
                         </h2>
                       </div>
 
-                      <span className="rounded-full border border-[#d6a85f]/20 px-2.5 py-1 text-[10px] text-[#d6a85f]">
+                      <span className=" border border-[#d6a85f]/20 px-2.5 py-1 text-[10px] text-[#d6a85f]">
                         {barber.experience || "NOIR team"}
                       </span>
                     </div>

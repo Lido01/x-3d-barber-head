@@ -21,6 +21,8 @@ from .services import (
     HaircutStyleService,
     ServiceService,
 )
+from apps.accounts.permissions import capability_permission
+from apps.accounts.audit import log_action
 
 
 class ServiceViewSet(viewsets.ViewSet):
@@ -75,7 +77,7 @@ class ServiceViewSet(viewsets.ViewSet):
             "partial_update_style",
             "destroy_style",
         ]:
-            return [IsAdminUser()]
+            return [capability_permission("services.manage")()]
 
         return [AllowAny()]
 
@@ -132,6 +134,8 @@ class ServiceViewSet(viewsets.ViewSet):
         service = ServiceService.create(
             **serializer.validated_data
         )
+
+        log_action(request, "service.created", service, {"name": service.name, "price": str(service.price)})
 
         output = ServiceSerializer(
             service,
@@ -207,6 +211,8 @@ class ServiceViewSet(viewsets.ViewSet):
             **serializer.validated_data
         )
 
+        log_action(request, "service.updated", service, {"fields": sorted(serializer.validated_data.keys())})
+
         output = ServiceSerializer(
             service,
             context={"request": request},
@@ -252,6 +258,8 @@ class ServiceViewSet(viewsets.ViewSet):
             **serializer.validated_data
         )
 
+        log_action(request, "service.updated", service, {"fields": sorted(serializer.validated_data.keys())})
+
         output = ServiceSerializer(
             service,
             context={"request": request},
@@ -280,7 +288,13 @@ class ServiceViewSet(viewsets.ViewSet):
     ):
         service = ServiceService.get(pk)
 
+        # Captured before the delete, when the row still has a name to
+        # put in the log.
+        name = service.name
+
         ServiceService.delete(service)
+
+        log_action(request, "service.deleted", details={"name": name})
 
         return Response(
             status=status.HTTP_204_NO_CONTENT
@@ -370,6 +384,8 @@ class ServiceViewSet(viewsets.ViewSet):
             **validated_data
         )
 
+        log_action(request, "haircut_style.created", style, {"name": style.name, "service": service.name})
+
         output = HaircutStyleSerializer(
             style,
             context={"request": request},
@@ -425,6 +441,8 @@ class ServiceViewSet(viewsets.ViewSet):
             **serializer.validated_data
         )
 
+        log_action(request, "haircut_style.updated", style, {"fields": sorted(serializer.validated_data.keys())})
+
         output = HaircutStyleSerializer(
             style,
             context={"request": request},
@@ -478,6 +496,8 @@ class ServiceViewSet(viewsets.ViewSet):
             **serializer.validated_data
         )
 
+        log_action(request, "haircut_style.updated", style, {"fields": sorted(serializer.validated_data.keys())})
+
         output = HaircutStyleSerializer(
             style,
             context={"request": request},
@@ -516,7 +536,11 @@ class ServiceViewSet(viewsets.ViewSet):
             style_id,
         )
 
+        name = style.name
+
         HaircutStyleService.delete(style)
+
+        log_action(request, "haircut_style.deleted", details={"name": name, "service": service.name})
 
         return Response(
             status=status.HTTP_204_NO_CONTENT

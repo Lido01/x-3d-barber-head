@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Clock3, Scissors, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import Alert from "../components/ui/Alert";
 import Spinner from "../components/ui/Spinner";
+import { useQuery } from "../hooks/useQuery";
 import { getService } from "../services/servicesApi";
 import { mediaUrl } from "../services/api";
 import { formatDuration, formatPrice } from "../utils/format";
@@ -18,36 +19,14 @@ import { formatDuration, formatPrice } from "../utils/format";
 export default function ServiceDetail() {
   const { id } = useParams();
 
-  const [service, setService] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [reloadKey, setReloadKey] = useState(0);
   const [selectedStyle, setSelectedStyle] = useState(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    setLoading(true);
-    setError(null);
-
-    getService(id, { signal: controller.signal })
-      .then((data) => {
-        setService(data);
-        setLoading(false);
-      })
-      .catch((apiError) => {
-        if (apiError?.isCancelled) {
-          return;
-        }
-
-        setError(apiError);
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [id, reloadKey]);
+  const {
+    data: service,
+    loading,
+    error,
+    refetch,
+  } = useQuery(`/services/${id}/`, (signal) => getService(id, { signal }));
 
   const styles = Array.isArray(service?.styles) ? service.styles : [];
 
@@ -55,7 +34,7 @@ export default function ServiceDetail() {
     <div className="min-h-screen bg-[#090909] px-5 pb-24 pt-28 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1200px]">
         {loading && (
-          <div className="mt-16 flex items-center justify-center  border border-white/10 bg-[#111] py-24">
+          <div className="mt-16 flex items-center justify-center rounded-2xl border border-white/10 bg-[#111] py-24">
             <Spinner label="Loading service details..." />
           </div>
         )}
@@ -65,7 +44,7 @@ export default function ServiceDetail() {
             tone="error"
             title="Could not load this service"
             details={error.fieldErrors}
-            onRetry={() => setReloadKey((key) => key + 1)}
+            onRetry={refetch}
             className="mt-16"
           >
             {error.message}
@@ -91,10 +70,10 @@ export default function ServiceDetail() {
                 <img
                   src={mediaUrl(service.image)}
                   alt={service.name}
-                  className="mt-10 aspect-[4/3] w-full max-w-xl  border border-white/10 object-cover"
+                  className="mt-10 aspect-[4/3] w-full max-w-xl rounded-2xl border border-white/10 object-cover"
                 />
               ) : (
-                <div className="mt-10 flex aspect-[4/3] w-full max-w-xl items-center justify-center  border border-white/10 bg-gradient-to-br from-[#242424] to-[#0d0d0d]">
+                <div className="mt-10 flex aspect-[4/3] w-full max-w-xl items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-[#242424] to-[#0d0d0d]">
                   <Scissors size={40} className="text-[#d6a85f]/40" />
                 </div>
               )}
@@ -112,7 +91,7 @@ export default function ServiceDetail() {
                       <button
                         key={style.id}
                         onClick={() => setSelectedStyle(style)}
-                        className="group flex items-center gap-4 overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
+                        className="group flex items-center gap-4 rounded-2xl overflow-hidden border border-white/10 bg-[#111] text-left transition hover:border-[#d6a85f]/50"
                       >
                         {style.image ? (
                           <img
@@ -202,7 +181,7 @@ function StyleModal({ style, close }) {
       onMouseDown={close}
     >
       <article
-        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
+        className="relative max-h-[92svh] w-full max-w-3xl overflow-auto rounded-2xl border border-white/15 bg-[#121212] sm:grid sm:grid-cols-2"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button

@@ -1,47 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "./useQuery";
 
 import { listServices } from "../services/servicesApi";
+import { toArray } from "../utils/toArray";
 
 /**
  * Active services from GET /api/services/.
  *
  * The backend's list() already returns only active services, so there
  * is no client-side filtering here.
+ *
+ * Served from the shared cache: the six components that need this list
+ * share one request, and the second one to mount renders immediately
+ * from cache instead of showing a spinner. `reload()` still forces a
+ * fresh read, so the retry button on an error screen keeps working.
  */
 export function useServices() {
-  const [services, setServices] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data, error, loading, refetch } = useQuery("/services/", listServices, {
+    select: toArray,
+  });
 
-  const reload = useCallback(() => {
-    setReloadKey((key) => key + 1);
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    setLoading(true);
-    setError(null);
-
-    listServices({ signal: controller.signal })
-      .then((data) => {
-        setServices(Array.isArray(data) ? data : data?.results || []);
-        setLoading(false);
-      })
-      .catch((apiError) => {
-        if (apiError?.isCancelled) {
-          return;
-        }
-
-        setError(apiError);
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [reloadKey]);
-
-  return { services, loading, error, reload };
+  return { services: data || [], loading, error, reload: refetch };
 }

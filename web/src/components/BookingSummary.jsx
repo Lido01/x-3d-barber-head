@@ -1,13 +1,30 @@
 import { CalendarDays, Clock3, Scissors, User } from "lucide-react";
 
 import StatusBadge from "./StatusBadge";
-import { formatDate, formatTimeRange } from "../utils/format";
+import { bookingCodeOf } from "../utils/bookingCode";
+import {
+  formatEthiopianDate,
+  formatEthiopianTime,
+  formatEthiopianWeekday,
+} from "../utils/ethiopianDate";
 
 /**
  * Booking recap card.
  *
- * Renders only what Django returned on the booking - including the
- * barber it assigned when the customer had no preference.
+ * Renders only what Django returned on the booking - including the barber it
+ * assigned when the customer had no preference.
+ *
+ * The heading is the booking ID rather than the row id, because that is the
+ * number the customer has to quote. `bookingCodeOf` falls back to the id
+ * only for a booking made before codes existed.
+ *
+ * The date and time are in the Ethiopian calendar, because that is the
+ * calendar the customer chose the day in and the one they will read it back
+ * in. Showing them a Gregorian date they have to convert is how someone
+ * arrives on the wrong day; the Gregorian equivalent is kept out of the
+ * recap rather than sat beside it, so there is only one date on screen to
+ * be wrong. Staff read the Gregorian from the booking card and the admin
+ * console.
  */
 export default function BookingSummary({ booking, children, className = "" }) {
   if (!booking) {
@@ -28,18 +45,22 @@ export default function BookingSummary({ booking, children, className = "" }) {
     {
       icon: CalendarDays,
       label: "Date",
-      value: formatDate(booking.booking_date),
+      value: booking.booking_date
+        ? `${formatEthiopianDate(booking.booking_date)} · ${formatEthiopianWeekday(
+            booking.booking_date
+          )}`
+        : "—",
     },
     {
       icon: Clock3,
       label: "Time",
-      value: formatTimeRange(booking.start_time, booking.end_time),
+      value: formatEthiopianTime(booking.start_time),
     },
   ];
 
   return (
     <div
-      className={`rounded-2xl border border-white/10 bg-white/[0.02] p-5 sm:p-6 ${className}`}
+      className={`border-white/10 bg-white/[0.02] p-5 sm:p-6 ${className}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -47,8 +68,8 @@ export default function BookingSummary({ booking, children, className = "" }) {
             Booking
           </p>
 
-          <p className="mt-1 font-serif text-2xl text-white">
-            #{booking.id}
+          <p className="mt-1 font-serif text-2xl tracking-[0.08em] text-white">
+            {bookingCodeOf(booking)}
           </p>
         </div>
 
@@ -64,7 +85,7 @@ export default function BookingSummary({ booking, children, className = "" }) {
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
         {rows.map(({ icon: Icon, label, value }) => (
           <div key={label} className="flex gap-3">
-            <Icon size={15} className="mt-0.5 shrink-0 text-[#d6a85f]" />
+            <Icon size={15} className="mt-0.5 shrink-0" />
 
             <div className="min-w-0">
               <dt className="text-[10px] uppercase tracking-[0.2em] text-white/30">

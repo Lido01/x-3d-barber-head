@@ -781,6 +781,7 @@ For example:
 ```json
 {
   "id": 10,
+  "booking_code": "BK-0010",
   "customer_name": "Adonay",
   "customer_phone": "0987654321",
   "service": 5,
@@ -790,15 +791,152 @@ For example:
   "start_time": "10:00:00",
   "end_time": "10:30:00",
   "status": "pending",
+  "payment_status": null,
+  "payment_due": true,
+  "payment_open": false,
+  "already_booked": false,
   "notes": "I want a low fade.",
   "created_at": "2026-08-30T10:00:00Z",
   "updated_at": "2026-08-30T10:00:00Z"
 }
 ```
 
+### `booking_code` - the customer's reference
+
+Every booking gets its own code, assigned on creation and never changed.
+It is derived from the primary key, so it cannot collide and the customer
+reference and the shop's internal row id always agree.
+
+**Show it prominently and give the customer something to copy it with.**
+They need it together with the phone number they booked with to check
+this booking again, from any device, at any time - and it is what staff
+ask for on the phone.
+
+Two bookings on the same phone number have two different codes. That is
+the point: the code identifies the **booking**, not the customer.
+
 ---
 
-# 4.3 Booking Status
+# 4.3 Look Up One Booking
+
+### Endpoint
+
+```http
+POST /api/bookings/lookup/
+```
+
+### Authentication
+
+```text
+Public, but proved by the booking's own code and phone number
+```
+
+### Content-Type
+
+```json
+```
+
+### Request
+
+```json
+{
+  "code": "BK-0010",
+  "phone": "0987654321"
+}
+```
+
+The booking ID identifies the booking; the phone number proves the person
+asking owns it. Two, because the ID alone is short and guessable - it is
+derived from a row id - and a booking carries a name, a phone number, an
+appointment time and a payment receipt.
+
+An unknown code and a wrong phone number are answered **identically**, so
+this cannot be used to discover which codes exist.
+
+POST rather than GET: the phone number belongs in a request body, not in a
+URL that ends up in an access log, a browser history and a `Referer`
+header.
+
+### Response
+
+```json
+{
+  "booking": {
+    "id": 10,
+    "booking_code": "BK-0010",
+    "customer_name": "Adonay",
+    "customer_phone": "0987654321",
+    "service": 5,
+    "service_name": "Classic Haircut",
+    "barber": 2,
+    "barber_name": "Lidetu Tesfaye",
+    "booking_date": "2027-08-27",
+    "start_time": "10:00:00",
+    "end_time": "10:30:00",
+    "status": "confirmed",
+    "payment_status": null,
+    "payment_due": true,
+    "payment_open": true,
+    "already_booked": false,
+    "notes": "",
+    "created_at": "2026-08-30T10:00:00Z",
+    "updated_at": "2026-08-30T11:20:00Z"
+  },
+  "payment": null,
+  "payment_due": true,
+  "payment_open": true,
+  "payment_rejected": false
+}
+```
+
+### One code, one booking
+
+`booking` is **the one appointment that booking ID names**. Not the
+customer's history, not a row inside a list, and there is no index of their
+other bookings beside it.
+
+This is deliberate. Returning "everything on this phone number" made the
+booking ID identify the *customer* rather than the *booking*, so the screen
+opened on however many rows they happened to have and the appointment they
+were asking about was no more likely to be the one they read than any other.
+If someone checks one appointment's payment status and walks away
+satisfied, the ID did not identify anything.
+
+Someone who has booked three times holds three booking IDs, and each one
+opens its own appointment. That is what makes them worth printing, copying
+and keeping.
+
+The response is therefore exactly five keys:
+
+```text
+booking            the appointment, in full
+payment            its payment, or null
+payment_due        money is still owed on it
+payment_open       the customer may pay it this minute
+payment_rejected   money arrived that could not be matched
+```
+
+### The money flags
+
+| Field | Question | True when |
+| --- | --- | --- |
+| `payment_due` | Does the shop still want money for this appointment? | a live appointment (`pending` or `confirmed`) with no payment behind it |
+| `payment_open` | May the customer send it right now? | the booking is `confirmed` and there is no payment, or the payment was `rejected` |
+| `payment_rejected` | Did money arrive that could not be matched? | a payment exists with status `rejected` |
+
+A booking awaiting confirmation owes money but cannot be paid yet. Showing a
+pay form off `payment_due` offers money for a chair nobody has agreed to.
+
+### Failed request
+
+| Status | Reason |
+| --- | --- |
+| 400 | the code and phone number do not match a booking |
+| 400 | either field missing |
+
+---
+
+# 4.4 Booking Status
 
 Possible statuses:
 
@@ -837,7 +975,7 @@ The exact booking-status update should follow the implemented backend business r
 
 ---
 
-# 4.4 Multiple Customers at the Same Time
+# 4.5 Multiple Customers at the Same Time
 
 The booking system supports multiple customers during the same time period according to the configured shop capacity.
 
@@ -868,7 +1006,7 @@ Once capacity is reached, another booking for an overlapping time range should r
 
 ---
 
-# 4.5 Same Customer, Same Style, Different Time
+# 4.6 Same Customer, Same Style, Different Time
 
 A customer can make another booking for the same service/style at another time.
 
@@ -890,7 +1028,7 @@ The booking system should identify them using their individual booking IDs.
 
 ---
 
-# 4.6 Update Booking
+# 4.7 Update Booking
 
 ### Endpoint
 
@@ -929,7 +1067,7 @@ based on the selected service duration.
 
 ---
 
-# 4.7 Confirm Booking
+# 4.8 Confirm Booking
 
 ### Endpoint
 
@@ -949,8 +1087,22 @@ Authenticated admin/staff
 No body required
 ```
 
-Verifying a payment already confirms its booking, so this is for the
-walk-in or cash customer who has no receipt to verify.
+This is the step that **opens payment**.
+
+The order is fixed:
+
+```text
+requested (pending) -> confirmed -> paid -> checked
+```
+
+A booking is `pending` the moment a customer makes it and `confirmed`
+once reception has agreed the chair. A payment can only be submitted
+against a `confirmed` booking, so the shop never takes money for a slot
+it has not looked at.
+
+Confirming by hand is still the right action for a walk-in or a cash
+customer who will pay at the counter: the appointment is theirs, and the
+money is settled in the room rather than through the API.
 
 ### Response
 
@@ -971,7 +1123,7 @@ walk-in or cash customer who has no receipt to verify.
 
 ---
 
-# 4.8 Complete Booking
+# 4.9 Complete Booking
 
 ### Endpoint
 
@@ -1011,7 +1163,7 @@ Marks a confirmed appointment as served. Idempotent.
 
 ---
 
-# 4.9 Cancel Booking
+# 4.10 Cancel Booking
 
 ### Endpoint
 
@@ -1046,7 +1198,7 @@ and its time becomes available again.
 
 ---
 
-# 4.10 Delete Booking
+# 4.11 Delete Booking
 
 ### Endpoint
 
@@ -1065,6 +1217,150 @@ According to current backend permission configuration.
 ```http
 204 No Content
 ```
+
+---
+
+# 4.12 Read One Booking's Live State (Customer)
+
+### Endpoint
+
+```http
+GET /api/bookings/{booking_id}/status/
+```
+
+### Authentication
+
+```text
+Public, but proved by the booking's own code and phone number
+```
+
+### Headers
+
+```http
+X-Booking-Code: BK-0025
+X-Booking-Phone: 0911234567
+```
+
+The customer's proof of ownership, carried in headers rather than the
+query string: this is a GET, and a GET holding a credential must not end up
+in an access log, a browser history or a `Referer` header.
+
+An unknown code is answered exactly like a wrong phone number, so the
+endpoint cannot be used to discover which codes exist.
+
+### Response
+
+```json
+{
+  "booking": {
+    "id": 25,
+    "booking_code": "BK-0025",
+    "customer_name": "Adonay",
+    "customer_phone": "0911234567",
+    "service": 4,
+    "service_name": "Classic Haircut",
+    "barber": 1,
+    "barber_name": "Lidetu Tesfaye",
+    "booking_date": "2026-08-29",
+    "start_time": "09:00:00",
+    "end_time": "09:45:00",
+    "status": "confirmed",
+    "payment_status": null,
+    "payment_due": true,
+    "payment_open": true,
+    "already_booked": false,
+    "notes": "",
+    "created_at": "2026-08-28T09:00:00Z",
+    "updated_at": "2026-08-28T10:15:00Z"
+  },
+  "payment": null,
+  "payment_due": true,
+  "payment_open": true,
+  "payment_rejected": false
+}
+```
+
+Always a 200 once the proof passes, **including when nothing has been
+paid**. "Not paid yet" is a state the interface has to render, not a
+failure.
+
+### The two money flags
+
+They answer different questions and must not be collapsed:
+
+| Field | Question | True when |
+| --- | --- | --- |
+| `payment_due` | Does the shop still want money for this appointment? | a live appointment (`pending` or `confirmed`) with no payment behind it |
+| `payment_open` | May the customer send it right now? | the booking is `confirmed` and there is no payment, or the payment was `rejected` |
+| `payment_rejected` | Did money arrive that could not be matched? | a payment exists with status `rejected` |
+
+A booking awaiting confirmation owes money but cannot be paid yet. Showing a
+pay form off `payment_due` offers money for a chair nobody has agreed to,
+which is the mistake this split exists to prevent.
+
+This is the endpoint a booking result page should poll: it answers "has
+reception confirmed?" and "has the shop checked the payment?" in one
+request, so the transition from waiting to payable happens without the
+customer touching anything.
+
+### Failed request
+
+| Status | Reason |
+| --- | --- |
+| 400 | the code and phone number do not match this booking |
+| 404 | no such booking |
+
+---
+
+# 4.13 Booking List Carries Its Payment (Staff)
+
+### Endpoint
+
+```http
+GET /api/bookings/
+GET /api/bookings/{booking_id}/
+```
+
+### Authentication
+
+```text
+Authenticated staff with the bookings.view capability
+```
+
+Every row carries one extra key on top of the booking:
+
+```json
+  "payment": {
+    "id": 1,
+    "booking": 25,
+    "booking_code": "BK-0025",
+    "booking_status": "confirmed",
+    "booking_date": "2026-08-29",
+    "booking_start_time": "09:00:00",
+    "booking_barber": "Lidetu Tesfaye",
+    "booking_customer": "Adonay",
+    "booking_service": "Classic Haircut",
+    "amount": "5000.00",
+    "method": "telebirr",
+    "transaction_reference": "TIN0987",
+    "receipt": "http://127.0.0.1:8000/media/payment_receipts/receipt.png",
+    "status": "pending",
+    "verified_by": null,
+    "verified_at": null,
+    "rejection_reason": "",
+    "created_at": "2026-08-29T08:40:00Z",
+    "updated_at": "2026-08-29T08:40:00Z"
+  }
+```
+
+`null` when no payment exists - always present, never missing, because an
+absent field is indistinguishable from no data.
+
+The point is that a booking and its money are read in one request and
+cannot disagree on screen: deciding a payment no longer means leaving the
+booking, finding the payment queue, and matching rows on a booking id
+nobody had asked for. The payment is joined by the same query as the
+booking, so the detail costs no extra round trip per row.
 
 ---
 
@@ -1108,16 +1404,39 @@ Use an actual file upload.
 
 ```text
 booking
+booking_reference   # the booking code, e.g. BK-0025
+booking_phone       # the phone number the booking was made with
 amount
 method
 transaction_reference
 receipt
 ```
 
+`booking_reference` and `booking_phone` are the customer's proof of
+ownership. They must match that booking exactly, and an unknown code is
+answered the same way as a wrong phone number, so the endpoint cannot be
+used to find out which codes exist.
+
+### The booking must already be confirmed
+
+A booking that is still `pending` is refused with a 400 and no payment is
+created. The message names reception and says payment opens once they have
+confirmed, so a customer reads it as "not yet" rather than as a failure.
+
+A `cancelled`, `completed` or `expired` booking is refused with its own
+message.
+
+`confirmed` and `paid` are still separate. Staff confirm walk-ins who pay
+at the counter, so a confirmed booking with no payment behind it is an
+ordinary state - it just means payment is *open*, not that money is
+impossible.
+
 ### Example
 
 ```text
 booking=4
+booking_reference=BK-0025
+booking_phone=0911234567
 amount=5000
 method=telebirr
 transaction_reference=TIN0987
@@ -1739,13 +2058,26 @@ POST /api/bookings/
 
 ---
 
-## Step 9 — Customer Pays
+## Step 9 — Reception Confirms
+
+```http
+POST /api/bookings/{id}/confirm/
+```
+
+**The customer cannot pay before this happens.** A booking is created
+`pending`, and a payment submitted against a `pending` booking is
+refused. The booking is held for the customer in the meantime and the
+result page polls until reception confirms it.
+
+---
+
+## Step 10 — Customer Pays
 
 ```http
 POST /api/payments/payments/
 ```
 
-The customer can upload:
+Payment is now open for that booking. The customer can upload:
 
 ```text
 Telebirr receipt
@@ -1755,7 +2087,7 @@ Other supported payment proof
 
 ---
 
-## Step 10 — Admin Receives Payment
+## Step 11 — Admin Receives Payment
 
 Admin sees:
 
@@ -1772,7 +2104,7 @@ Receipt screenshot
 
 ---
 
-## Step 11 — Admin Verifies
+## Step 12 — Admin Verifies
 
 ```http
 POST /api/payments/payments/{id}/verify/
@@ -1780,7 +2112,7 @@ POST /api/payments/payments/{id}/verify/
 
 ---
 
-## Step 12 — Notification
+## Step 13 — Notification
 
 After successful verification:
 
@@ -1838,8 +2170,11 @@ POST /api/bookings/{id}/confirm/     pending              ->  confirmed
 POST /api/bookings/{id}/complete/    confirmed            ->  completed
 ```
 
-Verifying a payment calls `confirm_booking()` internally, so a booking
-with a verified receipt becomes confirmed without a second call.
+Confirmation comes first and payment second, so the booking is already
+`confirmed` by the time a payment exists. Verifying a payment still calls
+`confirm_booking()` afterwards, but on a confirmed booking that is a no-op
+- it is there only to cover payments created before this order was
+enforced, which must not become un-acceptable.
 
 `complete` refuses anything that is not `confirmed`: a booking that was
 never paid for and never confirmed has to be cancelled, not quietly
@@ -1889,6 +2224,27 @@ REJECT
 ---
 
 # 10. Frontend Integration Order
+
+## Calendar and dates
+
+The storefront books in the **Ethiopian calendar** and shows appointment
+dates and times back in it, with the Amharic month, weekday and part of
+day (`መስከረም`, `ሰኞ`, `ጠዋት`).
+
+The wire format is unchanged and stays Gregorian: every date on this API
+is `YYYY-MM-DD` and every time is `HH:MM:SS`. The conversion happens in the
+interface only, at the edge of the date picker, so:
+
+- the API, the availability endpoint and the admin console keep comparing
+  Gregorian dates against Gregorian rows;
+- staff reading a booking card still see a Gregorian date;
+- there is exactly one place that can be wrong about which day was picked,
+  and `npm run check:calendar` checks it - round trip, weekday agreement and
+  grid layout across 18,000+ days.
+
+Watch the leap year: Pagume is 5 days, or 6 in a leap year, and it exists
+at all only in a leap year. After a leap year the new year falls on 12
+September Gregorian rather than the 11th.
 
 Do not connect everything at once.
 
