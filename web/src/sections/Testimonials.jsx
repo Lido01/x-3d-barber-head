@@ -153,7 +153,7 @@ export default function Testimonials() {
     if (submitted) {
       return (
         <div className="py-10 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#5fb98a]/15 text-2xl text-[#7fcfa4]">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center  bg-[#5fb98a]/15 text-2xl text-[#7fcfa4]">
             ✓
           </div>
           <h3 className="mt-5 font-serif text-2xl">{t("testimonials.form.thanksTitle")}</h3>
@@ -241,7 +241,7 @@ export default function Testimonials() {
                 onClick={clearPhoto}
                 disabled={submitting}
                 aria-label={t("testimonials.form.removePhoto")}
-                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
+                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center  bg-black/70 text-white transition hover:bg-black"
               >
                 <X size={15} />
               </button>
@@ -286,7 +286,7 @@ export default function Testimonials() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-6 flex w-full items-center justify-center rounded-full bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-6 flex w-full items-center justify-center  bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? (
             <Spinner size={15} label={t("testimonials.form.submitting")} />
@@ -382,7 +382,7 @@ function SignInPrompt() {
 
   return (
     <div className="py-4 text-center sm:py-6">
-      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
+      <span className="mx-auto flex h-12 w-12 items-center justify-center  border border-white/10 bg-white/[0.04]">
         <LogIn size={19} className="text-[#d6a85f]" />
       </span>
 
@@ -398,7 +398,7 @@ function SignInPrompt() {
         <Link
           to="/login"
           state={state}
-          className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
+          className="flex w-full items-center justify-center gap-2.5  bg-[#d6a85f] px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-[#e5bd7a]"
         >
           <LogIn size={15} />
           {t("testimonials.form.signInCta")}
@@ -407,7 +407,7 @@ function SignInPrompt() {
         <Link
           to="/register"
           state={state}
-          className="flex w-full items-center justify-center gap-2.5 rounded-full border border-white/15 px-6 py-3.5 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
+          className="flex w-full items-center justify-center gap-2.5  border border-white/15 px-6 py-3.5 text-sm font-semibold text-white/70 transition hover:border-[#d6a85f]/50 hover:text-white"
         >
           <UserPlus size={15} />
           {t("testimonials.form.registerCta")}

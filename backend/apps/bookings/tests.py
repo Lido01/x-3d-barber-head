@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
+from django.utils.timezone import localdate, localtime
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -10,6 +11,9 @@ from apps.accounts.models import StaffAccess
 from apps.services.models import Service
 from .models import Barber, Booking, build_booking_code
 from .services import (
+    CLOSING_MINUTES,
+    OPENING_MINUTES,
+    SLOT_INTERVAL_MINUTES,
     Availability,
     get_availability_report,
     get_available_times,
@@ -320,17 +324,28 @@ class BookingCodeTests(APITestCase):
 
 class BookingLookupTests(APITestCase):
     """
-    A customer checking on the bookings they made without an account.
+    A customer checking on one booking, without an account.
 
-    The booking flow is deliberately unauthenticated, so the booking code
-    is the only reference they carry. It is short and guessable, so the
-    phone number is the second half of the proof - and the two failures
-    are answered identically so the endpoint cannot be used to confirm
-    which codes exist.
+    The booking flow is deliberately unauthenticated, so the booking code is
+    the only reference they carry. It is short and guessable, so the phone
+    number is the second half of the proof - and the two failures are
+    answered identically so the endpoint cannot be used to confirm which
+    codes exist.
 
-    One code plus one phone number returns the whole history, not one row:
-    a customer who wants to look over their bookings should not have to
-    dig out a separate code for each one.
+    ## One code names one booking
+
+    Every booking carries its own code, so someone who has booked three
+    times has three references and each one leads to its own appointment.
+    That is the contract these tests hold in place, and it is the reason the
+    endpoint returns a booking rather than a list: handing back "everything
+    on this number" made the code identify the customer instead of the
+    appointment, and put the booking they were asking about one row among
+    however many - where the wrong row was as plausible as the right one.
+
+    Nothing else comes back. Not the customer's other bookings, not a
+    history, not a summary of it - because a screen whose whole promise is
+    "this is your one booking" should not also carry three more rows for the
+    wrong appointment to be read off.
     """
 
     def setUp(self):
@@ -358,39 +373,145 @@ class BookingLookupTests(APITestCase):
             format="json",
         )
 
-    def rows(self, response):
-        return [row["booking"] for row in response.data["bookings"]]
-
     def test_the_right_code_and_phone_returns_the_booking(self):
         response = self.lookup()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
-            self.rows(response)[0]["booking_code"], self.booking.booking_code,
+            response.data["booking"]["booking_code"],
+            self.booking.booking_code,
         )
-        self.assertEqual(self.rows(response)[0]["status"], "pending")
-        self.assertIsNone(response.data["bookings"][0]["payment"])
+        self.assertEqual(response.data["booking"]["status"], "pending")
+        self.assertIsNone(response.data["payment"])
 
-    def test_the_code_that_was_used_is_echoed_back(self):
-        # So the interface can say "you are looking at BK-0013" even when
-        # the history is longer than one row.
+    def test_the_booking_is_the_answer_not_a_row_in_a_list(self):
+        """
+        No `bookings` array any more. One booking, at the top level, so
+        there is nothing for the screen to have to pick from and nothing for
+        it to pick wrong.
+        """
+
+        for index in range(4):
+            start = datetime.combine(
+                self.booking_date + timedelta(days=5), time(9, 0)
+            ) + timedelta(minutes=30 * index)
+
+            Booking.objects.create(
+                customer_name="Sam Doe", customer_phone="0911234567",
+                service=self.service, barber=self.barber,
+                booking_date=self.booking_date + timedelta(days=5),
+                start_time=start.time(),
+                end_time=(start + timedelta(minutes=30)).time(),
+            )
+
         response = self.lookup()
+
+        self.assertNotIn("bookings", response.data)
+        self.assertEqual(
+            response.data["booking"]["booking_code"],
+            self.booking.booking_code,
+        )
+
+    def test_each_booking_on_one_number_has_its_own_code(self):
+        """
+        The same person booking twice on the same number is the ordinary
+        case, not an edge. Two bookings, two references, and either one
+        leads to its own appointment.
+        """
+
+        second = Booking.objects.create(
+            customer_name="Sam Doe", customer_phone="0911234567",
+            service=self.service, barber=self.barber,
+            booking_date=self.booking_date + timedelta(days=4),
+            start_time=time(14, 0), end_time=time(14, 30),
+        )
+
+        self.assertNotEqual(
+            self.booking.booking_code, second.booking_code
+        )
+
+        first = self.lookup()
 
         self.assertEqual(
-            response.data["matched_code"], self.booking.booking_code,
+            first.data["booking"]["booking_code"],
+            self.booking.booking_code,
         )
 
-    def test_an_unpaid_booking_is_flagged_as_due(self):
+        # And the second code, with the same phone, opens the second one.
+        again = self.lookup(code=second.booking_code)
+
+        self.assertEqual(
+            again.data["booking"]["booking_code"], second.booking_code
+        )
+        self.assertEqual(
+            again.data["booking"]["id"], second.pk
+        )
+
+    def test_nothing_else_comes_back(self):
+        """
+        No `other_bookings`, no history, no list. The response is the one
+        booking the ID named and the facts about it.
+
+        An index of the customer's other bookings was here briefly and was
+        wrong: a page whose whole promise is "this is your one booking"
+        should not also carry three more rows for the wrong appointment to be
+        read off. Someone who has booked three times has three IDs, and each
+        one opens its own appointment.
+        """
+
+        for offset in (1, 2, 3):
+            Booking.objects.create(
+                customer_name="Sam Doe", customer_phone="0911234567",
+                service=self.service, barber=self.barber,
+                booking_date=self.booking_date + timedelta(days=offset),
+                start_time=time(12, 0), end_time=time(12, 30),
+            )
+
         response = self.lookup()
 
-        self.assertTrue(response.data["bookings"][0]["payment_due"])
-        self.assertFalse(response.data["bookings"][0]["payment_rejected"])
+        self.assertNotIn("other_bookings", response.data)
+        self.assertNotIn("bookings", response.data)
+        self.assertNotIn("totals", response.data)
+        self.assertNotIn("matched_code", response.data)
+
+        # Just the booking, its payment, and the flags.
+        self.assertEqual(
+            sorted(response.data),
+            [
+                "booking",
+                "payment",
+                "payment_due",
+                "payment_open",
+                "payment_rejected",
+            ],
+        )
+
+    def test_another_customers_bookings_never_appear(self):
+        theirs = Booking.objects.create(
+            customer_name="Someone Else", customer_phone="0911999999",
+            service=self.service, barber=self.barber,
+            booking_date=self.booking_date, start_time=time(16, 0),
+            end_time=time(16, 30),
+        )
+
+        response = self.lookup()
+
+        self.assertEqual(response.data["booking"]["id"], self.booking.pk)
+
+    def test_an_unpaid_booking_is_flagged_as_due_but_not_open(self):
+        response = self.lookup()
+
+        # Money is owed, and it cannot be sent yet - which is the split
+        # `payment_due` and `payment_open` exist to make.
+        self.assertTrue(response.data["payment_due"])
+        self.assertFalse(response.data["payment_open"])
+        self.assertFalse(response.data["payment_rejected"])
 
     def test_a_wrong_phone_is_refused(self):
         response = self.lookup(phone="0911999999")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertNotIn("bookings", response.data)
+        self.assertNotIn("booking", response.data)
 
     def test_an_unknown_code_is_answered_exactly_like_a_wrong_phone(self):
         unknown = self.lookup(code="BK-9999")
@@ -419,39 +540,7 @@ class BookingLookupTests(APITestCase):
         # No token is set on the client at all.
         self.assertEqual(self.lookup().status_code, status.HTTP_200_OK)
 
-    def test_the_whole_history_comes_back_newest_first(self):
-        later = Booking.objects.create(
-            customer_name="Sam Doe", customer_phone="0911234567",
-            service=self.service, barber=self.barber,
-            booking_date=self.booking_date + timedelta(days=3),
-            start_time=time(14, 0), end_time=time(14, 30),
-        )
-
-        response = self.lookup()
-
-        codes = [row["booking_code"] for row in self.rows(response)]
-
-        self.assertEqual(len(codes), 2)
-        self.assertEqual(
-            codes,
-            [later.booking_code, self.booking.booking_code],
-        )
-
-    def test_another_customers_bookings_are_not_returned(self):
-        Booking.objects.create(
-            customer_name="Someone Else", customer_phone="0911999999",
-            service=self.service, barber=self.barber,
-            booking_date=self.booking_date, start_time=time(16, 0),
-            end_time=time(16, 30),
-        )
-
-        response = self.lookup()
-
-        names = {row["customer_name"] for row in self.rows(response)}
-
-        self.assertEqual(names, {"Sam Doe"})
-
-    def test_history_is_matched_across_phone_formats(self):
+    def test_the_match_is_made_across_phone_formats(self):
         """
         The number is typed today; the booking was written months ago in
         whatever format the person at the desk used. Those have to meet.
@@ -465,42 +554,23 @@ class BookingLookupTests(APITestCase):
                 response = self.lookup(phone="0911234567")
 
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
-                self.assertEqual(len(self.rows(response)), 1)
+                self.assertEqual(response.data["booking"]["id"], self.booking.pk)
 
                 self.booking.customer_phone = "0911234567"
                 self.booking.save()
 
-    def test_the_totals_summarise_the_history(self):
-        # A second booking with a payment attached, so all four figures
-        # are exercised at once.
-        paid = Booking.objects.create(
-            customer_name="Sam Doe", customer_phone="0911234567",
-            service=self.service, barber=self.barber,
-            booking_date=self.booking_date - timedelta(days=7),
-            start_time=time(11, 0), end_time=time(11, 30),
-        )
-
-        from apps.payments.models import Payment
-
-        Payment.objects.create(
-            booking=paid, amount="350.00", method="telebirr",
-            transaction_reference="TIN0001", status="verified",
-        )
-
-        response = self.lookup()
-
-        self.assertEqual(
-            response.data["totals"],
-            {
-                "all": 2,
-                "upcoming": 1,
-                "awaiting_payment": 1,
-                "awaiting_response": 0,
-            },
-        )
-
     def test_a_rejected_payment_is_marked_as_needing_a_call(self):
+        """
+        Money arrived and could not be matched. That is not "nothing sent",
+        and it is not the end of it either: the booking stays confirmed, so a
+        clearer screenshot can be sent straight away - which is why
+        `payment_open` goes back to true rather than staying shut.
+        """
+
         from apps.payments.models import Payment
+
+        self.booking.status = Booking.Status.CONFIRMED
+        self.booking.save(update_fields=["status", "updated_at"])
 
         payment = Payment.objects.create(
             booking=self.booking, amount="350.00", method="telebirr",
@@ -509,15 +579,13 @@ class BookingLookupTests(APITestCase):
         )
 
         response = self.lookup()
-        row = response.data["bookings"][0]
 
-        # Not "nothing sent" - money arrived and could not be matched.
-        # A fresh upload is not what this needs; a phone call is.
-        self.assertFalse(row["payment_due"])
-        self.assertTrue(row["payment_rejected"])
-        self.assertEqual(row["payment"]["id"], payment.id)
+        self.assertFalse(response.data["payment_due"])
+        self.assertTrue(response.data["payment_rejected"])
+        self.assertTrue(response.data["payment_open"])
+        self.assertEqual(response.data["payment"]["id"], payment.id)
 
-    def test_a_payment_still_waiting_is_counted_as_awaiting_response(self):
+    def test_a_payment_in_flight_closes_the_form_without_ending_the_row(self):
         from apps.payments.models import Payment
 
         Payment.objects.create(
@@ -527,14 +595,20 @@ class BookingLookupTests(APITestCase):
 
         response = self.lookup()
 
-        self.assertEqual(response.data["totals"]["awaiting_response"], 1)
-        self.assertEqual(response.data["totals"]["awaiting_payment"], 0)
+        self.assertEqual(response.data["payment"]["status"], "pending")
+        # Nothing owed, and nothing to send again.
+        self.assertFalse(response.data["payment_due"])
+        self.assertFalse(response.data["payment_open"])
 
-    def test_history_lookup_costs_a_fixed_number_of_queries(self):
+    def test_lookup_costs_exactly_one_query(self):
         """
-        One for the code, one for the history, one for the joined
-        payments. Not one per booking, and not a scan in Python to
-        compare phone numbers - which is what this replaced.
+        One, whatever the customer has booked: the booking the ID names, with
+        its service, barber and payment joined in.
+
+        Not one per booking, and not a scan in Python to compare phone
+        numbers, which is what this replaced. The number is fixed because
+        this endpoint is driven by a customer typing two fields, and it is
+        the one they will do again on every visit.
         """
 
         for index in range(6):
@@ -545,7 +619,7 @@ class BookingLookupTests(APITestCase):
                 start_time=time(9, 0), end_time=time(9, 30),
             )
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(1):
             self.lookup()
 
     def test_mine_requires_a_token(self):
@@ -946,6 +1020,177 @@ class AvailabilityReportTests(APITestCase):
             )
 
 
+class ElapsedTimeTests(APITestCase):
+    """
+    A date being today is not enough for a time inside it to be bookable.
+
+    `validate_booking_date` already refuses yesterday; these cover the half
+    it cannot see, which is the part of *today* that has gone. Without them
+    the morning is still free in the diary at four in the afternoon, so the
+    time picker offers 09:00 to someone reading the page at 16:00 and the
+    booking is accepted.
+    """
+
+    def setUp(self):
+        self.today = localdate()
+        self.service = Service.objects.create(name="Cut", price="350.00", duration=30)
+        self.barber = Barber.objects.create(name="Dawit")
+
+        self.tomorrow = self.today + timedelta(days=1)
+
+    def minutes_now(self):
+        return localtime().time().hour * 60 + localtime().time().minute
+
+    def report(self, booking_date):
+        return get_availability_report(
+            booking_date=booking_date,
+            service=self.service,
+        )
+
+    def test_today_never_offers_a_start_time_that_has_gone(self):
+        now = self.minutes_now()
+
+        for start in range(0, min(now, CLOSING_MINUTES), SLOT_INTERVAL_MINUTES):
+            Booking.objects.create(
+                customer_name="Blocker", customer_phone="123",
+                service=self.service, barber=self.barber,
+                booking_date=self.today,
+                start_time=time(start // 60, start % 60),
+                end_time=time((start + 30) // 60, (start + 30) % 60),
+            )
+
+        times = self.report(self.today)["available_times"]
+
+        for slot in times:
+            hour, minute = (int(part) for part in slot.split(":"))
+
+            self.assertGreaterEqual(
+                hour * 60 + minute,
+                now,
+                f"{slot} is in the past but was still offered",
+            )
+
+    def test_tomorrow_is_untouched_by_the_clock(self):
+        """
+        The bound belongs to today alone.
+
+        Tomorrow's 09:00 is not "passed" at 16:00 - it is tomorrow morning -
+        and filtering on the time of day regardless of the date would empty
+        every future day as the afternoon wore on.
+        """
+
+        self.assertIn("09:00", self.report(self.tomorrow)["available_times"])
+
+    def test_a_day_whose_hours_have_all_gone_says_the_time_passed(self):
+        """
+        Distinct from a full diary, because the fix is different.
+
+        Everything still ahead on today is taken and everything behind is
+        free, so the day offers nothing - but the chairs are not all in
+        use, the customer has simply got here late. They are told the day
+        is spent and offered tomorrow, not that the shop is full.
+        """
+
+        now = self.minutes_now()
+
+        for start in range(now, CLOSING_MINUTES, SLOT_INTERVAL_MINUTES):
+            Booking.objects.create(
+                customer_name="Blocker", customer_phone="123",
+                service=self.service, barber=self.barber,
+                booking_date=self.today,
+                start_time=time(start // 60, start % 60),
+                end_time=time((start + 30) // 60, (start + 30) % 60),
+            )
+
+        report = self.report(self.today)
+
+        self.assertEqual(report["available_times"], [])
+        self.assertEqual(
+            report["availability"]["status"], Availability.TIME_PASSED,
+        )
+        self.assertIn("already", report["availability"]["message"])
+
+        # And it still carries the way forward.
+        self.assertIsNotNone(report["availability"]["next_available"])
+
+    def test_a_full_day_is_still_reported_as_full_not_as_passed(self):
+        """
+        A diary that is genuinely booked out is `FULLY_BOOKED`, not
+        `TIME_PASSED`. Collapsing the two would tell a customer at 20:00
+        that the day is spent when it is actually full, which is a
+        different problem with a different answer.
+        """
+
+        self.fill_every_slot(self.tomorrow)
+
+        report = self.report(self.tomorrow)
+
+        self.assertEqual(report["available_times"], [])
+        self.assertEqual(
+            report["availability"]["status"], Availability.FULLY_BOOKED,
+        )
+
+    def fill_every_slot(self, day):
+        for start in range(
+            OPENING_MINUTES, CLOSING_MINUTES, SLOT_INTERVAL_MINUTES
+        ):
+            Booking.objects.create(
+                customer_name="Blocker", customer_phone="123",
+                service=self.service, barber=self.barber,
+                booking_date=day,
+                start_time=time(start // 60, start % 60),
+                end_time=time((start + 30) // 60, (start + 30) % 60),
+            )
+
+    def test_booking_an_elapsed_time_today_is_refused(self):
+        """
+        The availability list is a snapshot. A form left open across
+        lunchtime would otherwise keep offering the morning, so the write
+        is the last moment where refusing is still cheap.
+        """
+
+        now = self.minutes_now()
+        first = OPENING_MINUTES + (now // SLOT_INTERVAL_MINUTES - 1) * SLOT_INTERVAL_MINUTES
+
+        if first < OPENING_MINUTES or first + self.service.duration > CLOSING_MINUTES:
+            self.skipTest("No elapsed slot inside the bookable window right now.")
+
+        response = self.client.post(
+            "/api/bookings/",
+            {
+                "customer_name": "Sam Doe",
+                "customer_phone": "0911234567",
+                "service": self.service.id,
+                "booking_date": str(self.today),
+                "start_time": f"{first // 60:02d}:{first % 60:02d}",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("start_time", response.data)
+        self.assertIn("already passed", response.data["start_time"][0])
+        self.assertEqual(
+            response.data["availability"]["status"],
+            Availability.TIME_PASSED,
+        )
+
+    def test_the_availability_endpoint_hides_elapsed_times(self):
+        response = self.client.get(
+            "/api/bookings/availability/"
+            f"?service={self.service.id}&booking_date={self.today}"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        now = self.minutes_now()
+
+        for slot in response.data["available_times"]:
+            hour, minute = (int(part) for part in slot.split(":"))
+
+            self.assertGreaterEqual(hour * 60 + minute, now)
+
+
 class BookingStatusTransitionTests(APITestCase):
     """
     The staff-only transitions behind the admin booking screen.
@@ -1197,10 +1442,403 @@ class SlotUniquenessTests(APITestCase):
 
         Booking.objects.create(**shared)
 
-        # Same slot, no longer a live booking, so the unique index does not
+# Same slot, no longer a live booking, so the unique index does not
         # apply and this succeeds.
         Booking.objects.create(
             **{**shared, "customer_name": "Two", "status": Booking.Status.PENDING}
         )
 
         self.assertEqual(Booking.objects.count(), 2)
+
+
+class BookingStatusEndpointTests(APITestCase):
+    """
+    One booking, live, for the customer who booked it.
+
+    This is what the confirmation page polls, and it exists because the two
+    things a waiting customer is watching - has reception confirmed, and
+    has the shop checked the payment - used to need two endpoints and two
+    round trips, with a window between them in which the page could show a
+    booking that had just been confirmed beside a payment that had just
+    been verified.
+
+    The proof is the booking code plus the phone number it was made with,
+    carried in headers because a GET holding a credential must not end up
+    in an access log or a Referer header.
+    """
+
+    def setUp(self):
+        self.booking_date = date.today() + timedelta(days=1)
+        self.service = Service.objects.create(name="Cut", price="350.00", duration=30)
+        self.barber = Barber.objects.create(name="Dawit")
+
+        self.booking = Booking.objects.create(
+            customer_name="Sam Doe",
+            customer_phone="0911234567",
+            service=self.service,
+            barber=self.barber,
+            booking_date=self.booking_date,
+            start_time=time(10, 0),
+            end_time=time(10, 30),
+        )
+
+    def url(self, booking=None):
+        booking = booking or self.booking
+
+        return f"/api/bookings/{booking.pk}/status/"
+
+    def headers(self, booking=None, **overrides):
+        booking = booking or self.booking
+
+        return {
+            "HTTP_X_BOOKING_CODE": overrides.get("code", booking.booking_code),
+            "HTTP_X_BOOKING_PHONE": overrides.get("phone", booking.customer_phone),
+        }
+
+    def read(self, booking=None, **overrides):
+        return self.client.get(
+            self.url(booking),
+            **self.headers(booking, **overrides),
+        )
+
+    def test_the_right_code_and_phone_returns_the_booking(self):
+        response = self.read()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["booking"]["booking_code"],
+            self.booking.booking_code,
+        )
+
+    def test_no_token_is_needed(self):
+        # The customer flow has no account, so this has to be reachable
+        # without one - while still requiring the booking's own proof.
+        response = self.client.get(
+            self.url(),
+            HTTP_X_BOOKING_CODE=self.booking.booking_code,
+            HTTP_X_BOOKING_PHONE=self.booking.customer_phone,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_missing_the_proof_is_refused(self):
+        # No code and no phone at all is not a booking anyone can claim.
+        response = self.client.get(self.url())
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_a_wrong_phone_is_refused(self):
+        response = self.read(phone="0911999999")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn("booking_code", response.data)
+        self.assertNotIn("payment", response.data)
+
+    def test_an_unknown_code_is_answered_exactly_like_a_wrong_phone(self):
+        unknown = self.read(code="BK-9999")
+        wrong_phone = self.read(phone="0911999999")
+
+        # Identical answers, or the code stops being guessable-resistant.
+        self.assertEqual(unknown.status_code, wrong_phone.status_code)
+        self.assertEqual(unknown.data["booking"], wrong_phone.data["booking"])
+
+    def test_the_code_may_be_written_in_any_format(self):
+        response = self.read(code=str(self.booking.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_the_phone_may_be_written_in_any_format(self):
+        # The number is typed on a phone today; the booking card was filled
+        # in by hand weeks ago.
+        response = self.read(phone="+251911234567")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_a_booking_with_no_payment_is_a_200_not_a_404(self):
+        """
+        "Nothing sent yet" is the state every first-time visitor is in, and
+        it is a state the interface has to render - not a failure.
+
+        Answering it with a 404 is what once left the payment page on
+        "Checking this booking..." forever, for exactly the customers who
+        had come to pay.
+        """
+
+        response = self.read()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["payment"])
+
+    def test_it_carries_the_appointment_the_payment_is_for(self):
+        from apps.payments.models import Payment
+
+        Payment.objects.create(
+            booking=self.booking,
+            amount="350.00",
+            method="telebirr",
+            transaction_reference="TIN5001",
+        )
+
+        response = self.read()
+        payment = response.data["payment"]
+
+        self.assertEqual(payment["transaction_reference"], "TIN5001")
+        self.assertEqual(payment["booking_code"], self.booking.booking_code)
+        self.assertEqual(payment["booking_service"], self.service.name)
+
+    def test_payment_open_follows_the_confirmation(self):
+        """
+        The flag the customer screens render the pay form from, read from
+        the same endpoint the page is already polling.
+        """
+
+        first = self.read()
+
+        self.assertFalse(first.data["payment_open"])
+
+        self.booking.status = Booking.Status.CONFIRMED
+        self.booking.save(update_fields=["status", "updated_at"])
+
+        second = self.read()
+
+        self.assertTrue(second.data["payment_open"])
+
+    def test_an_unknown_booking_is_a_404(self):
+        response = self.client.get(
+            "/api/bookings/999999/status/",
+            **self.headers(),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_it_reads_in_a_fixed_number_of_queries(self):
+        """
+        One query. The booking, its service, its barber and its payment
+        all arrive together, because this is the endpoint a confirmation
+        page polls every twenty seconds and a per-row payment lookup would
+        be a query nobody could see and everybody would pay for.
+        """
+
+        from apps.payments.models import Payment
+
+        Payment.objects.create(
+            booking=self.booking,
+            amount="350.00",
+            method="telebirr",
+            transaction_reference="TIN5002",
+        )
+
+        with self.assertNumQueries(1):
+            self.read()
+
+
+class AdminBookingPaymentAttachmentTests(APITestCase):
+    """
+    The console reads a booking and its payment as one record.
+
+    The staff bookings screen used to carry only a status word for the
+    money, which made deciding a payment a two-screen job: leave the
+    booking, open the payment queue, and match rows on a booking id nobody
+    had asked for. So the payment travels with the booking, and the
+    appointment it belongs to is on screen while the decision is made.
+
+    And only for an account entitled to see money - see the capability tests
+    at the bottom, which are the reason this is not simply "always attach
+    it".
+    """
+
+    def setUp(self):
+        from apps.payments.models import Payment
+
+        self.admin = get_user_model().objects.create_user(
+            username="attachment-admin",
+            password="test-password",
+            is_staff=True,
+        )
+
+        StaffAccess.objects.create(user=self.admin, role=StaffAccess.Role.ADMIN)
+        self.client.force_authenticate(self.admin)
+
+        self.service = Service.objects.create(name="Cut", price="350.00", duration=30)
+        self.barber = Barber.objects.create(name="Dawit")
+
+        self.booking = Booking.objects.create(
+            customer_name="Sam Doe",
+            customer_phone="0911234567",
+            service=self.service,
+            barber=self.barber,
+            booking_date=date.today() + timedelta(days=1),
+            start_time=time(10, 0),
+            end_time=time(10, 30),
+            status=Booking.Status.CONFIRMED,
+        )
+
+        self.payment = Payment.objects.create(
+            booking=self.booking,
+            amount="350.00",
+            method="telebirr",
+            transaction_reference="TIN6001",
+            receipt=None,
+        )
+
+    def test_the_booking_list_carries_the_payment(self):
+        response = self.client.get("/api/bookings/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        row = response.data[0]
+
+        self.assertEqual(row["payment"]["id"], self.payment.pk)
+        self.assertEqual(row["payment"]["transaction_reference"], "TIN6001")
+
+    def test_a_booking_with_no_payment_says_null_not_missing(self):
+        """
+        An absent field is indistinguishable from no data, and the console
+        would draw an unpaid booking as though nothing had been paid with
+        no error anywhere to say so.
+        """
+
+        self.payment.delete()
+
+        response = self.client.get("/api/bookings/")
+
+        self.assertIn("payment", response.data[0])
+        self.assertIsNone(response.data[0]["payment"])
+
+    def test_the_payment_carries_the_appointment_it_is_for(self):
+        """
+        Answering "is this the right money for this appointment" needs the
+        appointment. From the payment queue alone that meant a second
+        screen; here it is on the row.
+        """
+
+        response = self.client.get(f"/api/bookings/{self.booking.pk}/")
+
+        payment = response.data["payment"]
+
+        self.assertEqual(payment["booking_status"], "confirmed")
+        self.assertEqual(payment["booking_date"], str(self.booking.booking_date))
+        self.assertEqual(payment["booking_start_time"], "10:00:00")
+        self.assertEqual(payment["booking_barber"], self.barber.name)
+        self.assertEqual(payment["booking_service"], self.service.name)
+
+    def test_the_attachment_is_a_join_not_a_query_per_row(self):
+        """
+        The console's bookings screen is the whole shop. A per-row payment
+        lookup would be one extra query for every booking on it, and the
+        detail added must not be paid for with that.
+        """
+
+        self.payment.delete()
+
+        start = datetime.combine(
+            date.today() + timedelta(days=2), time(10, 0)
+        )
+
+        for index in range(6):
+            slot = start + timedelta(minutes=30 * index)
+
+            booking = Booking.objects.create(
+                customer_name=f"Customer {index}",
+                customer_phone="0911111111",
+                service=self.service,
+                barber=self.barber,
+                booking_date=date.today() + timedelta(days=2),
+                start_time=slot.time(),
+                end_time=(slot + timedelta(minutes=30)).time(),
+                status=Booking.Status.CONFIRMED,
+            )
+
+            from apps.payments.models import Payment
+
+            Payment.objects.create(
+                booking=booking,
+                amount="350.00",
+                method="telebirr",
+                transaction_reference=f"TIN{index}",
+            )
+
+        with self.assertNumQueries(1):
+            self.client.get("/api/bookings/")
+
+    # --- who is entitled to see the money ------------------------
+
+    @staticmethod
+    def _staff(username, permissions):
+        user = get_user_model().objects.create_user(
+            username=username,
+            password="test-password",
+            is_staff=True,
+        )
+
+        StaffAccess.objects.create(
+            user=user,
+            role=StaffAccess.Role.RECEPTION,
+            permissions=list(permissions),
+        )
+
+        return user
+
+    def test_an_account_without_payments_view_is_not_shown_the_payment(self):
+        """
+        Attaching the payment to every row would hand the amount, the
+        transaction reference and the receipt image to anyone who can read
+        the diary. Before this existed those fields only appeared on the
+        payment screen, behind `payments.view`, so this is a grant that has
+        to be checked rather than assumed.
+        """
+
+        receptionist = self._staff(
+            "diary-only", ["bookings.view", "bookings.manage"]
+        )
+
+        self.client.force_authenticate(receptionist)
+        row = self.client.get("/api/bookings/").data[0]
+
+        self.assertNotIn("payment", row)
+
+        # The word is still there, because "does this appointment owe money"
+        # is what the diary is for. A confirmed booking with a payment
+        # waiting to be checked is not payable again, which is exactly the
+        # distinction the console needs and cannot get from the detail it
+        # was not shown.
+        self.assertEqual(row["payment_status"], "pending")
+        self.assertFalse(row["payment_open"])
+        self.assertFalse(row["payment_due"])
+
+    def test_payments_view_is_enough_to_see_the_payment(self):
+        receptionist = self._staff(
+            "money-reader", ["bookings.view", "payments.view"]
+        )
+
+        self.client.force_authenticate(receptionist)
+        row = self.client.get("/api/bookings/").data[0]
+
+        self.assertEqual(row["payment"]["id"], self.payment.pk)
+        self.assertEqual(row["payment"]["transaction_reference"], "TIN6001")
+
+    def test_a_missing_payment_and_a_hidden_one_are_different(self):
+        """
+        `payment: null` is a booking nobody has paid for. No `payment` key at
+        all is a booking whose money this account may not see. Both are
+        resolved by looking at the key, so neither can be mistaken for a
+        failed request that happened to omit data.
+        """
+
+        receptionist = self._staff("diary-only-2", ["bookings.view"])
+
+        self.client.force_authenticate(receptionist)
+
+        self.payment.delete()
+
+        row = self.client.get("/api/bookings/").data[0]
+
+        self.assertNotIn("payment", row)
+        self.assertIsNone(row["payment_status"])
+
+        # The unpaid flags are readable without seeing the money, so this
+        # account still knows to chase it - it just cannot see what was
+        # sent.
+        self.assertTrue(row["payment_due"])
+        self.assertTrue(row["payment_open"])
+

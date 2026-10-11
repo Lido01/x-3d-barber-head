@@ -9,6 +9,7 @@ import {
   Scissors,
   Sparkles,
   CircleHelp,
+  MessageCircleQuestion,
   Ticket,
   UserRound,
 } from "lucide-react";
@@ -16,6 +17,8 @@ import {
 import LanguageSwitcher from "./LanguageSwitcher";
 import { useCustomerAuth } from "../context/CustomerAuthContext";
 import { useLanguage } from "../i18n/LanguageContext";
+import { openAiChat } from "../utils/aiChat";
+import { useModalOpen } from "../utils/modalStack";
 
 /**
  * Mobile-first bottom app bar (Telegram-style).
@@ -28,6 +31,16 @@ import { useLanguage } from "../i18n/LanguageContext";
  *
  * A small tap-target overlay menu (opened from the "+ More" tab) gives
  * access to About + the staff console on small screens.
+ *
+ * ## It leaves the room when a sheet opens
+ *
+ * A booking sheet - the answer on "My bookings", the payment form, the
+ * booking lookup - covers the bottom 90px of a phone screen with its own
+ * footer. The bar is `fixed` there too, so one of the two has to give. The
+ * sheet is at `z-70` and above this bar, which stops the bar hiding the
+ * sheet; the bar in turn steps aside, because a "Book" button sitting on
+ * top of a modal the customer is reading is a link that navigates away
+ * from it under their thumb. Both halves are in `utils/modalStack`.
  */
 export default function BottomBar() {
   const location = useLocation();
@@ -36,6 +49,7 @@ export default function BottomBar() {
   const [hidden, setHidden] = useState(false);
   const lastScroll = useRef(0);
   const [moreOpen, setMoreOpen] = useState(false);
+  const modalOpen = useModalOpen();
 
   // Scroll direction: hide on the way down, reveal on the way up.
   useEffect(() => {
@@ -66,6 +80,8 @@ export default function BottomBar() {
     return null;
   }
 
+  const outOfTheWay = modalOpen || hidden;
+
   const base =
     "flex flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10px] font-medium transition-colors";
 
@@ -74,9 +90,16 @@ export default function BottomBar() {
 
   return (
     <nav
+      aria-hidden={modalOpen || undefined}
       className={`fixed inset-x-0 bottom-0 z-[55] lg:hidden ${
-        hidden ? "translate-y-full" : "translate-y-0"
-      } transition-transform duration-300 ease-out`}
+        outOfTheWay ? "invisible translate-y-full" : "visible translate-y-0"
+      } ${
+        // Scrolling is the customer's own gesture and is worth animating;
+        // a sheet opening is not, and `pointer-events-none` matters more
+        // than the transition - without it the bar keeps swallowing taps
+        // aimed at the sheet during the slide.
+        modalOpen ? "pointer-events-none" : "transition-transform duration-300 ease-out"
+      }`}
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
         paddingLeft: "env(safe-area-inset-left)",
@@ -88,7 +111,7 @@ export default function BottomBar() {
         style={{ boxShadow: "0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)" }}
       >
         {/* Home */}
-        <NavLink to="/" end className={tabClass}>
+        <NavLink to="/home" end className={tabClass}>
           <Home size={20} strokeWidth={2} />
           <span>{t("nav.home")}</span>
         </NavLink>
@@ -185,6 +208,22 @@ export default function BottomBar() {
             <CircleHelp size={18} />
             Help & FAQ
           </NavLink>
+
+          {/* The way back to the assistant once it has been closed.
+              `openAiChat` clears the dismissal flag as well as opening
+              the panel, so this one link is both "show me the chat" and
+              "un-hide it" - see utils/aiChat.js. */}
+          <button
+            type="button"
+            onClick={() => {
+              setMoreOpen(false);
+              openAiChat();
+            }}
+            className="flex items-center gap-3 bg-white/[0.03] p-4 text-left text-sm font-medium"
+          >
+            <MessageCircleQuestion size={18} />
+            {t("ai.title")}
+          </button>
 
           {/* <Link
             to="/admin"

@@ -19,7 +19,8 @@ import re
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.utils.timezone import localdate
+from django.db.models import F
+from django.utils.timezone import localdate, localtime
 
 from rest_framework.exceptions import ValidationError
 
@@ -62,6 +63,13 @@ class Availability:
     day, pick another barber, pick another service, pick a future date,
     or wait - so the API reports which one it is. `AVAILABLE` is the only
     one that means "go ahead".
+
+    `PAST_DATE` and `TIME_PASSED` are the two halves of the same idea, and
+    both exist because a date being in the future is not sufficient for a
+    time inside it to be bookable: yesterday is gone whatever time you pick,
+    and so is this morning once it is afternoon. `TIME_PASSED` is also
+    different from `FULLY_BOOKED` because the fix is different - a full
+    diary wants another time today, an elapsed one wants tomorrow.
     """
 
     AVAILABLE = "available"
@@ -70,6 +78,7 @@ class Availability:
     SERVICE_TOO_LONG = "service_too_long"
     SERVICE_UNAVAILABLE = "service_unavailable"
     PAST_DATE = "past_date"
+    TIME_PASSED = "time_passed"
     BARBER_UNAVAILABLE = "barber_unavailable"
     OUTSIDE_HOURS = "outside_hours"
 
@@ -89,6 +98,43 @@ def _at(minutes):
     """Minutes from midnight back to a time."""
 
     return time(minutes // 60, minutes % 60)
+
+
+def _now_minutes():
+    """
+    What time it is right now, as minutes from midnight.
+
+    `localtime()` rather than `datetime.now()` because the shop's hours are
+    the shop's local hours: with `TIME_ZONE="UTC"` behind it, a naive clock
+    is seven hours out in Addis and would hide the evening of every day in
+    the country.
+    """
+
+    return _minutes(localtime().time())
+
+
+def _earliest_bookable_minutes(booking_date, today):
+    """
+    The first start minute still in the future, for a date, or None.
+
+    Yesterday has already gone and tomorrow has not started, so the bound
+    only exists for today - and for today it is *now*, which is what stops
+    the morning being offered at four in the afternoon. A barber is not
+    taking a 09:00 appointment when it is 16:40; the slot being free in
+    the diary is not the same question as the slot still being ahead of the
+    clock.
+
+    Deliberately no lead time. The rule the shop asked for is "not the
+    morning any more", and inventing thirty minutes of cut-off silently
+    refuses slots a receptionist would happily take. A lead time is a
+    booking policy, and it belongs in settings next to the opening and
+    closing times rather than hidden in this function.
+    """
+
+    if booking_date != today:
+        return None
+
+    return _now_minutes()
 
 
 OPENING_MINUTES = _minutes(settings.BOOKING_OPENING_TIME)
@@ -167,6 +213,56 @@ def phone_matches(stored, offered):
         return True
 
     return phone_signature(left) == phone_signature(right)
+
+
+#: The one refusal every customer-proof check gives.
+#:
+#: Deliberately identical whatever went wrong. "No such booking code" and
+#: "that is not your phone number" are told the same way, because a
+#: booking code is derived from a row id and therefore guessable: an
+#: endpoint that said which half was wrong would be confirming which codes
+#: exist, and the phone number would stop being a second factor.
+CUSTOMER_PROOF_ERROR = {
+    "booking": [
+        "We could not match that booking code and phone"
+    ]
+}
+
+
+def require_customer_booking(booking, *, code, phone):
+    """
+    Prove this booking belongs to whoever is asking, or refuse.
+
+    The customer's whole flow is unauthenticated - no account, no session
+    - so a booking code plus the phone number it was made with is the only
+    thing standing between a stranger and someone's name, phone number,
+    appointment time and payment receipt.
+
+    Two shapes of the same check reach here:
+
+      - the lookup, in the request body, because the phone number
+        belongs in a body rather than a URL that lands in an access log;
+      - the live status read, in headers, because a GET that carries a
+        credential must never be cached.
+
+    One implementation for both, so the two can never disagree about who
+    is allowed to see what - which is the failure that turns "code plus
+    phone" into "code".
+
+    :returns: the booking, so a caller can write `require_customer_booking(
+        booking, ...)` and carry on.
+    :raises ValidationError: with `CUSTOMER_PROOF_ERROR`.
+    """
+
+    if (
+        booking is None
+        or not code
+        or booking.booking_code != code
+        or not phone_matches(booking.customer_phone, phone)
+    ):
+        raise ValidationError(CUSTOMER_PROOF_ERROR)
+
+    return booking
 
 
 def raise_time_unavailable(message, *, status, **extra):
@@ -282,6 +378,7 @@ def free_slots(
     service,
     barbers,
     busy,
+    earliest_minutes=None,
 ):
     """
     Bookable start times on one date, given an already-loaded diary.
@@ -290,12 +387,20 @@ def free_slots(
     of them is free: that is what makes the default "no barber
     preference" flow work at all, and it is why a day can be genuinely
     full while a named barber still has gaps.
+
+    `earliest_minutes` drops the part of today that has already gone -
+    see `_earliest_bookable_minutes`. It is a filter on the candidate
+    list rather than a separate query, so it costs nothing and cannot
+    disagree with the diary about which slots exist.
     """
 
     duration = service.duration
     available = []
 
     for start in _candidate_starts(duration):
+        if earliest_minutes is not None and start < earliest_minutes:
+            continue
+
         end = start + duration
 
         for current in barbers:
@@ -453,11 +558,18 @@ def get_availability_report(
         end_date=booking_date + timedelta(days=AVAILABILITY_LOOKAHEAD_DAYS),
     )
 
+    # Today loses its elapsed hours before the diary is even consulted. Kept
+    # as a separate bound rather than folded into the branch below, because
+    # "nothing free" and "nothing left that has not happened yet" are
+    # different answers and the customer has to be able to tell them apart.
+    earliest = _earliest_bookable_minutes(booking_date, today)
+
     available_times = free_slots(
         booking_date=booking_date,
         service=service,
         barbers=barbers,
         busy=busy,
+        earliest_minutes=earliest,
     )
 
     report["available_times"] = available_times
@@ -479,6 +591,31 @@ def get_availability_report(
     who = (
         f"with {barber.name}" if barber is not None else ""
     )
+
+    # Every slot the day has is in the past: the shop still has chairs, the
+    # diary is empty, and the customer is being told a day has passed rather
+    # than that they were too late. The one case where "try another time
+    # today" would be nonsense, so it is named separately.
+    if earliest is not None and free_slots(
+        booking_date=booking_date,
+        service=service,
+        barbers=barbers,
+        busy=busy,
+    ):
+        earliest_time = _at(
+            max(
+                earliest - earliest % SLOT_INTERVAL_MINUTES,
+                OPENING_MINUTES,
+            )
+        )
+
+        return finish(
+            Availability.TIME_PASSED,
+            f"The shop books between {describe_window()}, and it is "
+            f"already {localtime():%H:%M} - so there is nothing left today "
+            f"at or after {earliest_time:%H:%M}. Please choose a later date.",
+            next_available=suggestion,
+        )
 
     if suggestion is None:
         message = (
@@ -530,11 +667,13 @@ def _next_free_slots(
     )
 
     duration = service.duration
+    earliest = _earliest_bookable_minutes(booking_date, localdate())
 
     following = [
         _format_slot(item)
         for item in _candidate_starts(duration)
         if item > start_minutes
+        and (earliest is None or item >= earliest)
         and any(
             _is_free(
                 item,
@@ -646,6 +785,43 @@ def validate_business_hours(start_time, end_time):
             status=Availability.OUTSIDE_HOURS,
             window=window,
         )
+
+
+def validate_time_not_passed(booking_date, start_time):
+    """
+    Refuse a start time that has already gone by.
+
+    `validate_booking_date` stops a whole day that has passed. This stops
+    the part of *today* that has - which is the half the first check cannot
+    see, and the one customers actually hit: the form was opened over lunch,
+    the morning is still free in the diary, and 09:00 was offered to someone
+    reading the page at 15:20.
+
+    Checked here as well as in the availability list because the list is a
+    snapshot. A form left open across lunchtime would otherwise hold a
+    morning slot the whole time, and the write is the last moment where
+    refusing is still cheap.
+    """
+
+    today = localdate()
+
+    if booking_date < today:
+        # Already named by validate_booking_date, in more detail.
+        return
+
+    earliest = _earliest_bookable_minutes(booking_date, today)
+
+    if earliest is None or _minutes(start_time) >= earliest:
+        return
+
+    raise_time_unavailable(
+        f"{start_time:%H:%M} has already passed - it is now "
+        f"{localtime():%H:%M} and the shop books between "
+        f"{describe_window()}. Please choose a time later today, or a "
+        "later date.",
+        status=Availability.TIME_PASSED,
+        window=describe_window(),
+    )
 
 
 def check_booking_conflict(
@@ -908,6 +1084,11 @@ def create_booking(
     validate_business_hours(
         start_time,
         end_time,
+    )
+
+    validate_time_not_passed(
+        booking_date,
+        start_time,
     )
 
     # Before the diary is consulted, and before anything is written: has
@@ -1184,6 +1365,18 @@ def update_booking(
         new_end,
     )
 
+    # Only when the appointment is actually being moved. Correcting a phone
+    # number on a booking whose time went past an hour ago must not be
+    # refused for a reason about the appointment, which did not change.
+    if (
+        new_date != booking.booking_date
+        or new_start != booking.start_time
+    ):
+        validate_time_not_passed(
+            new_date,
+            new_start,
+        )
+
     # ---------------------------------------------------------
     # LOCK BARBER
     # ---------------------------------------------------------
@@ -1293,9 +1486,9 @@ def get_available_times(
     )["available_times"]
 
 
-def find_bookings_by_code(*, code, phone):
+def find_booking_by_code(*, code, phone):
     """
-    Every booking made with one phone number, proved by one booking code.
+    One booking, named by its own code and proved by its own phone number.
 
     A booking code alone is not a credential. It is short, it is printed
     on the confirmation, and it is derived from a row id, so anyone could
@@ -1303,19 +1496,21 @@ def find_bookings_by_code(*, code, phone):
     a phone number, a service, an appointment time and a payment receipt,
     so the phone number the booking was made with is required as well.
 
-    The code proves who is asking. The phone number is then the key to
-    everything else they have booked - which is the whole point, because a
-    customer who wants to see their booking history does not want to type
-    in a code for each one. They have one of the codes and the number on
-    all of them.
+    Exactly one booking comes back, and that is the point. Every booking
+    carries its own code, so a customer who books twice on the same number
+    has two different references and either one leads to its own
+    appointment. Handing back "everything on this number" instead made the
+    code almost decorative - it identified the customer rather than the
+    booking, so the screen opened on a list in which the appointment they
+    were asking about was one row among however many, and the wrong row was
+    as plausible as the right one.
 
     Both failures are answered identically - one message naming both
     fields, never "code not found" on its own. Distinguishing them would
     turn this endpoint into a way to confirm which codes exist, which is
     the only thing the second factor is there to prevent.
 
-    :returns: (bookings, matched_booking) - the customer's history newest
-        first, and the row whose code was used to get it.
+    :returns: the one booking the code names.
     """
 
     normalised = normalise_booking_code(code)
@@ -1323,9 +1518,15 @@ def find_bookings_by_code(*, code, phone):
     anchor = None
 
     if normalised:
+        # `service`, `barber` and `payment` are joined in rather than left
+        # lazy. The caller serialises all three immediately - the response is
+        # this one booking in full - so leaving them lazy would spend three
+        # more round trips on every lookup, from a page the customer
+        # triggers by typing two fields.
         anchor = (
             Booking.objects
             .filter(booking_code=normalised)
+            .select_related("service", "barber", "payment")
             .first()
         )
 
@@ -1333,26 +1534,13 @@ def find_bookings_by_code(*, code, phone):
         raise ValidationError(
             {
                 "code": [
-                    "We could not match that booking code and phone "
-                    "number. Check both - the code looks like BK-1234 "
-                    "and the phone is the one you booked with - and "
-                    "try again."
+                    "We could not match that booking code and phone you booked"
+
                 ]
             }
         )
 
-    signature = anchor.phone_normalised or phone_signature(
-        anchor.customer_phone
-    )
-
-    history = (
-        Booking.objects
-        .filter(phone_normalised=signature)
-        .select_related("service", "barber", "payment")
-        .order_by("-booking_date", "-start_time", "-pk")
-    )
-
-    return list(history), anchor
+    return anchor
 
 
 def list_bookings_for_user(user):

@@ -1707,11 +1707,18 @@ class DashboardTestCase(APITestCase):
 
         # Both booking queues are in scope for this account: both are
         # counts over bookings, not over payments.
+        #
+        # `payments_outstanding` counts the two CONFIRMED bookings with
+        # nothing paid behind them. The pending one is not in it: payment
+        # opens when reception confirms, so a booking nobody has confirmed
+        # yet is not money the shop is waiting for - it belongs in the
+        # queue beside it, and counting it here would send reception after
+        # a payment the customer is not able to make.
         self.assertEqual(
             response.data["queues"],
             {
                 "bookings_to_confirm": 1,
-                "payments_outstanding": 3,
+                "payments_outstanding": 2,
             },
         )
 

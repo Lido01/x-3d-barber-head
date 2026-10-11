@@ -19,6 +19,10 @@ import api from "./api";
  *
  *   {
  *     id, booking: 25,
+ *     booking_code: "BK-0025",
+ *     booking_status: "confirmed",
+ *     booking_date: "2026-08-29", booking_start_time: "09:00:00",
+ *     booking_barber: "Lidetu Tesfaye",
  *     booking_customer: "Adonay",
  *     booking_service: "Fade Haircut",
  *     amount: "5000.00", method: "telebirr",
@@ -29,10 +33,23 @@ import api from "./api";
  *     created_at, updated_at
  *   }
  *
+ * The `booking_*` fields are what let a verifier decide a payment from the
+ * queue alone - "is this the right money for this appointment" needs the
+ * appointment, and it used to need a second screen to answer.
+ *
  * Backend rules that matter to the UI:
+ *   - the booking must already be CONFIRMED; reception confirms first and
+ *     payment opens second, so the pay form is only offered once the
+ *     booking's `payment_open` is true
  *   - status always starts as "pending"; the customer can never set it
  *   - booking is a OneToOneField, so a booking accepts ONE payment
- *   - verifying a payment also confirms its booking (confirm_booking)
+ *   - verifying a payment also confirms its booking, which is a no-op for
+ *     anything created under the rule above and covers payments that
+ *     predate it
+ *
+ * To read one customer's live payment, use `getBookingStatus` in
+ * bookingApi instead: it returns the booking and its payment together, so
+ * a page waiting on a confirmation never has to ask about both.
  */
 
 export const PAYMENT_METHODS = [
@@ -95,33 +112,6 @@ export function createPayment(
 export function getPayment(id, { signal } = {}) {
   return api
     .get(`/payments/payments/${id}/`, { signal })
-    .then((response) => response.data);
-}
-
-/**
- * Find the payment attached to a booking.
- *
- * Used when a customer refreshes the result page in a new tab and the
- * cached payment id is gone. Retrieval by id is public on this backend,
- * so no credentials are involved and the customer flow stays
- * unauthenticated.
- *
- * Scoped to the one booking by using the detail route. The list route
- * is staff-only, so a customer calling it gets 401 - which is correct,
- * since that list is every customer's payment in the shop.
- */
-export function findPaymentForBooking(
-  bookingId,
-  { signal, bookingCode, bookingPhone } = {}
-) {
-  return api
-    .get(`/payments/payments/by-booking/${bookingId}/`, {
-      signal,
-      headers: {
-        "X-Booking-Code": bookingCode,
-        "X-Booking-Phone": bookingPhone,
-      },
-    })
     .then((response) => response.data);
 }
 

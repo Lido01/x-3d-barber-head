@@ -995,10 +995,16 @@ class DashboardView(generics.GenericAPIView):
         # it costs no join and no extra round trip, and the dashboard
         # keeps its fixed query budget however many figures it grows.
         #
-        # The figure matters because two ordinary staff actions leave a
-        # live appointment with no money behind it - confirming a walk-in
-        # by hand, and rejecting a payment - and both are invisible
-        # without it.
+        # Confirmed only, and that is a deliberate narrowing. Payment opens
+        # when reception confirms, so a pending booking with no payment
+        # behind it is not money the shop is waiting for - it is a booking
+        # the shop has not looked at yet, and it belongs in the other
+        # queue. Counting it here told reception to chase a payment the
+        # customer is not able to make.
+        #
+        # The figure still matters, because two ordinary staff actions
+        # leave a *confirmed* appointment with no money behind it:
+        # confirming a walk-in by hand, and rejecting a payment.
         from django.db.models import Exists, OuterRef
 
         from apps.payments.models import Payment as PaymentModel
@@ -1011,7 +1017,7 @@ class DashboardView(generics.GenericAPIView):
             ),
             pending=Q(status="pending"),
             awaiting_payment=Q(
-                status__in=["pending", "confirmed"],
+                status="confirmed",
                 booking_date__gte=today,
                 has_payment=False,
             ),

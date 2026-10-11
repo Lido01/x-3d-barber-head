@@ -24,7 +24,7 @@ from .services import (
     verify_payment,
 )
 from apps.bookings.models import Booking
-from apps.bookings.services import normalise_booking_code, phone_matches
+from apps.bookings.services import require_customer_booking
 from apps.accounts.permissions import capability_permission
 from apps.accounts.audit import log_action
 
@@ -103,30 +103,24 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
     @staticmethod
     def _customer_booking(request, booking):
-        """Require the code and phone that prove this booking is theirs."""
+        """
+        Require the code and phone that prove this booking is theirs.
 
-        code = normalise_booking_code(
-            request.headers.get("X-Booking-Code", "")
+        Delegated to bookings.services so this and the booking status
+        endpoint are literally the same check. They used to be two copies
+        of it in two apps, which is one refactor away from one of them
+        quietly accepting a booking code on its own.
+        """
+
+        from apps.bookings.services import normalise_booking_code
+
+        return require_customer_booking(
+            booking,
+            code=normalise_booking_code(
+                request.headers.get("X-Booking-Code", "")
+            ),
+            phone=request.headers.get("X-Booking-Phone", ""),
         )
-        phone = request.headers.get("X-Booking-Phone", "")
-
-        if (
-            not code
-            or booking.booking_code != code
-            or not phone_matches(booking.customer_phone, phone)
-        ):
-            from rest_framework.exceptions import ValidationError
-
-            raise ValidationError(
-                {
-                    "booking": [
-                        "We could not match that booking code and phone "
-                        "number. Check both and try again."
-                    ]
-                }
-            )
-
-        return booking
 
     @extend_schema(
         request=None,
@@ -189,7 +183,12 @@ class PaymentViewSet(viewsets.ModelViewSet):
         },
         description=(
             "Public payment submission. "
-            "Customers do not need an account. "
+            "Customers do not need an account.\n\n"
+            "The booking must already be confirmed by reception - the "
+            "shop confirms the appointment first and opens payment "
+            "second, so a booking still awaiting confirmation is refused "
+            "with a 400 rather than taking money for a chair nobody has "
+            "agreed to.\n\n"
             "Submit payment information and optionally "
             "upload a receipt screenshot."
         ),
@@ -200,6 +199,14 @@ class PaymentViewSet(viewsets.ModelViewSet):
         *args,
         **kwargs,
     ):
+        """
+        Take a customer's payment for a confirmed booking.
+
+        The serializer calls payments.services.create_payment, so the
+        confirmation gate, the one-payment-per-booking rule and the
+        correction path for a rejected payment all live in one place
+        rather than being spread across this view.
+        """
         serializer = self.get_serializer(
             data=request.data
         )

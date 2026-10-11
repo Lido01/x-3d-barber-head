@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, LogOut, Menu, Scissors, Settings, X } from "lucide-react";
+import {
+  ExternalLink,
+  LogOut,
+  Menu,
+  Scissors,
+  Settings,
+  UserRound,
+  X,
+} from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import { ThemeToggle } from "./AdminUi";
@@ -169,14 +177,25 @@ export default function AdminLayout({ children }) {
 
   const accountBlock = (
     <div className="space-y-1 border-t border-console-line px-3 py-3">
-      <div className="rounded-xl bg-console-sunken px-3.5 py-2.5">
+      <NavLink
+        to="/admin/profile"
+        className="block rounded-xl bg-console-sunken px-3.5 py-2.5 transition hover:bg-console-line"
+      >
         <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-console-muted">
           Signed in
         </p>
-        <p className="mt-0.5 truncate text-sm font-medium text-console-ink">
-          {account?.username || "Team member"}
-        </p>
-      </div>
+
+        <span className="mt-0.5 flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-sm font-medium text-console-ink">
+            {account?.username || "Team member"}
+          </span>
+
+          {/* The way to your own details and your password. In the block
+              rather than in the section list above because it is not a
+              section of the shop - it is the person looking at it. */}
+          <UserRound size={15} className="shrink-0 text-console-accent" />
+        </span>
+      </NavLink>
 
       <button
         type="button"
@@ -243,6 +262,24 @@ export default function AdminLayout({ children }) {
             {currentItem?.label || "Overview"}
           </p>
         </div>
+
+        {/* Your own details and password, one tap away rather than three
+            taps into the drawer. On a phone that matters, because the
+            console is mostly used on one. */}
+        <NavLink
+          to="/admin/profile"
+          aria-label="Your profile"
+          title="Your profile"
+          className={({ isActive }) =>
+            `flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition ${
+              isActive
+                ? "border-console-accent text-console-accent-strong"
+                : "border-console-line text-console-body hover:border-console-accent hover:text-console-accent-strong"
+            }`
+          }
+        >
+          <UserRound size={17} />
+        </NavLink>
 
         <ThemeToggle compact />
       </header>

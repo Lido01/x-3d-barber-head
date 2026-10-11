@@ -100,11 +100,29 @@ export function AdminAuthProvider({ children }) {
     return data;
   }, []);
 
-  const signOut = useCallback(() => {
+const signOut = useCallback(() => {
     adminTokens.clearTokens();
     clearCache();
     setAccount(null);
     setStatus("anonymous");
+  }, []);
+
+  /**
+   * Merge a change into the signed-in account.
+   *
+   * The profile screen calls this after a save so the console header, the
+   * drawer's "Signed in" block and this page all read the new name
+   * immediately, instead of the person saving a correction and still
+   * seeing the old one above them until the next sign-in.
+   *
+   * `patch` is merged rather than replacing: PATCH /accounts/me/ answers
+   * with the profile fields only, while the session additionally carries
+   * `staff_role`, `permissions` and `is_unlimited` — so a bare replace
+   * would drop the account's role and lock the console's own nav down to
+   * a single section.
+   */
+  const updateAccount = useCallback((patch) => {
+    setAccount((current) => (current ? { ...current, ...patch } : current));
   }, []);
 
   const value = useMemo(
@@ -115,8 +133,9 @@ export function AdminAuthProvider({ children }) {
       isChecking: status === "checking",
       signIn,
       signOut,
+      updateAccount,
     }),
-    [account, status, signIn, signOut]
+    [account, status, signIn, signOut, updateAccount]
   );
 
   return (

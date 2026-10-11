@@ -15,11 +15,17 @@ import { formatDate } from "../../utils/format";
  * exists, its own action:
  *
  *   past_date          -> the date picker, which is already wrong
+ *   time_passed        -> today is spent; tomorrow is the fix, not another time
  *   fully_booked       -> the next free date, one tap away
  *   no_barber_on_duty  -> nothing to offer; come back or call
  *   service_too_long   -> the service cannot fit in a day at all
  *   service_unavailable-> back to the service list
  *   barber_unavailable -> back to the barber list
+ *
+ * `time_passed` is the one that was missing and the one customers hit
+ * most: the morning is still free in the diary at four in the afternoon,
+ * so without it the panel said "every slot is taken" about a day that is
+ * empty, and pointed at another time on today rather than at tomorrow.
  *
  * The wording is the backend's, not ours. Django knows the shop's hours
  * and the state of the diary; anything written here would be a second
@@ -28,6 +34,7 @@ import { formatDate } from "../../utils/format";
 
 const HEADINGS = {
   past_date: "That date has passed",
+  time_passed: "Today is over",
   fully_booked: "Every slot is taken",
   no_barber_on_duty: "No barber on duty",
   service_too_long: "This service does not fit in a day",

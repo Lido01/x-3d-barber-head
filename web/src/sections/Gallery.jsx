@@ -44,7 +44,7 @@ export default function Gallery({ onSelect }) {
       </div>
 
       {loading && (
-        <div className="mt-12 flex items-center justify-center rounded-2xl border border-white/10 bg-black/40 py-20 backdrop-blur-md">
+        <div className="mt-12 flex items-center justify-center  border border-white/10 bg-black/40 py-20 backdrop-blur-md">
           <Spinner label={t("gallery.loading")} />
         </div>
       )}
@@ -79,7 +79,7 @@ export default function Gallery({ onSelect }) {
             >
               <button
                 onClick={() => onSelect(post)}
-                className="relative h-full w-full rounded-2xl overflow-hidden border border-white/10 text-left transition hover:border-[#d6a85f]/50"
+                className="relative h-full w-full  overflow-hidden border border-white/10 text-left transition hover:border-[#d6a85f]/50"
               >
                 <img
                   src={mediaUrl(post.image)}
@@ -89,9 +89,9 @@ export default function Gallery({ onSelect }) {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
                 <div className="absolute inset-x-4 bottom-4 flex items-end justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[9px] uppercase tracking-[.2em] text-[#d6a85f]">
+                    {/* <p className="text-[9px] uppercase tracking-[.2em] text-[#d6a85f]">
                       {post.style_name || t("gallery.recentWork")}
-                    </p>
+                    </p> */}
                     <p className="mt-1 truncate font-serif text-xl">{post.title}</p>
                   </div>
                   <ArrowUpRight className="mb-1 shrink-0 text-white/80" size={18} />

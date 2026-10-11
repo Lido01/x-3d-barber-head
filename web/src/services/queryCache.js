@@ -46,12 +46,13 @@ const DEFAULT_STALE_MS = 5 * 60 * 1000;
  * This is separate from `staleMs` on purpose. `staleMs` is a freshness
  * policy a caller sets; this is a floor on how often the same key may
  * hit the wire, and it is what stops the pattern where one user action
- * mounts two components that both ask for the same thing. The payment
- * screens are the case that motivated it: `/payment/:id` reads the
- * payment to decide whether it is even needed, then redirects to
- * `/booking/success/:id`, which reads it again immediately. With
- * `staleMs: 0` on that key - which it must have, so staff verification
- * shows up - that was two identical requests a second apart.
+ * mounts two components that both ask for the same thing. The booking
+ * status screens are the case that motivated it: a booking's success page
+ * reads `/bookings/{id}/status/` to decide whether the pay form should be
+ * open at all, and a customer with the history list open on the same
+ * booking asks the identical question. With `staleMs: 0` on that key -
+ * which it must have, so reception confirming and staff verifying show up
+ * without a refresh - that was two identical requests a second apart.
  *
  * An explicit `refetch()` still bypasses this, so the Refresh button
  * means "ask again now" rather than "ask again if you can".

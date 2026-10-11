@@ -3,7 +3,7 @@ import {
   Check,
   Copy,
   KeyRound,
-  Pencil,
+  MoveHorizontal,
   RefreshCw,
   ShieldCheck,
   UserCog,
@@ -21,9 +21,14 @@ import {
   AdminInput,
   AdminLoading,
   AdminPageHeader,
-  AdminPanel,
   AdminSearch,
   AdminSheet,
+  AdminTable,
+  AdminTableCell,
+  AdminTableHead,
+  AdminTableHeadCell,
+  AdminTableHint,
+  AdminTableRow,
 } from "../../components/admin/AdminUi";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { EMPTY_LIST, invalidateQuery, useQuery } from "../../hooks/useQuery";
@@ -63,6 +68,18 @@ import { ASSIGNABLE_ROLES, CAPABILITIES, staffRoleLabel } from "../../utils/staf
  * centred dialog on a desktop. Inline expansion was tried and is wrong
  * for both - on a phone it pushes the row you were reading off screen,
  * and on a desktop it moves the page under the cursor.
+ *
+ * ## Why the accounts are a table
+ *
+ * The role filter is the point of this screen, and a filter over a stack
+ * of cards makes you read every card to find out which roles are
+ * represented. Columns answer it at a glance: how many customers, how
+ * many disabled, who is the only administrator.
+ *
+ * The username leads and sticks to the left edge for the same reason as
+ * every other directory in the console - it is the stable identifier, and
+ * every action on this screen is keyed by it rather than by the editable
+ * name.
  */
 
 const FILTERS = [
@@ -438,41 +455,81 @@ export default function AdminUsers() {
       )}
 
       {users && rows.length > 0 && (
-        <ul className="grid gap-3">
-          {rows.map((user) => {
-            const locked = lockReason(user);
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-console-muted">
+              Showing {rows.length} {rows.length === 1 ? "account" : "accounts"}
+            </p>
 
-            return (
-              <li key={user.id}>
-                <AdminPanel>
-                  <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-console-accent-soft text-console-accent-strong">
-                        <UserCog size={17} />
+            <p className="hidden items-center gap-1.5 text-[11px] text-console-faint sm:flex">
+              <MoveHorizontal size={12} />
+              Scroll the table sideways to reach every column
+            </p>
+          </div>
+
+          <AdminTable
+            label="Accounts"
+            caption="Every customer and team account, with its role and what it may do."
+            minWidth="min-w-[66rem]"
+          >
+            <AdminTableHead>
+              <tr>
+                <AdminTableHeadCell sticky width="10rem">
+                  Username
+                </AdminTableHeadCell>
+                <AdminTableHeadCell width="14rem">Name</AdminTableHeadCell>
+                <AdminTableHeadCell width="16rem">Contact</AdminTableHeadCell>
+                <AdminTableHeadCell width="9rem">Role</AdminTableHeadCell>
+                <AdminTableHeadCell width="16rem">
+                  Capabilities
+                </AdminTableHeadCell>
+                <AdminTableHeadCell width="18rem">
+                  Actions
+                </AdminTableHeadCell>
+              </tr>
+            </AdminTableHead>
+
+            <tbody>
+              {rows.map((user) => {
+                const locked = lockReason(user);
+
+                return (
+                  <AdminTableRow key={user.id}>
+                    <AdminTableCell sticky>
+                      <span className="font-mono text-sm text-console-ink">
+                        @{user.username}
                       </span>
 
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-console-ink">
-                          {user.first_name || user.last_name
-                            ? `${user.first_name} ${user.last_name}`.trim()
-                            : user.username}
-                          {user.username !==
-                            `${user.first_name} ${user.last_name}`.trim() && (
-                            <span className="ml-2 font-normal text-console-muted">
-                              {user.username}
-                            </span>
-                          )}
-                        </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {!user.is_active && (
+                          <AdminChip tone="bad">Disabled</AdminChip>
+                        )}
 
-                        <p className="mt-1 truncate text-xs text-console-muted">
-                          {[user.email, user.phone]
-                            .filter(Boolean)
-                            .join(" · ") || "No contact details on file"}
-                        </p>
+                        {user.id === viewer?.id && (
+                          <AdminChip tone="warn">You</AdminChip>
+                        )}
                       </div>
-                    </div>
+                    </AdminTableCell>
 
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <AdminTableCell>
+                      <span className="block break-words font-medium text-console-ink">
+                        {user.first_name || user.last_name
+                          ? `${user.first_name} ${user.last_name}`.trim()
+                          : "—"}
+                      </span>
+                    </AdminTableCell>
+
+                    <AdminTableCell>
+                      <span className="block break-all text-xs text-console-body">
+                        {user.email || "—"}
+                      </span>
+
+                      <span className="mt-0.5 block whitespace-nowrap text-xs tabular-nums text-console-muted">
+                        {user.phone || ""}
+                      </span>
+                    </AdminTableCell>
+
+                    <AdminTableCell>
                       <AdminChip
                         tone={
                           user.role === "admin" || user.role === "owner"
@@ -484,73 +541,81 @@ export default function AdminUsers() {
                       >
                         {staffRoleLabel(user.role)}
                       </AdminChip>
+                    </AdminTableCell>
 
-                      {!user.is_active && <AdminChip tone="bad">Disabled</AdminChip>}
+                    <AdminTableCell>
+                      {user.permissions?.length > 0 ? (
+                        <span className="flex flex-wrap gap-1">
+                          {user.permissions.slice(0, 4).map((permission) => (
+                            <AdminChip key={permission}>{permission}</AdminChip>
+                          ))}
 
-                      {user.id === viewer?.id && (
-                        <AdminChip tone="warn">You</AdminChip>
+                          {user.permissions.length > 4 && (
+                            <AdminChip>
+                              +{user.permissions.length - 4} more
+                            </AdminChip>
+                          )}
+                        </span>
+                      ) : user.role === "admin" || user.role === "owner" ? (
+                        <span className="text-xs text-console-muted">
+                          All — held by the role
+                        </span>
+                      ) : (
+                        <span className="text-xs text-console-faint">—</span>
                       )}
-                    </div>
-                  </div>
 
-                  {user.permissions?.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {user.permissions.slice(0, 6).map((permission) => (
-                        <AdminChip key={permission}>{permission}</AdminChip>
-                      ))}
-
-                      {user.permissions.length > 6 && (
-                        <AdminChip>
-                          +{user.permissions.length - 6} more
-                        </AdminChip>
+                      {locked && (
+                        <span className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-5 text-console-muted">
+                          <ShieldCheck size={12} className="mt-0.5 shrink-0" />
+                          {locked}
+                        </span>
                       )}
-                    </div>
-                  )}
+                    </AdminTableCell>
 
-                  {locked && (
-                    <p className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-console-muted">
-                      <ShieldCheck size={13} className="mt-0.5 shrink-0" />
-                      {locked}
-                    </p>
-                  )}
-
-                  <div className="mt-4 flex flex-wrap gap-2 border-t border-console-line pt-4">
-                    <AdminButton
-                      icon={Pencil}
-                      disabled={Boolean(locked)}
-                      onClick={() => startEdit(user)}
-                    >
-                      Edit
-                    </AdminButton>
-
-                    {!user.is_superuser && (
-                      <>
+                    <AdminTableCell>
+                      <div className="flex flex-wrap gap-2">
                         <AdminButton
-                          icon={KeyRound}
-                          onClick={() => {
-                            setResetFor(user);
-                            setIssued(null);
-                            setActionError(null);
-                          }}
+                          icon={UserCog}
+                          disabled={Boolean(locked)}
+                          onClick={() => startEdit(user)}
                         >
-                          Reset password
+                          Edit
                         </AdminButton>
 
-                        <AdminButton
-                          tone={user.is_active ? "danger" : "neutral"}
-                          disabled={user.id === viewer?.id}
-                          onClick={() => toggleActive(user)}
-                        >
-                          {user.is_active ? "Disable" : "Enable"}
-                        </AdminButton>
-                      </>
-                    )}
-                  </div>
-                </AdminPanel>
-              </li>
-            );
-          })}
-        </ul>
+                        {!user.is_superuser && (
+                          <>
+                            <AdminButton
+                              icon={KeyRound}
+                              onClick={() => {
+                                setResetFor(user);
+                                setIssued(null);
+                                setActionError(null);
+                              }}
+                            >
+                              Reset password
+                            </AdminButton>
+
+                            <AdminButton
+                              tone={user.is_active ? "danger" : "neutral"}
+                              disabled={user.id === viewer?.id}
+                              onClick={() => toggleActive(user)}
+                            >
+                              {user.is_active ? "Disable" : "Enable"}
+                            </AdminButton>
+                          </>
+                        )}
+                      </div>
+                    </AdminTableCell>
+                  </AdminTableRow>
+                );
+              })}
+            </tbody>
+          </AdminTable>
+
+          <AdminTableHint>
+            Swipe the table sideways for the rest of each row.
+          </AdminTableHint>
+        </>
       )}
 
       {/* --- Edit an existing account ------------------------------- */}

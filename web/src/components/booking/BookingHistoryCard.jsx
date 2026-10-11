@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   CalendarDays,
   ChevronDown,
@@ -11,20 +10,34 @@ import StatusBadge from "../StatusBadge";
 import PaymentPreview from "./PaymentPreview";
 import { BookingTimeline, PaymentPrompt } from "./BookingProgress";
 import { bookingCodeOf } from "../../utils/bookingCode";
-import { formatDate, formatTimeRange } from "../../utils/format";
+import {
+  formatEthiopianDate,
+  formatEthiopianTime,
+  formatEthiopianWeekday,
+} from "../../utils/ethiopianDate";
 
 /**
- * One booking in a customer's history.
+ * One booking in full.
  *
- * Collapsed it is a scannable row: the code, the date, what it was for,
- * and whether the money is in. Expanded it is the full record - the
- * payment with its screenshot, the step-by-step timeline, and the action
- * if one is outstanding.
+ * Two ways it is used, and the difference is only whether it is a row in a
+ * list or the whole answer:
  *
- * Collapsed by default because a history of thirty bookings is a list,
- * not a set of forms, and expanding all of them would bury the two or
- * three that need attention. The card that needs one says so itself, so
- * the thing to act on is never the thing that has to be found.
+ *   - in a list, collapsed it is a scannable row - the code, the date, what
+ *     it was for, and whether the money is in - and it opens itself when
+ *     there is something the customer has to do;
+ *   - alone, `alwaysOpen` shows the full record with no toggle at all.
+ *
+ * Always expanded when alone, because a customer who has just quoted one
+ * code and been handed one appointment should not then have to tap to find
+ * out whether they paid. A disclosure arrow on the only record on a screen
+ * says "there is more behind this", which is the wrong thing to say.
+ *
+ * `paymentOpen` is the server's answer to "may this be paid right now", and
+ * it is kept distinct from `paymentDue` on purpose. A booking waiting on
+ * reception owes money but cannot be paid yet, and that row needs the
+ * customer to do nothing at all - so it is tagged "With the shop" rather
+ * than "To pay", and it does not open itself offering a form the endpoint
+ * would refuse.
  */
 
 const DETAILS = [
@@ -38,33 +51,56 @@ export default function BookingHistoryCard({
   booking,
   payment,
   paymentDue,
+  paymentOpen = false,
   paymentRejected,
   expanded,
   onToggle,
   onPaid,
+  autoOpenPayment = false,
+  alwaysOpen = false,
 }) {
   const code = bookingCodeOf(booking);
 
   const values = {
     service: booking.service_name || `Service #${booking.service}`,
     barber: booking.barber_name || "Assigned by the shop",
-    date: formatDate(booking.booking_date),
-    time: formatTimeRange(booking.start_time, booking.end_time),
+    date: booking.booking_date
+      ? `${formatEthiopianDate(booking.booking_date)} · ${formatEthiopianWeekday(
+          booking.booking_date
+        )}`
+      : "—",
+    time: `${formatEthiopianTime(booking.start_time)} – ${formatEthiopianTime(
+      booking.end_time
+    )}`,
   };
 
-  // Anything outstanding, or a payment the shop could not match. Both
-  // need the customer to do something, which is why they open themselves.
-  const needsAttention = paymentDue || paymentRejected;
+  // Anything the customer can act on right now, or a payment the shop
+  // could not match. Both need something from them, which is why they open
+  // themselves. A booking still awaiting confirmation does not: there is
+  // nothing for them to do but wait, and opening itself would only put an
+  // unreadable waiting notice at the top of a list.
+  const needsAttention = paymentOpen || paymentRejected;
 
-  const open = expanded || needsAttention;
+  const open = alwaysOpen || expanded || needsAttention;
+
+  const tag = paymentRejected
+    ? "Needs a call"
+    : paymentOpen
+      ? "To pay"
+      : paymentDue && booking.status === "pending"
+        ? "With the shop"
+        : null;
 
   return (
-    <li className="rounded-2xl border border-white/10 bg-[#111]">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-start gap-4 p-4 text-left sm:p-5"
+    <li
+      className={`rounded-2xl border bg-[#111] ${
+        alwaysOpen ? "border-[#d6a85f]/25" : "border-white/10"
+      }`}
+    >
+      <div
+        className={`flex items-start gap-4 p-4 text-left sm:p-5 ${
+          alwaysOpen ? "" : "cursor-pointer"
+        }`}
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
@@ -85,26 +121,45 @@ export default function BookingHistoryCard({
           </p>
 
           <p className="mt-0.5 text-xs text-white/40">
-            {formatDate(booking.booking_date)} ·{" "}
-            {formatTimeRange(booking.start_time, booking.end_time)}
+            {formatEthiopianDate(booking.booking_date)} ·{" "}
+            {formatEthiopianWeekday(booking.booking_date)} ·{" "}
+            {formatEthiopianTime(booking.start_time)}
           </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-3 pt-1">
-          {needsAttention && (
-            <span className="rounded-full border border-[#d6a85f]/40 bg-[#d6a85f]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#e5bd7a]">
-              {paymentRejected ? "Needs a call" : "To pay"}
+          {tag && (
+            <span
+              className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                tag === "To pay"
+                  ? "border-[#d6a85f]/40 bg-[#d6a85f]/10 text-[#e5bd7a]"
+                  : "border-white/15 bg-white/[0.04] text-white/45"
+              }`}
+            >
+              {tag}
             </span>
           )}
 
-          <ChevronDown
-            size={16}
-            className={`text-white/30 transition-transform ${
-              open ? "rotate-180" : ""
-            }`}
-          />
+          {/* No chevron when this is the only record on the screen: there is
+              nothing to expand into. */}
+          {!alwaysOpen && (
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={open}
+              aria-label={open ? "Hide the details" : "Show the details"}
+              className="-mr-1 flex h-11 w-11 items-center justify-center rounded-lg text-white/30 transition hover:text-white/70"
+            >
+              <ChevronDown
+                size={16}
+                className={`transition-transform ${
+                  open ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+          )}
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="border-t border-white/10 px-4 pb-5 pt-4 sm:px-5">
@@ -147,11 +202,13 @@ export default function BookingHistoryCard({
               opens in this card rather than on another page, so paying
               for a booking in the history is one screen, not three
               navigations. */}
-          {(paymentDue || paymentRejected) && (
+          {(paymentOpen || paymentRejected || paymentDue) && (
             <div className="mt-4">
               <PaymentPrompt
                 booking={booking}
                 payment={payment}
+                paymentOpen={paymentOpen}
+                autoOpen={autoOpenPayment}
                 onPaid={onPaid}
               />
             </div>
@@ -170,15 +227,4 @@ export default function BookingHistoryCard({
       )}
     </li>
   );
-}
-
-/** Exported so the list can hold the expanded state for one row at a time. */
-export function useExpandedBooking() {
-  const [expandedId, setExpandedId] = useState(null);
-
-  return {
-    expandedId,
-    toggle: (id) => setExpandedId((current) => (current === id ? null : id)),
-    isExpanded: (id) => expandedId === id,
-  };
 }

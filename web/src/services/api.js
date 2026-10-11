@@ -11,7 +11,7 @@ const ROOT = configuredApiRoot.replace(/\/+$/, "");
 export const API_ROOT = ROOT;
 
 const api = axios.create({
-  baseURL: ROOT ? `${ROOT}/api` : "/api",
+  baseURL: ROOT ? `${ROOT}/api/v1` : "/api/v1",
   timeout: 20000,
 
   // Accept is safe to pin. Content-Type is deliberately NOT set:
@@ -70,7 +70,7 @@ async function refreshAccessToken(authScope) {
   }
 
   const pending = axios
-    .post(`${ROOT}/api/accounts/token/refresh/`, { refresh })
+    .post(`${ROOT}/api/v1/accounts/token/refresh/`, { refresh })
     .then((response) => {
       const access = response.data?.access;
 

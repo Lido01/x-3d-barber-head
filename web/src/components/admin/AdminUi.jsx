@@ -28,11 +28,12 @@
  */
 
 import { useEffect, useId, useRef } from "react";
-import { Monitor, Moon, Search, Sun, X } from "lucide-react";
+import { Monitor, Moon, MoveHorizontal, Search, Sun, X } from "lucide-react";
 
 import Alert from "../ui/Alert";
 import Spinner from "../ui/Spinner";
 import { useTheme } from "../../context/ThemeContext";
+import { registerModal } from "../../utils/modalStack";
 
 // -----------------------------------------------------------------
 // Theme
@@ -154,12 +155,6 @@ export function AdminPageHeader({ eyebrow, title, description, actions, meta }) 
         <h1 className="mt-1.5 font-serif text-3xl leading-tight text-console-ink sm:text-4xl">
           {title}
         </h1>
-
-        {description && (
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-console-muted">
-            {description}
-          </p>
-        )}
 
         {meta}
       </div>
@@ -382,6 +377,11 @@ const STATUS_CHIP = {
   good: "border-console-good/30 bg-console-good-soft text-console-good",
   bad: "border-console-bad/30 bg-console-bad-soft text-console-bad",
   info: "border-console-info/30 bg-console-info-soft text-console-info",
+  // The brand tone, for chips that mark *your own* state rather than a
+  // row's status - the signed-in role, the active theme. It was missing
+  // here, so `tone="accent"` silently rendered as the muted fallback.
+  accent:
+    "border-console-accent/40 bg-console-accent-soft text-console-accent-strong",
   neutral: "border-console-line-strong bg-console-sunken text-console-muted",
 };
 
@@ -830,6 +830,210 @@ export function AdminFilterTabs({ options, value, onChange, className = "" }) {
 }
 
 // -----------------------------------------------------------------
+// Tables
+// -----------------------------------------------------------------
+
+/**
+ * A management table that survives a 360px screen.
+ *
+ * ## Why a table and not a stack of cards
+ *
+ * Every list in the console used to be one card per row, stacked. That is
+ * the right shape for a *feed* - photographs, reviews, a gallery - and the
+ * wrong shape for a list staff work down: a queue of bookings, a list of
+ * payments to check, the staff directory. What a working list needs is to
+ * be *scanned*, and you cannot scan a column that does not exist. Six
+ * cards stacked down a phone screen show one fact each; a table shows a
+ * row per booking with the code, the customer, the service, the time and
+ * the money state all on one line, which is the only way to spot the one
+ * booking that is confirmed, unpaid, and for 09:00 tomorrow while you work
+ * through forty of them.
+ *
+ * ## How it stays usable narrow
+ *
+ * Four things, and they are all needed:
+ *
+ *   - **`overflow-x-auto` with a `min-w`.** Below the width the columns
+ *     need, the table scrolls sideways instead of squashing. A squashed
+ *     table wraps every cell to three lines and every row becomes 200px
+ *     tall, which is worse than the card it replaced. Scrolling sideways
+ *     to reach the actions is a deliberate, discoverable gesture; hunting
+ *     for a wrapped row is not.
+ *   - **A sticky header row.** Once a list is forty rows long, the column
+ *     names are the thing that has scrolled off the top.
+ *   - **A first column that sticks to the left edge.** The booking code,
+ *     the reference, the username: the one field on each row that has to be
+ *     readable at every scroll position to make sense of the rest. It is
+ *     painted over the columns sliding beneath it, and it picks up the
+ *     row's hover colour with `group-hover` so it does not break the row
+ *     into two shades.
+ *   - **A bounded height.** This one is not obvious and it is what makes
+ *     the sticky header real. `position: sticky` resolves against the
+ *     *nearest scroll container*, and an element with `overflow-x: auto` is
+ *     a scroll container in **both** axes - CSS coerces a `visible` axis to
+ *     `auto` as soon as the other one is not `visible`. So the sideways
+ *     scroller becomes the sticky containing block, it has no vertical
+ *     overflow of its own, and a `top-0` header would simply never move.
+ *     Capping the height gives that scroller a vertical scrollport, and the
+ *     header then sticks against it. The table scrolls inside its own
+ *     frame instead of pushing the filters off the top of the page, which
+ *     is also how a management table is meant to behave.
+ *
+ * The wrapper deliberately adds no margin or padding of its own. The
+ * console's page already has a gutter, and `position: sticky` pins a cell
+ * to the *scrollport* edge rather than to the content edge - so a wrapper
+ * with `px-4` would pin the first column 16px left of where every other
+ * column starts, and the top-left corner of the table would not line up
+ * with itself. Inheriting the page gutter is the only version where the
+ * columns and the scroll container agree.
+ */
+export function AdminTable({
+  children,
+  minWidth = "min-w-[60rem]",
+  maxHeight = "max-h-[70svh]",
+  label,
+  caption,
+  className = "",
+}) {
+  return (
+    <div
+      className={`min-w-0 overflow-auto overscroll-contain rounded-2xl border border-console-line ${maxHeight} ${className}`}
+    >
+      <table
+        aria-label={label}
+        className={`w-full border-separate border-spacing-0 text-left ${minWidth}`}
+      >
+        {caption && <caption className="sr-only">{caption}</caption>}
+
+        {children}
+      </table>
+    </div>
+  );
+}
+
+/**
+ * The scroll affordance.
+ *
+ * A horizontally scrolling region with no visible scrollbar looks broken
+ * on desktop and looks like nothing at all on a phone, so the fact that
+ * there is more to the right is said in words, once, under the table.
+ * Hidden entirely once the table fits, rather than shown on every screen.
+ */
+export function AdminTableHint({ children, className = "" }) {
+  return (
+    <p
+      className={`flex items-center gap-1.5 text-[11px] leading-5 text-console-faint sm:hidden ${className}`}
+    >
+      <MoveHorizontal size={12} />
+      {children || "Swipe the table sideways for the rest of each row."}
+    </p>
+  );
+}
+
+/** The column-name row. Sticks to the top of the viewport as the page scrolls. */
+export function AdminTableHead({ children }) {
+  return (
+    <thead className="sticky top-0 z-20 bg-console">{children}</thead>
+  );
+}
+
+export function AdminTableRow({ children, className = "", ...rest }) {
+  return (
+    <tr
+      className={`group cursor-default transition-colors hover:bg-console-sunken/70 ${className}`}
+      {...rest}
+    >
+      {children}
+    </tr>
+  );
+}
+
+const CELL_BASE =
+  "border-b border-console-line px-3 py-3 align-top text-sm text-console-body";
+
+/**
+ * One cell.
+ *
+ * `sticky` pins it to the left edge as the rest of the row slides past -
+ * see `AdminTable`. `numeric` right-aligns and turns off the proportional
+ * figures on the money and count columns, which is what makes a column of
+ * amounts readable as a column.
+ *
+ * `width` is a hint for the column, not a promise: a table cell takes the
+ * widest of its content and the header, so these are how a screen says
+ * "this column wants to be narrow" without fighting the content.
+ */
+export function AdminTableCell({
+  children,
+  sticky = false,
+  numeric = false,
+  width,
+  className = "",
+  ...rest
+}) {
+  return (
+    <td
+      width={width}
+      className={`${CELL_BASE} ${numeric ? "text-right tabular-nums" : ""} ${
+        sticky ? "sticky left-0 z-10 bg-console group-hover:bg-console-sunken" : ""
+      } ${className}`}
+      {...rest}
+    >
+      {children}
+    </td>
+  );
+}
+
+export function AdminTableHeadCell({
+  children,
+  numeric = false,
+  sticky = false,
+  width,
+  className = "",
+  ...rest
+}) {
+  return (
+    <th
+      scope="col"
+      width={width}
+      className={`border-b border-console-line-strong px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-console-muted ${
+        numeric ? "text-right" : ""
+      } ${
+        // Sticks with the body cell below it, so the corner of the table
+        // that never leaves the screen is labelled too - a code column with
+        // no visible heading reads as part of the customer column.
+        sticky ? "sticky left-0 z-30 bg-console" : ""
+      } ${className}`}
+      {...rest}
+    >
+      {children}
+    </th>
+  );
+}
+
+/**
+ * A row that opens a panel under itself.
+ *
+ * The wide columns of a working list - the receipt, the notes, the whole
+ * payment breakdown - do not belong in the row, and dropping them on a
+ * screen only leaves the question unanswered. So they span every column on
+ * their own line below the row, which keeps the table scannable and still
+ * lets the screen show everything the previous card did.
+ */
+export function AdminTableDetail({ children, columns = 1 }) {
+  return (
+    <tr className="bg-console">
+      <td
+        colSpan={columns}
+        className="border-b border-console-line px-3 pb-4 pt-0 text-sm text-console-body"
+      >
+        {children}
+      </td>
+    </tr>
+  );
+}
+
+// -----------------------------------------------------------------
 // Sheet
 // -----------------------------------------------------------------
 
@@ -841,6 +1045,14 @@ export function AdminFilterTabs({ options, value, onChange, className = "" }) {
  * than the screen is unusable, and a full-height sheet that also
  * applies on a 1440px display is a sheet pretending to be a dialog.
  *
+ * Registered with `utils/modalStack` like the customer-side sheet, so
+ * that if either is ever opened over a surface that carries the mobile
+ * bottom bar the bar moves out of the way instead of sitting on top of
+ * the footer. The console has no bar today - it uses a drawer - but the
+ * admin sign-in page does not go through this component and the customer
+ * booking sheet does, and a modal that can be covered by a fixed bar is
+ * a bug waiting for the bar to be added back.
+ *
  * Handles its own scroll lock, Escape and focus, so a screen opening
  * one does not have to.
  */
@@ -848,34 +1060,50 @@ export function AdminSheet({ open, onClose, title, description, children, footer
   const panelRef = useRef(null);
   const closeRef = useRef(null);
 
+  // `onClose` is an inline closure at most call sites, so it gets a new
+  // identity on every render. Keeping it in a ref stops the effect below
+  // from re-running on every keystroke - which used to yank focus back
+  // onto the close button mid-typing and swallow the first character.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) {
       return undefined;
     }
 
     const previousOverflow = document.body.style.overflow;
+    const releaseModal = registerModal();
+
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
-        onClose();
+        onCloseRef.current();
       }
     };
 
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
-    closeRef.current?.focus();
+
+    // Focus the first editable field, not the X button: typing should
+    // go straight into the form the sheet opened for.
+    const field = panelRef.current?.querySelector(
+      'input:not([type="hidden"]):not([disabled]), textarea:not([disabled])'
+    );
+    (field || closeRef.current)?.focus();
 
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
+      releaseModal();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-6">
       <button
         type="button"
         onClick={onClose}
@@ -892,7 +1120,7 @@ export function AdminSheet({ open, onClose, title, description, children, footer
           wide ? "sm:max-w-3xl" : "sm:max-w-lg"
         }`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-console-line px-4 py-3.5 sm:px-5">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-console-line px-4 py-3.5 sm:px-5">
           <div className="min-w-0">
             <h2 className="font-serif text-xl leading-tight text-console-ink">{title}</h2>
 
@@ -912,12 +1140,16 @@ export function AdminSheet({ open, onClose, title, description, children, footer
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+        <div
+          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 ${
+            footer ? "" : "pb-[calc(1rem+env(safe-area-inset-bottom))]"
+          }`}
+        >
           {children}
         </div>
 
         {footer && (
-          <div className="flex flex-col-reverse gap-2 border-t border-console-line bg-console px-4 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:px-5 sm:pb-3.5">
+          <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-console-line bg-console px-4 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:px-5 sm:pb-3.5">
             {footer}
           </div>
         )}

@@ -7,13 +7,15 @@ import api from "./api";
  *   POST /api/bookings/
  *   POST /api/bookings/lookup/
  *   GET  /api/bookings/availability/
+ *   GET  /api/bookings/{id}/status/    one booking, live, proved by
+ *                                       code + phone in the headers
  *
  * Signed in (customer):
  *   GET  /api/bookings/mine/
  *
- * Admin only (IsAuthenticated + IsAdminUser):
- *   GET    /api/bookings/
- *   GET    /api/bookings/{id}/
+ * Admin only (IsAuthenticated + capability):
+ *   GET    /api/bookings/          each row carries its payment
+ *   GET    /api/bookings/{id}/     the same, for one booking
  *   PUT    /api/bookings/{id}/
  *   PATCH  /api/bookings/{id}/
  *   DELETE /api/bookings/{id}/
@@ -36,8 +38,28 @@ import api from "./api";
  *     booking_date: "2026-08-29",
  *     start_time: "09:00:00", end_time: "10:00:00",
  *     status: "pending", notes,
+ *     payment_status: null | "pending" | "verified" | "rejected",
+ *     payment_due: true,      money is still owed on a live appointment
+ *     payment_open: false,    money may be sent this minute
+ *     already_booked: false,
  *     created_at, updated_at
  *   }
+ *
+ * The two money flags are not the same question and must not be collapsed:
+ *
+ *   payment_due   the shop is still owed money for this appointment.
+ *                 True for a booking nobody has confirmed *yet* - it is
+ *                 already money the shop intends to collect.
+ *   payment_open  the customer may send it right now. False until
+ *                 reception confirms, which is the order the whole
+ *                 booking flow runs in: requested, confirmed, paid,
+ *                 checked. Showing a pay form off `payment_due` offers
+ *                 money for a chair nobody has agreed to.
+ *
+ * On the staff `list` and `retrieve` actions there is one more key,
+ * `payment`: the whole attached payment - amount, method, reference,
+ * receipt image, verifier, or the reason it was rejected. So a booking
+ * and its money are read in one request and cannot disagree on screen.
  */
 
 /**
@@ -122,46 +144,94 @@ export function listBarbers({ signal } = {}) {
 }
 
 /**
- * Fetch a customer's booking history.
+ * One booking, named by its own code, proved by the phone it was made with.
  *
- * The booking code plus the phone number the booking was made with. Two
- * because the code alone is short and guessable - it is derived from a
- * row id - and each row carries a name, a phone number, an appointment
- * time and a payment receipt.
+ * The code identifies the booking; the phone number is the second factor
+ * that proves the person asking owns it. Two because the code alone is short
+ * and guessable - it is derived from a row id - and a booking carries a
+ * name, a phone number, an appointment time and a payment receipt.
  *
- * The code proves who is asking; the phone number is then the key to
- * everything else they have booked. That is why this returns a list and
- * not one booking: someone who wants to look over their history should
- * not have to dig out a separate code for every appointment they ever
- * made.
+ * Every booking has its own code, so someone who has booked three times
+ * quotes the one they mean and gets that appointment. This does **not**
+ * return everything on the phone number: that made the code identify the
+ * customer rather than the booking, and put the appointment being asked
+ * about in a list where the wrong row was as plausible as the right one.
+ *
+ * The other bookings on that number come back as `other_bookings` - a code,
+ * a date, a service and the state of the money, with no payment detail.
+ * Enough to see there are three and pick another; reading any of them
+ * properly still takes that booking's own code.
  *
  * POST rather than GET, so the phone number stays out of the URL: query
- * strings end up in access logs, browser history and Referer headers.
- * It also keeps the endpoint out of any cache, which a GET carrying a
+ * strings end up in access logs, browser history and Referer headers. It
+ * also keeps the endpoint out of any cache, which a GET carrying a
  * credential should be.
  *
- * The backend answers an unknown code and a wrong phone identically, so
- * this cannot be used to find out which codes exist.
+ * The backend answers an unknown code and a wrong phone identically, so this
+ * cannot be used to find out which codes exist.
  *
  * @returns {Promise<{
- *   bookings: Array<{
- *     booking: object,
- *     payment: object | null,
- *     payment_due: boolean,
- *     payment_rejected: boolean,
+ *   booking: object,
+ *   payment: object | null,
+ *   payment_due: boolean,
+ *   payment_open: boolean,
+ *   payment_rejected: boolean,
+ *   other_bookings: Array<{
+ *     id: number,
+ *     booking_code: string,
+ *     booking_date: string,
+ *     start_time: string,
+ *     service_name: string,
+ *     status: string,
+ *     payment_status: string | null,
  *   }>,
- *   matched_code: string,
- *   totals: {
- *     all: number,
- *     upcoming: number,
- *     awaiting_payment: number,
- *     awaiting_response: number,
- *   },
  * }>}
  */
 export function lookupBooking({ code, phone }) {
   return api
     .post("/bookings/lookup/", { code, phone })
+    .then((response) => response.data);
+}
+
+/**
+ * One booking, live, for the customer who made it.
+ *
+ * The endpoint the booking result page polls, because it answers both of
+ * the questions a waiting customer is watching in one request: has
+ * reception confirmed the appointment yet, and has the shop checked the
+ * payment. Two endpoints meant two round trips and a window between them
+ * in which the page could show a booking that had just been confirmed
+ * beside a payment that had just been verified.
+ *
+ * The code and the phone travel in headers rather than the query string.
+ * This is a GET, and a GET carrying a credential must not end up in an
+ * access log, a browser history or a Referer header.
+ *
+ * Always a 200 once the proof passes - including when nothing has been
+ * paid, because "not paid yet" is a state the page has to render rather
+ * than a failure. Answering it with a 404 is what once left the payment
+ * page on a spinner for exactly the customers who had come to pay.
+ *
+ * @returns {Promise<{
+ *   booking: object,
+ *   payment: object | null,
+ *   payment_due: boolean,
+ *   payment_open: boolean,
+ *   payment_rejected: boolean,
+ * }>}
+ */
+export function getBookingStatus(
+  bookingId,
+  { signal, bookingCode, bookingPhone } = {}
+) {
+  return api
+    .get(`/bookings/${bookingId}/status/`, {
+      signal,
+      headers: {
+        "X-Booking-Code": bookingCode,
+        "X-Booking-Phone": bookingPhone,
+      },
+    })
     .then((response) => response.data);
 }
 

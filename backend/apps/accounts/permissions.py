@@ -17,6 +17,7 @@ CAPABILITY_CATALOG = [
     ("gallery.manage", "Manage gallery"),
     ("reviews.moderate", "Moderate reviews"),
     ("settings.manage", "Change shop settings"),
+    ("ai.manage", "Manage AI assistant"),
 ]
 
 CAPABILITIES = [value for value, _ in CAPABILITY_CATALOG]

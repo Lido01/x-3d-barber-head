@@ -30,6 +30,37 @@ export default {
     closeMenu: "Close menu",
   },
 
+  /**
+   * The floating AI assistant.
+   *
+   * Translated because it is storefront chrome a customer chooses to open,
+   * not part of the money-handling flow. The four suggestions are the
+   * ones the assistant is actually good at answering from the catalogue,
+   * so a customer who has not typed anything yet still gets four useful
+   * prompts rather than an empty box.
+   */
+  ai: {
+    title: "AI assistant",
+    subtitle: "Services, prices and free times",
+    open: "Open the AI assistant",
+    minimize: "Minimise the assistant",
+    close: "Close the assistant",
+    clear: "Start a new chat",
+    quickQuestions: "Show or hide quick questions",
+    placeholder: "Ask about a cut, a price or a free time...",
+    send: "Send",
+    thinking: "Thinking...",
+    emptyBody: "Ask me anything about our services, prices or free times.",
+    errorBody:
+      "The assistant cannot be reached just now. Please try again in a moment.",
+    suggestions: {
+      cuts: "Which haircut suits me?",
+      price: "How much does a signature cut cost?",
+      free: "When are you free today?",
+      book: "I would like to book a fade",
+    },
+  },
+
   hero: {
     titleLead: "YOUR STYLE",
     titleTail: "YOUR IDENTITY",
